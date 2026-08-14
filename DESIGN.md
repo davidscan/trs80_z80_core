@@ -2,8 +2,9 @@
 
 Agreed with the user 2026-08-07 (conversation in the parent repo's
 session; summarized in ../awk_BASIC_interpreter/STATUS.md under
-"Machine-language call support"). This document is the authoritative
-context for starting the work.
+"Machine-language call support"), REVISED 2026-08-13 after ML Stage 0
+shipped in the parent and the language ruling changed to Python. This
+document is the authoritative context for starting the work.
 
 ## Goal and non-goals
 
@@ -16,7 +17,12 @@ NON-GOALS, standing:
   program). That is full-emulator territory; trs80gp/sdltrs exist. Our
   niche is "runs your OCR-rescued BASIC listing directly".
 - Cycle-accurate timing. Sound routines (cycle-counted OUT loops) get
-  "returns promptly, silent" semantics — pitch requires cycle accuracy.
+  "returns promptly, silent" semantics — real-TIME pitch requires cycle
+  accuracy we will not build. NOTE kept deliberately open (2026-08-13):
+  cycle COUNTING is trivial in a table-driven core (a per-opcode cost
+  column), so accumulating cycles between port-FFH toggles recovers
+  pitch information for possible OFFLINE sound synthesis someday. Do
+  not design the counter out; do not build the synth now.
 - Interrupts, R-register-based timing, undocumented-opcode exotica in
   v1 (document what real listings demand; measure first).
 - SHIPPING ROM BYTES — never. The Level II ROM is copyrighted. All ROM
@@ -25,55 +31,127 @@ NON-GOALS, standing:
   LCG research: behavior reimplementation from documentation is fine,
   verbatim code/bytes are not).
 
+## Language and the runtime seam (RULED 2026-08-13)
+
+The core is PYTHON 3, not awk. Ruling: the machine-language portion is
+outside the scope of BASIC, so it follows the project's standing split
+(interpreter = awk; non-BASIC tooling = Python — the basclean/detok
+precedent). Technical case: a Z80 core is ~700 opcodes of table-driven
+decode and wall-to-wall bit arithmetic; Python has real integers with
+native bit ops where gawk has doubles plus toU/toS juggling; the
+single-step JSON test vectors are a json.load() away; and the Phase A
+disassembler/classifier shares its decode tables with the core — one
+language for the whole ML toolchain. Speed is a non-issue: the target
+is ~440K instr/s (real Model I); table-driven CPython does millions.
+
+The cost is the RUNTIME SEAM: USR fires mid-expression against live
+interpreter state (mem[] bytes, video SCR, the live keyboard matrix,
+HL back to the evaluator). The agreed shape:
+
+- PERSISTENT COPROCESS, not spawn-per-call: gawk's `|&` two-way
+  coprocess keeps a warm Python process with line-based messaging —
+  sub-millisecond per call, so per-frame USR calls in games stay
+  viable. (Python startup is ~30ms; spawn-per-call is disqualified.)
+- CALL FRAME OUT, WRITE-SET BACK: awk sends entry address, the HL
+  argument, and the sparse mem[] contents (or deltas — dopoke can log);
+  Python executes to the terminating RET, returns HL, the memory
+  write-set, and a cycle count. awk applies writes through its existing
+  device mapping, so video writes render exactly like POKEs.
+- DEVICE READS AS PROTOCOL CALLBACKS: reads of 3800H-38FFH (and any
+  other live device) round-trip to awk, which answers from the live
+  keyboard matrix — this is what makes wait-for-keypress routines work
+  instead of spinning on a stale snapshot, and it gives awk a hook to
+  honor Ctrl-C (BREAK) during a runaway routine. An instruction budget
+  backstops routines that never RET.
+- GRACEFUL DEGRADATION: no python3 on the machine -> USR falls back to
+  the parent's stub (evaluate and return the argument) with a one-time
+  notice. trs80basic.awk stays a complete single-file gawk program, the
+  Windows zero-install zip stays honest, and the core is an OPTIONAL
+  enhancement — the exact pattern the OLLAMA channel established with
+  curl.
+
+Consequence for ship location: the old plan (core as src/p95_z80.awk in
+the parent) is DEAD. The core lives here; the parent gains only the
+small coprocess plumbing (protocol client + fallback), which is
+legitimately awk.
+
 ## The staged plan
 
-STAGE 0 lives in the PARENT repo, not here (interpreter features, no
-Z80): (a) memory-mapped keyboard matrix for PEEK (3800H-38FFH), which
-unlocks pure-BASIC real-time games with zero emulation; (b) the
-hour-sized USR parse-and-stub. Also adjacent but parent-owned: string
+STAGE 0 lived in the PARENT repo and SHIPPED 2026-08-13 (fourth corpus
+batch): (a) memory-mapped keyboard matrix for PEEK (3800H-38FFH) —
+live, pty-verified, corpus-measured; (b) the USR/DEF USR parse-and-stub
+(USRn(x) returns its argument). Still parent-owned and pending: string
 packing / VARPTR (mem[]-backed string storage) and program-memory
-mapping. See the parent STATUS.md roadmap for all four.
+mapping. See the parent STATUS.md roadmap.
 
-STAGE 1 (this repo's first milestone): the Z80 core + minimal USR
-plumbing.
+PHASE A (this repo's FIRST artifact, before any core code): a static
+Z80 DISASSEMBLER/CLASSIFIER run over the parent corpus's DATA/POKE
+loader bytes. For each listing with a loader, decode the poked bytes
+and bucket the routine: sound (cycle-timed OUT 255 loops), keyboard
+(reads 3800H-38FFH), video (writes 3C00H-3FFFH), pure compute,
+ROM-calling (WHICH entry points, exactly). Output = the real gate
+number per bucket, the Stage 2 trap priority list, and the
+sound-exclusion count, in one measured pass. The decode tables it
+needs are the same tables the core needs — nothing is thrown away.
+Rationale (2026-08-13): the old gate proxy (the parent's usr/ blocked
+category, 143 files) dissolved when the stub re-scan moved 90 files
+and re-filed the rest under deeper blockers; grep can no longer answer
+"what would a working Z80 unlock" — only disassembly can.
+
+STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
 - Core: full documented instruction set (~700 opcodes incl. CB/DD/ED/FD
   prefixes), registers, flags (mind half-carry and DAA — the classic
-  correctness traps), 64K address space backed by the interpreter's
-  mem[] (default 255 = absent-RAM reads, already authentic).
+  correctness traps), 64K address space synced with the interpreter's
+  mem[] via the coprocess protocol (default 255 = absent-RAM reads,
+  already authentic).
 - USR interface: entry address from the USR vector at 408EH/408FH
-  (dec 16526/16527, the classic POKE pair); DEFUSR support arrives with
-  the parent repo's Disk BASIC tier.
+  (dec 16526/16527, the classic POKE pair) or the parent's DEF USR
+  stub table (shipped 2026-08-13 — the stub already parses and
+  evaluates the address; the coprocess route gives it a consumer).
 - Two ROM traps only: 0A7FH (fetch the USR integer argument into HL)
   and 0A9AH (return HL to BASIC as the function result).
 - Exit: RET with the entry-call's return address = done.
-- This alone runs pure-computation routines (sorts, memory fills) and
+- This alone runs pure-computation routines (sorts, memory fills),
   fast-video routines (writes to 3C00H-3FFFH land in the interpreter's
-  SCR and RENDER — the mapping already exists).
+  SCR and RENDER — the mapping already exists), AND — new since Stage 0
+  shipped — direct keyboard-matrix scan routines, because reads of
+  3800H-38FFH callback into the LIVE matrix. Endgame's SCAN3 may
+  therefore be a STAGE 1 acceptance case, not Stage 2 as originally
+  assumed; Phase A's disassembly of it settles which.
 
 STAGE 2: the HLE trap table, grown CORPUS-DRIVEN (the basclean
-methodology): implement a ROM entry point only when a measured real
-listing calls it. Known first candidates (from Microsoft BASIC Decoded
-and the Paay ROM reference): 002BH keyboard scan-once, 0049H wait-key,
-0033H character-to-display, 003BH character-to-printer (likely
-refuse/no-op), 0060H delay. Start Z80_FINDINGS.md on the first real
-listing, findings-numbered like basclean's.
+methodology): implement a ROM entry point only when Phase A shows a
+measured real listing calls it. Known candidates (from Microsoft BASIC
+Decoded and the Paay ROM reference): 002BH keyboard scan-once, 0049H
+wait-key, 0033H character-to-display, 003BH character-to-printer
+(likely route to the parent's LPRINT stream or refuse), 0060H delay.
+Start Z80_FINDINGS.md on the first real listing, findings-numbered like
+basclean's.
+
+PARALLEL, PARENT-SIDE: VARPTR. The parent's varptr/ blocked category is
+now the second-largest (359 files as of 2026-08-13) and the dominant
+idiom is DEF USR=VARPTR(US%(0)) — VARPTR used to LOCATE the poked
+routine. Those files need the parent's VARPTR item (synthetic-but-
+consistent addresses backed by mem[]) AND this core, together. Phase A
+counts exactly how many need both.
 
 ## Technical reference (verified in the 2026-08-07 session)
 
-- Model I CPU: Z80 @ 1.77 MHz (~440K instr/s effective). A gawk
-  dispatch loop plausibly matches or beats this — "emulation at
-  hardware speed"; the parent's `speed` throttle can slow it.
+- Model I CPU: Z80 @ 1.77 MHz (~440K instr/s effective). The parent's
+  `speed` throttle can slow replay toward authentic feel.
 - Memory map (all already meaningful in the interpreter's mem[]):
   3800H-38FFH keyboard matrix (dec 14336-14591; PEEK(14400) = the
-  arrow/space row) — Stage 0 makes reads live; the core inherits it.
+  arrow/space row) — LIVE since 2026-08-13 (Stage 0); the core reads it
+  through protocol callbacks.
   3C00H-3FFFH video (dec 15360-16383) — mapped to SCR, renders.
+  37E8H-37E9H printer status — reads 63 (attached/ready) since Stage 0.
   40A4H program-start pointer, 408EH/408FH USR vector, 42E9H program
   text base (relevant only to the parent's program-mapping item).
 - Port FFH (the only port real listings meaningfully touch): bits 0-1
   cassette output levels (the sound trick — alternate 1/2 for a square
   wave through an external amp), bit 3 = 32-column video mode (pairs
   with the parent's CHR$(23) roadmap item). OUT elsewhere: no-op or
-  error, decide from corpus evidence.
+  error, decide from corpus evidence (Phase A).
 - USR call convention (Level II): X=USR(n) jumps to the vector address;
   the routine may CALL 0A7FH to get n in HL, computes, optionally loads
   HL and JPs/CALLs 0A9AH to return a value; plain RET returns without
@@ -84,43 +162,61 @@ listing, findings-numbered like basclean's.
 - The core is exquisitely testable BEFORE any TRS-80 semantics: the
   per-instruction JSON test-vector suites (Tom Harte / jsmoo
   single-step tests) validate each opcode against thousands of
-  pre/post-state pairs; the classic ZEXDOC/ZEXALL exercisers are the
-  integration-level check (need a tiny CP/M-BDOS print trap to run).
-  Adopt the parent repo's culture: pin everything in a regression
+  pre/post-state pairs — in Python these are a json.load() away; the
+  classic ZEXDOC/ZEXALL exercisers are the integration-level check
+  (need a tiny CP/M-BDOS print trap to run). RULED 2026-08-13: the
+  vector suites are third-party data — gitignore them with a fetch
+  script, never commit them (the parent's no-third-party-material
+  practice).
+- Adopt the parent repo's culture: pin everything in a regression
   suite from day one; the passing suite pins mechanical behavior, not
   "the emulator works" — real-listing acceptance is the bar.
 - Acceptance corpus: the parent's rescued listings with USR routines.
   Known today: Space Chase (80 Micro 5/1982; sound-only USR — should
   run with sound silently swallowed) and ENDGAME/BAS (80 Micro 5/1985;
-  SCAN3 keyboard routine is load-bearing — the real Stage 2 test).
-- Regression contract with the parent: t1-t17 transcripts byte
-  identical; batch mode exit codes unchanged; a new t18+ for USR.
+  SCAN3 keyboard routine is load-bearing — possibly Stage 1 now that
+  the matrix is live; Phase A settles it). Phase A's classification
+  grows this list from the corpus.
+- Regression contract with the parent: t1-t24 transcripts exit 0 and
+  t7's RND line is the only run-to-run variance; batch mode exit codes
+  unchanged; a new t25+ transcript for coprocess USR (with the
+  fallback path tested by pointing the interpreter at a missing
+  python3).
 
-## The gate (do not start without it)
+## The gate (do not start the CORE without it)
 
-Count rescued listings blocked on USR before building Stage 1. As of
-2026-08-07 the honest count is ~2 (Space Chase plays stubbed; endgame
-can't run). The parent's vision-intake pipeline grows the corpus; the
-count is the trigger. This is the estimating twin of the parent's
-standing lesson: "measure the refutation before shipping a plausible
-heuristic" — here, count the unlocked programs before building the
-emulator.
+Count rescued listings blocked on USR before building Stage 1 — now
+operationalized as PHASE A (the disassembler/classifier), which is
+in-gate work: it is measurement, not emulator. As of 2026-08-07 the
+honest count was ~2 (Space Chase plays stubbed; endgame can't run). As
+of 2026-08-13 the parent's stub re-scan moved 90 usr/def files (80 ran
+clean — some unknown fraction have load-bearing USR results that only
+play-testing or Phase A can flag) and re-filed the deep-ML pile:
+varptr 359, raw-bytes-in-code 135, inp 54, system 7. The gate question
+is now "how many of these does Stage 1 (+VARPTR, parent-side) actually
+unlock" — Phase A's output IS the gate decision input. This is the
+estimating twin of the parent's standing lesson: "measure the
+refutation before shipping a plausible heuristic" — here, count the
+unlocked programs before building the emulator.
 
-## Open decisions (decide when work starts)
+## Decisions
 
-1. SHIP LOCATION: the core probably ships INTO the parent's single-file
-   deliverable as src/p95_z80.awk (cat-concatenated like every module),
-   with this repo holding development artifacts, tests, and findings —
-   mirroring how basclean lives in tools/. Alternative: fully separate
-   awk library. The parent's "single gawk script" identity argues for
-   the module.
-2. LICENSE: parent is GPLv3 (c) 2026 David Forbis; mirroring it here is
+RULED 2026-08-13:
+1. LANGUAGE: Python 3 (see "Language and the runtime seam").
+2. SHIP LOCATION: the core lives HERE; the parent gains only the awk
+   coprocess plumbing + stub fallback. src/p95_z80.awk is dead.
+3. NAME: renamed awk_Z80_core -> trs80_z80_core (no remote existed;
+   rename was free).
+4. TEST VECTORS: fetch-script + gitignore, never committed.
+
+STILL OPEN (decide when work starts):
+1. LICENSE: parent is GPLv3 (c) 2026 David Forbis; mirroring it here is
    the default assumption. No LICENSE file until code exists.
-3. R register: the parent's authentic-RND roadmap item reads R for
-   seeding (RANDOM at 01D3H). If the core emulates R (even crudely:
-   increment per instruction), the two items can share it. Low stakes.
-4. Naming: "awk_Z80_core" chosen 2026-08-07; rename is cheap until
-   there's a remote.
+2. R register: the parent's authentic-RND roadmap item reads R for
+   seeding (RANDOM at 01D3H). Emulating R crudely (increment per
+   instruction) lets the two items share it. Low stakes.
+3. Coprocess protocol details (framing, delta-vs-full memory sync,
+   instruction budget size): design with the plumbing, not before.
 
 ## Standing practices inherited from the parent repo
 
@@ -130,4 +226,5 @@ emulator.
   paths in shell commands.
 - No third-party copyrighted material in the repo (the parent keeps its
   scan corpus in a local-only sibling git repo — the same pattern
-  applies if test material here ever needs it).
+  applies to ROM-derived material and the downloaded test-vector
+  suites here).
