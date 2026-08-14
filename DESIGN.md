@@ -333,9 +333,11 @@ count already reflects all of this: the gate 5 now need only the core.
   this document called it before Phase A measured it (FINDING 2). Phase
   A's classification grew this list to 46 statically-extractable
   payloads, and the oracle added 56 more (FINDING 14).
-- Regression contract with the parent: t1-t24 transcripts exit 0 and
-  t7's RND line is the only run-to-run variance; batch mode exit codes
-  unchanged; a new t25+ transcript for coprocess USR (with the
+- Regression contract with the parent: t1-t28 transcripts exit 0 and
+  t7's RND line is the only run-to-run variance (t25-t28 arrived with
+  the parent's 2026-08-14 batch: RND LCG, Model III display modes,
+  MERGE/NAME, program-memory mapping); batch mode exit codes
+  unchanged; a new t29+ transcript for coprocess USR (with the
   fallback path tested by pointing the interpreter at a missing
   python3).
 
@@ -400,6 +402,11 @@ STILL OPEN (decide when work starts):
    instruction) lets the two items share it. Low stakes.
 3. Coprocess protocol details (framing, delta-vs-full memory sync,
    instruction budget size): design with the plumbing, not before.
+   ONE CONSTRAINT already known (parent review, 2026-08-14): the call
+   frame must carry the USR SLOT NUMBER, and the parent's spaced-call
+   fix (8c38dca6) currently DISCARDS the slot digit of `USR n(` before
+   dispatch — that dispatch point must pass it through when the
+   plumbing is built. Recorded in the parent STATUS.md ML entry too.
 
 ## Standing practices inherited from the parent repo
 
