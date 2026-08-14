@@ -1,0 +1,14 @@
+# Third-party single-step test-vector suites (Tom Harte / jsmoo) --
+# fetched by script, NEVER committed. DESIGN.md decision 4.
+tests/vectors/
+zexdoc*
+zexall*
+
+# ROM-derived material of any kind must never land here at all.
+*.rom
+*.bin
+
+# Sweep output (regenerable; may quote corpus material).
+out/
+__pycache__/
+*.pyc
