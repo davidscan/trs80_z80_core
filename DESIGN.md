@@ -149,6 +149,12 @@ sound-exclusion count, in one measured pass. The decode table it
 builds is THE shared declarative opcode table (see "Architecture: the
 reusable seams") — the core's decoder and the future assembler are its
 other consumers; nothing is thrown away.
+ACCEPTANCE ANCHORS (ruled 2026-08-13, see CLAUDE.md "ANCHORS BEFORE
+TRUST"): the table validates against known-good disassembly first; the
+classifier must bucket Space Chase (sound) and endgame SCAN3 (keyboard)
+correctly before corpus-wide counts are reported; Phase A ends in a
+findings doc + gate count presented to the user — never a rolling start
+into Stage 1.
 Rationale (2026-08-13): the old gate proxy (the parent's usr/ blocked
 category, 143 files) dissolved when the stub re-scan moved 90 files
 and re-filed the rest under deeper blockers; grep can no longer answer

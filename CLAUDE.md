@@ -22,6 +22,21 @@ STANDING RULES (do not relearn these the hard way):
   loader bytes. Do not write opcode-execution code until its numbers
   are in and the user has ruled the gate met. Phase A itself is in-gate
   (measurement, not emulator) — confirmed with the user 2026-08-13.
+- ANCHORS BEFORE TRUST (Phase A discipline, ruled 2026-08-13): validate
+  before believing, in this order. (1) The opcode table must pass a
+  validation set against known-good disassembly BEFORE any classifier
+  output is trusted. (2) The classifier must correctly bucket the two
+  ground-truth anchors — Space Chase (sound-only USR) and ENDGAME/BAS
+  SCAN3 (keyboard scan) — BEFORE its corpus-wide counts mean anything.
+  A count produced without both checks passing is not a measurement.
+  (This is the parent repo's standing lesson — plausible heuristics
+  die under measurement — applied prophylactically.)
+- THE GATE RULING IS A REVIEWED CHECKPOINT: Phase A ends in a findings
+  document (Z80_FINDINGS.md, numbered like basclean's) plus the gate
+  count, presented to the USER for the go/no-go ruling on the core.
+  Do not slide from measurement into Stage 1 in the same breath —
+  present, stop, and let the user rule (they may bring a heavier
+  review to the numbers).
 - NEVER commit ROM bytes, ROM disassembly text, or verbatim code from
   ROM-derived repositories. HLE traps are reimplemented from documented
   behavior only. (Same rule that kept the parent repo releasable.)
