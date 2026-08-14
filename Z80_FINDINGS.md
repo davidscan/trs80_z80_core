@@ -484,23 +484,32 @@ DISK branch — straight into `CMD`, which the parent does not implement
 — even though the cassette branch is the one that would run, and is
 usually the branch that POKEs the USR vector.
 
-Measured by re-running the 96 with the probe answering 201:
+First measured as a counterfactual, by re-running the 96 with the probe
+answering 201; **SHIPPED in the parent 2026-08-14 (8c38dca6)**, so the
+right-hand column is now simply the truth:
 
-| | as shipped | probe = 201 |
+| | before | after (shipped) |
 |---|---|---|
-| reached a USR call | 25 | **55** |
+| reached a USR call | 25 | **57** |
 | deposited any bytes | 80 | 86 |
 | yielded strict-formed ML | 56 | 61 |
+
+(57 rather than the 55 the counterfactual predicted: the remaining two
+come from FINDING 17's call-site fix, which shipped in the same commit.)
 
 Corpus-wide, **88 listings use the probe** — 66 blocked (29 of them
 filed under `cmd/`, 28 under `varptr/`) and 22 runnable. The 29 in
 `cmd/` are there *because* the probe sends them down the Disk branch;
 they are not Disk BASIC programs, they are cassette programs being told
-they are on a disk. This attacks FINDING 4's largest confound directly.
+they are on a disk. This attacks FINDING 4's largest confound directly,
+and means **a re-scan of the parent's blocked/ categories is now owed** —
+recorded in the parent's STATUS.md, not done here.
 
-PARENT-OWNED (memory map, CLAUDE.md standing split) and not built here.
-The counterfactual is a gated measurement in `phasea/oracle.py`, not a
-fix.
+The fix was PARENT-OWNED (memory map, CLAUDE.md standing split) and was
+made there: `MEM[16396] = 201` seeded at init (p10) rather than
+special-cased in `dopeek`, so `POKE 16396` still behaves normally. The
+counterfactual patch has been retired from `phasea/oracle.py`; a
+cross-repo regression test now asserts the parent still answers 201.
 
 ## FINDING 17 — FINDING 8 has a sibling: `USR n(` at the CALL site
 
@@ -519,8 +528,37 @@ repro against the shipped interpreter:
 Level II tokenizes `USR`, so the space is insignificant on real
 hardware — FINDING 12's lexical lesson for the third time.
 **134 listings corpus-wide use the call form** (118 blocked, 16
-runnable). Owed to the PARENT repo's queue, exactly as FINDING 8 was;
-not built here.
+runnable).
+
+**SHIPPED in the parent 2026-08-14 (8c38dca6)**, in `e_prim` (p60): a
+bare single-digit token after a digitless `USR` spelling is consumed
+*if a `(` follows it*, so the correction cannot swallow a digit in any
+other construct. Digit-carrying spellings stay strict.
+
+The lesson worth keeping: FINDING 8 and FINDING 17 are the same defect
+in the same keyword, and fixing the definition did not fix the call.
+**Check both halves of a lexical fix.**
+
+JOINT IMPACT of FINDINGS 16 and 17, measured in the parent old-build vs
+new over the 181 blocked listings that use either construct:
+
+| | files |
+|---|---|
+| now run to completion | 28 |
+| past it, stop on a different blocker | 15 |
+| past it, reach an interactive INPUT | 4 |
+| past it, then hang | 6 |
+| **improved** | **53** |
+| unchanged | 128 |
+| **regressions** | **0** |
+
+Zero regressions was checked explicitly: no listing went from clean to
+broken and none gained an error. One case looks like a regression and
+is not — `cmd/maestro4.bas` moved from `?SN` at line 150 to `?SN` at
+line 10, because line 10 is `... GOSUB 90 ... :CMD"LCDVR"`: it used to
+die at 150 *inside that GOSUB*, and now the subroutine returns and it
+reaches the CMD its own BLOCKED header already named. BASIC line
+numbers are not execution order.
 
 ## FINDING 18 — Stage 2 has callers after all
 
@@ -586,14 +624,32 @@ material. The sweep output is gitignored.
    the parent (c61fdae5) and unblocked `morsmstr.bas` and
    `quest_2.bas` to stub level, as predicted.
 
-## Owed to the PARENT repo's queue (new, 2026-08-14)
+## Owed to the PARENT repo's queue (new, 2026-08-14 — BOTH PAID)
 
 Both found by the oracle, both parent-owned under the standing split,
-neither built here. Together they are worth more listings than the core
-is, which is the single most decision-relevant thing in this document.
+both built THERE and shipped the same day in parent commit `8c38dca6`.
+Together they improved **53 blocked listings** with **zero
+regressions** — more than the core itself is measured to unlock, which
+is the single most decision-relevant fact in this document.
 
-5. `USR n(` at the call site raises `?SN` — FINDING 8's sibling, the
-   same one-line lexical shape, **134 listings** (FINDING 17).
-6. `PEEK(16396)` should answer 201, not 255 — the cassette/disk probe,
-   **88 listings**, and the reason 29 listings sit in `blocked/cmd/`
-   that are not Disk BASIC programs at all (FINDING 16).
+5. [PAID] `USR n(` at the call site raised `?SN` — FINDING 8's sibling,
+   the same one-line lexical shape, **134 listings** (FINDING 17).
+   Fixed in `e_prim` (p60).
+6. [PAID] `PEEK(16396)` answered 255, not 201 — the cassette/disk
+   probe, **88 listings**, and the reason 29 listings sat in
+   `blocked/cmd/` that are not Disk BASIC programs at all (FINDING 16).
+   Fixed by seeding `MEM[16396]` at init (p10).
+
+Parent regression bar held for both: t1-t28 exit 0, every transcript
+byte-identical to the pre-change build except t7 (documented RND
+variance, confirmed to vary on the unchanged build too) and t23, which
+grew coverage of the spaced call form and the probe on purpose.
+
+## Now owed BACK to the parent (not done)
+
+7. A re-scan of `blocked/`. FINDING 16 means some files are mis-filed:
+   several `blocked/cmd/` listings were never Disk BASIC programs, they
+   were cassette programs being told they were on a disk. Until that
+   re-scan runs, the blocked-category sizes overstate the CMD blocker
+   and understate everything behind it — including, possibly, the gate
+   population itself.

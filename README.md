@@ -26,10 +26,15 @@ gate number moved **5 → 6**. What is scarce in this corpus is not
 machine code; it is a listing whose ONLY obstacle is the absent Z80.
 
 The oracle also turned up two **parent-side** defects each worth more
-listings than the core is: `USR n(` at the call site raises ?SN (134
-listings — FINDING 8's sibling), and `PEEK(16396)` answers 255 where a
+listings than the core is: `USR n(` at the call site raised ?SN (134
+listings — FINDING 8's sibling), and `PEEK(16396)` answered 255 where a
 cassette Level II answers 201, sending 88 listings down their Disk
-branch into CMD. Both parent-owned, both unbuilt.
+branch into CMD. Both were parent-owned, and **both SHIPPED there
+2026-08-14** (parent `8c38dca6`): **53 blocked listings improved, 28 of
+them now running to completion, zero regressions**, parent bar held
+(t1-t28 exit 0). A re-scan of the parent's `blocked/` categories is now
+owed — FINDING 16 means some `cmd/` files were never Disk BASIC
+programs at all.
 
 See Z80_FINDINGS.md (18 findings). Stage 1 (the core itself) is NOT
 started and no core code has been written; the gate never set a

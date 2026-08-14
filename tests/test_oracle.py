@@ -187,19 +187,45 @@ class TestInstrumentedBuild(unittest.TestCase):
         self.assertEqual(oracle.runs_from_pokes(got['pokes']),
                          [(32000, bytes([62, 1, 211, 255]))])
 
-    def test_cassette_counterfactual_is_off_by_default(self):
+    def test_parent_answers_the_dos_probe_with_a_ret(self):
+        """PEEK(16396) must be 201 -- FINDING 16, now shipped upstream.
+
+        This began life as a gated COUNTERFACTUAL in the oracle: the
+        parent answered 255 (absent RAM), which sent every listing using
+        the am-I-under-Disk-BASIC probe down its DISK branch into CMD.
+        The parent shipped 201 on 2026-08-14, so the counterfactual is
+        retired and this is a cross-repo regression guard instead -- if
+        the probe ever goes back to 255, 88 rescued listings quietly
+        take the wrong branch again and this test says so.
+        """
         prog = os.path.join(oracle.OUT, 'probe.bas')
         with open(prog, 'w') as f:
             f.write('10 POKE 32000,PEEK(16396)\n'
                     '20 POKE 32001,PEEK(16396)\n'
                     '30 POKE 32002,PEEK(16396)\n'
                     '40 POKE 32003,PEEK(16396)\n')
-        off = oracle.run_listing(prog, timeout=20, cassette=False)
-        on = oracle.run_listing(prog, timeout=20, cassette=True)
-        self.assertEqual(oracle.runs_from_pokes(off['pokes']),
-                         [(32000, bytes([255] * 4))])
-        self.assertEqual(oracle.runs_from_pokes(on['pokes']),
+        got = oracle.run_listing(prog, timeout=20)
+        self.assertEqual(oracle.runs_from_pokes(got['pokes']),
                          [(32000, bytes([201] * 4))])
+
+    def test_parent_accepts_the_spaced_usr_call_form(self):
+        """X=USR 0(n) must parse -- FINDING 17, now shipped upstream.
+
+        The loader POKEs come BEFORE the call on purpose: run_listing
+        truncates the log at the first USR marker, which is the whole
+        point of the oracle, so anything poked afterwards is invisible.
+        """
+        prog = os.path.join(oracle.OUT, 'spacedusr.bas')
+        with open(prog, 'w') as f:
+            f.write('10 DEF USR 0=&H7D00\n'
+                    '20 FOR I=0 TO 3:POKE 32000+I,9:NEXT\n'
+                    '30 V=USR 0(7)\n'
+                    '40 END\n')
+        got = oracle.run_listing(prog, timeout=20)
+        self.assertEqual(got['rc'], 0, 'spaced USR call did not parse')
+        self.assertTrue(got['usr_seen'], 'never reached the USR call')
+        self.assertEqual(oracle.runs_from_pokes(got['pokes']),
+                         [(32000, bytes([9] * 4))])
 
 
 if __name__ == '__main__':

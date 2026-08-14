@@ -98,24 +98,6 @@ PATCHES = [
      '        print a, b > (ENVIRON["TRS80_POKELOG"])\n'
      '        fflush(ENVIRON["TRS80_POKELOG"])\n'
      '    }\n'),
-    # COUNTERFACTUAL, gated separately on TRS80_CASSETTE. 400CH holds a
-    # RET (201) on a cassette Level II machine and something else under
-    # Disk BASIC, so `IF PEEK(16396)=201` is the classic am-I-on-disk
-    # probe. The parent returns 255 (absent RAM), so every listing using
-    # the probe takes its DISK branch and dies on CMD -- even though the
-    # cassette branch is the one that would run. This patch measures how
-    # much of the corpus hinges on that one byte. It is a MEASUREMENT of
-    # a parent-side opportunity, not a fix: the map is parent-owned.
-    ('p80_stmt.awk',
-     '    return (a in MEM) ? MEM[a] : 255\n'
-     '}\n'
-     '\n'
-     'function st_poke(   v, a, b) {\n',
-     '    if (a == 16396 && "TRS80_CASSETTE" in ENVIRON) return 201\n'
-     '    return (a in MEM) ? MEM[a] : 255\n'
-     '}\n'
-     '\n'
-     'function st_poke(   v, a, b) {\n'),
     # Line trace, gated on TRS80_LINELOG. A listing that never halts is
     # the most interesting outcome the oracle can produce -- IF the loop
     # it is stuck in reads a USR result, a working core would break it.
@@ -191,7 +173,7 @@ def build(force=False):
 FEED = ('1\n' * 400).encode()
 
 
-def run_listing(path, timeout=10.0, cassette=False):
+def run_listing(path, timeout=10.0):
     """Run one listing under the instrumented interpreter.
 
     Returns dict(rc, pokes, usr_seen, timed_out). `pokes` is the
@@ -201,8 +183,6 @@ def run_listing(path, timeout=10.0, cassette=False):
     if os.path.exists(log):
         os.remove(log)
     env = dict(os.environ, TRS80_POKELOG=log)
-    if cassette:
-        env['TRS80_CASSETTE'] = '1'
     timed_out = False
     try:
         r = subprocess.run(
@@ -368,9 +348,9 @@ def validate(files, timeout=10.0, verbose=False):
 # the run over the unresolvable 96
 # --------------------------------------------------------------------
 
-def resolve(path, timeout=10.0, cassette=False):
+def resolve(path, timeout=10.0):
     """Run one unresolvable listing and classify whatever it deposited."""
-    got = run_listing(path, timeout, cassette)
+    got = run_listing(path, timeout)
     out = {'file': os.path.basename(path), 'rc': got['rc'],
            'usr_seen': got['usr_seen'], 'timed_out': got['timed_out'],
            'reason': got['reason'], 'n_pokes': len(got['pokes']),
@@ -406,8 +386,6 @@ def main():
     ap.add_argument('--json', help='write results here')
     ap.add_argument('--verbose', action='store_true')
     ap.add_argument('--rebuild', action='store_true')
-    ap.add_argument('--cassette', action='store_true',
-                    help='counterfactual: PEEK(16396)=201, the cassette probe')
     args = ap.parse_args()
 
     build(force=args.rebuild)
@@ -449,7 +427,7 @@ def main():
         print('running the oracle over %d listing(s)' % len(paths))
         results = []
         for i, p in enumerate(paths, 1):
-            r = resolve(p, args.timeout, args.cassette)
+            r = resolve(p, args.timeout)
             results.append(r)
             if args.verbose or i % 10 == 0:
                 print('  %d/%d %-28s pokes=%d usr=%s payloads=%d'
