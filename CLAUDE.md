@@ -57,17 +57,41 @@ STANDING RULES (do not relearn these the hard way):
   behavior only. (Same rule that kept the parent repo releasable.)
   The downloaded JSON test-vector suites are also never committed:
   fetch script + gitignore.
+- IN THE PARENT REPO, DOCUMENTATION ONLY — ASK BEFORE ANY CODE CHANGE
+  (ruled 2026-08-14, after this was got wrong). From a session in THIS
+  repo, edits to ../awk_BASIC_interpreter are limited by default to its
+  DOCUMENTATION: STATUS.md, README.md, RELEASE_NOTES.md and the like.
+  Everything else there — `src/p*.awk`, the built `trs80basic.awk`,
+  `programs/tests/t*.txt`, the launcher, the corpus — is CODE, and
+  changing it needs the user's EXPLICIT permission for that specific
+  change. If the permission is not 100% clear, STOP AND ASK before
+  making the change, not after.
+  Do NOT infer permission from: a measured defect owed to the parent's
+  queue, a fix being obviously correct or one line long, a general
+  "go ahead", or an instruction to "make the changes in the parent" —
+  that last phrasing was meant as "update the parent's docs" on
+  2026-08-14 and was read as authorization to patch its source. The
+  two fixes made that day (FINDINGS 16/17, parent 8c38dca6) were KEPT
+  by the user's ruling — do not revert them — but the standing rule is
+  ask first.
+  Reporting a parent-side defect and offering to fix it is always fine;
+  writing the fix without a clear yes is not.
 - Parent-owned items (string packing/VARPTR, program-memory mapping)
   stay in the PARENT repo — do not build them here. (Keyboard-matrix
   PEEK and the USR stub shipped there 2026-08-13; VARPTR/string
   packing, program-memory mapping, and the FINDING 8 DEF USR parse fix
-  shipped there 2026-08-14. Note: parent VARPTR does NOT give integer
-  arrays a contiguous 2-byte image — VARPTR-array loaders still route
-  through the extractor; see DESIGN.md.)
-- The parent's regression bar is part of THIS project's bar: any change
-  that touches the interpreter must leave t1-t28 exiting 0 (t7's RND
-  line varies run to run) and batch exit codes unchanged; the coprocess
-  fallback path (no python3) must behave exactly like the shipped stub.
+  shipped there 2026-08-14, as did the FINDING 16/17 fixes — the 400CH
+  DOS probe and the USR call-site space. Note: parent VARPTR does NOT
+  give integer arrays a contiguous 2-byte image — VARPTR-array loaders
+  still route through the extractor; see DESIGN.md.)
+- The parent's regression bar is part of THIS project's bar: any
+  AUTHORIZED change that touches the interpreter (see the ask-first
+  rule above) must leave t1-t28 exiting 0 (t7's RND line varies run to
+  run) and batch exit codes unchanged; the coprocess fallback path (no
+  python3) must behave exactly like the shipped stub. Baseline the
+  transcripts BEFORE editing, so "unchanged" is a diff and not a
+  belief, and keep the pre-change build around to tell an inherent
+  variance apart from a regression.
 - Commit with `git commit -F <msgfile>`; use absolute paths in shell
   commands; every increment committed and green before the next.
 - Remote: private GitHub davidscan/trs80-z80-core (created 2026-08-14
