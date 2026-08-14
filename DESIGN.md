@@ -16,6 +16,11 @@ NON-GOALS, standing:
 - Standalone machine-language programs (SYSTEM tapes as primary
   program). That is full-emulator territory; trs80gp/sdltrs exist. Our
   niche is "runs your OCR-rescued BASIC listing directly".
+  CLARIFIED 2026-08-13 (user): this is a BUILD boundary, not an
+  architecture boundary — an assembler and full machine-code execution
+  are ANTICIPATED FUTURE CONSUMERS of this core, and the architecture
+  keeps those seams open at zero cost (see "Architecture: the reusable
+  seams"). Nothing beyond the seams is built until asked.
 - Cycle-accurate timing. Sound routines (cycle-counted OUT loops) get
   "returns promptly, silent" semantics — real-TIME pitch requires cycle
   accuracy we will not build. NOTE kept deliberately open (2026-08-13):
@@ -75,6 +80,55 @@ the parent) is DEAD. The core lives here; the parent gains only the
 small coprocess plumbing (protocol client + fallback), which is
 legitimately awk.
 
+## Architecture: the reusable seams (RULED 2026-08-13)
+
+The user anticipates eventually wanting an ASSEMBLER and the ability to
+execute fully assembled machine code. Ruling: accommodate that in the
+architecture — but only as far as the accommodation is free, which is
+surprisingly far, because the pieces are things this project needs
+anyway. Three seams:
+
+1. THE CPU CORE IS A PURE LIBRARY. No I/O, no TRS-80 knowledge, no
+   protocol: a state machine parameterized by memory-read/write and
+   port-in/out callbacks. The single-step test vectors FORCE this shape
+   — they treat a CPU as (registers, memory) -> (registers', memory')
+   with no devices at all — so testability and reusability are the same
+   requirement. The USR coprocess runner is one consumer; a future
+   standalone runner wires the same callbacks to a flat 64K plus
+   devices.
+
+2. ONE DECLARATIVE OPCODE TABLE is the single source of truth: per
+   entry — mnemonic, operand pattern, encoding, cycle cost, flag
+   effects. Three consumers of the SAME table: the Phase A
+   disassembler/classifier (encoding -> mnemonic), the core's decoder
+   (encoding -> execution), and a future assembler (mnemonic ->
+   encoding, the inverse mapping over data that already exists).
+   Hardcoding decode logic per-opcode instead would mean re-deriving
+   ~700 encodings by hand when the assembler is wanted. Phase A builds
+   this table FIRST, so this ruling shapes the very first artifact.
+
+3. CALLER-OWNED RUN LOOP: the library exposes step() (and run-until
+   conveniences); the caller loops under its own budget and hooks. The
+   USR runner needs this anyway (instruction budget, Ctrl-C/device
+   callbacks); it also leaves the between-instructions slot where a
+   future machine could check interrupts — without building any
+   interrupt machinery now.
+
+NEAR-TERM ASSEMBLER PAYOFF, noted for when it comes up: magazines often
+printed the assembly SOURCE beside the BASIC DATA/POKE loader (endgame's
+machine-code DATA block was hand-verified against its printed assembly
+listing — see the parent's FINDING 29 work). With an assembler sharing
+the table: transcribe the printed assembly, assemble it, and diff the
+bytes against the DATA block — OCR damage in DATA blocks, nearly
+unverifiable today, becomes machine-checkable. A basclean-adjacent
+verification tool, and likely the assembler's first real use — well
+before any standalone-execution system exists.
+
+Explicitly NOT accommodated (gets no cheaper by anticipating it):
+interrupt emulation, a device framework, cassette/disk, ROM-image
+loading, timing beyond the cycle counter. Those remain fenced off with
+the standalone non-goal.
+
 ## The staged plan
 
 STAGE 0 lived in the PARENT repo and SHIPPED 2026-08-13 (fourth corpus
@@ -91,8 +145,10 @@ and bucket the routine: sound (cycle-timed OUT 255 loops), keyboard
 (reads 3800H-38FFH), video (writes 3C00H-3FFFH), pure compute,
 ROM-calling (WHICH entry points, exactly). Output = the real gate
 number per bucket, the Stage 2 trap priority list, and the
-sound-exclusion count, in one measured pass. The decode tables it
-needs are the same tables the core needs — nothing is thrown away.
+sound-exclusion count, in one measured pass. The decode table it
+builds is THE shared declarative opcode table (see "Architecture: the
+reusable seams") — the core's decoder and the future assembler are its
+other consumers; nothing is thrown away.
 Rationale (2026-08-13): the old gate proxy (the parent's usr/ blocked
 category, 143 files) dissolved when the stub re-scan moved 90 files
 and re-filed the rest under deeper blockers; grep can no longer answer
@@ -208,6 +264,10 @@ RULED 2026-08-13:
 3. NAME: renamed awk_Z80_core -> trs80_z80_core (no remote existed;
    rename was free).
 4. TEST VECTORS: fetch-script + gitignore, never committed.
+5. REUSABLE SEAMS: core = pure library, one declarative opcode table,
+   caller-owned run loop — assembler and standalone execution are
+   anticipated consumers, NOT built until asked (see "Architecture:
+   the reusable seams").
 
 STILL OPEN (decide when work starts):
 1. LICENSE: parent is GPLv3 (c) 2026 David Forbis; mirroring it here is
