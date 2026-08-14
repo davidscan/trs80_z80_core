@@ -6,6 +6,12 @@ bytes: measurement, not emulator. It ends here, at a reviewed
 checkpoint, with the gate count presented for the user's go/no-go
 ruling on Stage 1.
 
+RULING STATUS (2026-08-14): presented, reviewed (independent
+assessment reproduced all numbers; FINDING 8 resolved by measurement),
+and the user ruled **stop here for now, discuss further**. The gate is
+neither met nor refused; Stage 1 is not started. Do not write core
+code until the user rules the gate met.
+
 Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 (runnable 3283 + blocked 1062 = **4345 listings**). Reproduce with
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover

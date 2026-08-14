@@ -14,16 +14,21 @@ attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
-**STATUS: NOT STARTED — deliberately.** This space holds the agreed
-design and context so work can begin cold in a future session. The
-start is gated on a measurement: a count of rescued listings actually
-blocked on USR (see DESIGN.md "The gate"). The old proxy for that count
-dissolved on 2026-08-13 when the parent shipped ML Stage 0 (keyboard
-matrix + USR stub) and re-scanned the corpus; the agreed next step is
-PHASE A — a static disassembler/classifier over the corpus's DATA/POKE
-loader bytes — which produces the real gate number, the Stage 2 trap
-priority list, and the sound-exclusion count in one measured pass, and
-is this repo's first artifact.
+**STATUS: PHASE A COMPLETE; GATE RULING DEFERRED (2026-08-14).**
+Phase A — the static disassembler/classifier over the corpus's
+DATA/POKE loader bytes — ran over 4345 listings and produced the gate
+number: **5 blocked listings unlocked by the core (+parent VARPTR),
+21-23 correctness gains, Stage 2's candidate traps measured at zero
+callers**. See Z80_FINDINGS.md (12 findings; FINDING 8 resolved
+2026-08-14). The user's ruling on the gate: **stop here for now,
+discuss further** — Stage 1 (the core itself) is NOT started, and no
+core code should be written until the user rules the gate met.
+Durable Phase A artifacts: the validated 1780-entry opcode table
+(z80/table.py), disassembler, extractor/classifier, sweep, 64 tests.
+Open lever recorded, not built: the dynamic extraction oracle over
+the 96 unresolvable loaders (DESIGN.md escalation path). Owed to the
+PARENT repo: the one-line `DEF USR 0=` parse fix (findings
+correction 4).
 
 Read DESIGN.md for everything: goal, staged plan, technical reference
 (addresses, ROM entry points, ports), the coprocess seam, testing
