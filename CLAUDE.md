@@ -44,9 +44,13 @@ STANDING RULES (do not relearn these the hard way):
   fetch script + gitignore.
 - Parent-owned items (string packing/VARPTR, program-memory mapping)
   stay in the PARENT repo — do not build them here. (Keyboard-matrix
-  PEEK and the USR stub already shipped there, 2026-08-13.)
+  PEEK and the USR stub shipped there 2026-08-13; VARPTR/string
+  packing, program-memory mapping, and the FINDING 8 DEF USR parse fix
+  shipped there 2026-08-14. Note: parent VARPTR does NOT give integer
+  arrays a contiguous 2-byte image — VARPTR-array loaders still route
+  through the extractor; see DESIGN.md.)
 - The parent's regression bar is part of THIS project's bar: any change
-  that touches the interpreter must leave t1-t24 exiting 0 (t7's RND
+  that touches the interpreter must leave t1-t28 exiting 0 (t7's RND
   line varies run to run) and batch exit codes unchanged; the coprocess
   fallback path (no python3) must behave exactly like the shipped stub.
 - Commit with `git commit -F <msgfile>`; use absolute paths in shell

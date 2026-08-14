@@ -17,6 +17,9 @@ Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover
 -s tests` (64 tests). FINDING 8 resolved 2026-08-14 by batch runs
 under the parent interpreter; the sweep numbers are unchanged.
+PARENT-SIDE UPDATE, later the same day: the FINDING 8 fix SHIPPED in
+the parent (c61fdae5) and the parent's VARPTR item shipped too — see
+the addendum after the gate table; the gate number is still 5.
 
 ---
 
@@ -27,13 +30,37 @@ VARPTR item, and nothing else.** The "up to 2 more" reported on
 2026-08-13 was resolved on 2026-08-14: both ?SN errors reproduce, and
 their cause is a parent-side `DEF USR 0=` parse gap, not the missing
 core (FINDING 8) — the gate number is 5, full stop. A further
-**21 already-runnable listings** (23 once the parent parse gap is
-fixed) would stop silently returning a stubbed USR value and start
-returning the real one — a correctness gain, not a runnability gain.
+**21 already-runnable listings** (23 now that the parent parse gap is
+fixed — see the addendum) would stop silently returning a stubbed USR
+value and start returning the real one — a correctness gain, not a
+runnability gain.
 
 That is the honest answer to "how many rescued listings does Stage 1
 (+VARPTR) actually unlock". It is far below what the blocked-category
 sizes suggest, and the reasons are FINDINGS 3, 4 and 5.
+
+PARENT-SIDE ADDENDUM (2026-08-14, after the ruling was recorded): the
+parent shipped two of the items this measurement leaned on, and the
+gate number does not move.
+- The `DEF USR 0=` parse fix shipped (parent c61fdae5) and reproduced
+  this file's prediction exactly: morsmstr.bas batch exit 0, quest_2.bas
+  past its line-36 ?SN to an interactive INPUT — both at stub level,
+  joining the sound set. The correctness column is 23 actual, no
+  longer conditional.
+- The parent's VARPTR item shipped (parent 7e6f0749) — WITH A CAVEAT
+  THAT MATTERS HERE: it serves the STRING-packing idiom faithfully
+  (live descriptor, write-through bytes), but for numerics and array
+  elements it returns the address of a per-element 4-byte
+  Microsoft-single materialization. The parent strips `%` suffixes and
+  keeps all numerics as doubles, so `VARPTR(US%(0))` now returns a
+  real address WITHOUT a contiguous 2-bytes-per-element integer image
+  behind it. The VARPTR-array loader idiom therefore still cannot be
+  read out of parent memory by a future core — those files route
+  through Phase A's extractor/manifest exactly as planned (DESIGN.md
+  "LOADER EXTRACTION"). The gate constituency of 5 now needs ONLY the
+  core, but nothing about the count changes, and the parent's varptr/
+  blocked pile (359) is NOT auto-unblocked — re-classification is a
+  future measurement, recorded in the parent STATUS.md.
 
 | | files |
 |---|---|
@@ -43,7 +70,7 @@ sizes suggest, and the reasons are FINDINGS 3, 4 and 5.
 | **blocked listings unlocked by core + VARPTR alone** | **5** |
 | blocked, ML clean, but *also* blocked by CMD (Disk BASIC) | 14 |
 | blocked, ML clean, but needing a Stage 2 ROM trap | 4 |
-| blocked, ?SN from the parent's `DEF USR 0=` parse gap (FINDING 8) | 2 |
+| blocked, ?SN from the parent's `DEF USR 0=` parse gap (FINDING 8; parent fix shipped 2026-08-14, both now run at stub level) | 2 |
 | blocked, ?SN unrelated to the loader | 2 |
 | runnable listings whose USR result becomes correct | 21 (+2 after the parent fix) |
 
@@ -245,9 +272,10 @@ tokenizes past insignificant spaces, so this is a parse gap in the
 parent's DEF USR stub — FINDING 12's lexical lesson mirrored: the same
 tokenizer that permits `READD` also permits `USR 0`.
 
-Consequence: **neither file is gate constituency.** The blocker is a
+Consequence: **neither file is gate constituency.** The blocker was a
 one-line fix in the PARENT repo (owed to its queue, per the standing
-split — not built here). Once fixed, both run today under the shipped
+split — not built here; SHIPPED there 2026-08-14, c61fdae5, verified:
+morsmstr exit 0, quest_2 past line 36). Once fixed, both run today under the shipped
 stub: both payloads are sound routines (quest_2's 32 bytes disassemble
 to a textbook square wave — `OUT (FFH),A` alternating 1 and 0 around
 nested `DJNZ` delay loops, `RET` landing on exactly the last byte), so
@@ -362,7 +390,8 @@ material. The sweep output is gitignored.
 2. Stage 2's named candidates (`002BH`, `0049H`, `0033H`, `003BH`,
    `0060H`) have **zero** measured callers (FINDING 9).
 3. `raw-bytes-in-code` (135 files) is not 135 ML programs (FINDING 6).
-4. Owed to the PARENT repo's queue, not DESIGN.md: the DEF USR stub
-   rejects `DEF USR 0=` (space before the slot digit) with `?SN`
-   (FINDING 8). One-line lexical fix; unblocks `morsmstr.bas` and
-   `quest_2.bas` to stub level regardless of the gate ruling.
+4. [PAID 2026-08-14] Owed to the PARENT repo's queue, not DESIGN.md:
+   the DEF USR stub rejected `DEF USR 0=` (space before the slot
+   digit) with `?SN` (FINDING 8). The one-line lexical fix shipped in
+   the parent (c61fdae5) and unblocked `morsmstr.bas` and
+   `quest_2.bas` to stub level, as predicted.

@@ -17,7 +17,8 @@ program (see DESIGN.md "Language and the runtime seam").
 **STATUS: PHASE A COMPLETE; GATE RULING DEFERRED (2026-08-14).**
 Phase A — the static disassembler/classifier over the corpus's
 DATA/POKE loader bytes — ran over 4345 listings and produced the gate
-number: **5 blocked listings unlocked by the core (+parent VARPTR),
+number: **5 blocked listings unlocked by the core (parent VARPTR
+shipped 2026-08-14, so the 5 now need only the core),
 21-23 correctness gains, Stage 2's candidate traps measured at zero
 callers**. See Z80_FINDINGS.md (12 findings; FINDING 8 resolved
 2026-08-14). The user's ruling on the gate: **stop here for now,
@@ -26,9 +27,9 @@ core code should be written until the user rules the gate met.
 Durable Phase A artifacts: the validated 1780-entry opcode table
 (z80/table.py), disassembler, extractor/classifier, sweep, 64 tests.
 Open lever recorded, not built: the dynamic extraction oracle over
-the 96 unresolvable loaders (DESIGN.md escalation path). Owed to the
-PARENT repo: the one-line `DEF USR 0=` parse fix (findings
-correction 4).
+the 96 unresolvable loaders (DESIGN.md escalation path). The debt to
+the PARENT repo — the one-line `DEF USR 0=` parse fix (findings
+correction 4) — was PAID there 2026-08-14, verified on both files.
 
 Read DESIGN.md for everything: goal, staged plan, technical reference
 (addresses, ROM entry points, ports), the coprocess seam, testing

@@ -134,9 +134,15 @@ the standalone non-goal.
 STAGE 0 lived in the PARENT repo and SHIPPED 2026-08-13 (fourth corpus
 batch): (a) memory-mapped keyboard matrix for PEEK (3800H-38FFH) —
 live, pty-verified, corpus-measured; (b) the USR/DEF USR parse-and-stub
-(USRn(x) returns its argument). Still parent-owned and pending: string
-packing / VARPTR (mem[]-backed string storage) and program-memory
-mapping. See the parent STATUS.md roadmap.
+(USRn(x) returns its argument; the `DEF USR 0=` space gap of FINDING 8
+fixed 2026-08-14). The formerly-pending parent items BOTH SHIPPED
+2026-08-14: string packing / VARPTR (live write-through descriptor +
+bytes) and program-memory mapping (read-only tokenized image at 42E9H,
+validated against tok.py, plus MEMORY SIZE enforcement). CAVEAT for
+this repo: parent VARPTR serves the STRING idiom; numeric/array
+VARPTR returns per-element 4-byte-single addresses, NOT a contiguous
+2-byte-integer image (see the VARPTR paragraph below). See the parent
+STATUS.md roadmap.
 
 PHASE A (this repo's FIRST artifact, before any core code): a static
 Z80 DISASSEMBLER/CLASSIFIER run over the parent corpus's DATA/POKE
@@ -232,12 +238,22 @@ wait-key, 0033H character-to-display, 003BH character-to-printer
 Start Z80_FINDINGS.md on the first real listing, findings-numbered like
 basclean's.
 
-PARALLEL, PARENT-SIDE: VARPTR. The parent's varptr/ blocked category is
-now the second-largest (359 files as of 2026-08-13) and the dominant
-idiom is DEF USR=VARPTR(US%(0)) — VARPTR used to LOCATE the poked
-routine. Those files need the parent's VARPTR item (synthetic-but-
-consistent addresses backed by mem[]) AND this core, together. Phase A
-counts exactly how many need both.
+PARALLEL, PARENT-SIDE: VARPTR — SHIPPED in the parent 2026-08-14
+(7e6f0749), with one consequence for this repo. The parent's varptr/
+blocked category is the second-largest (359 files as of 2026-08-13)
+and the dominant idiom is DEF USR=VARPTR(US%(0)) — VARPTR used to
+LOCATE the poked routine. The shipped VARPTR returns real, consistent
+addresses (so those loader lines now RUN), and the STRING-packing
+idiom is served faithfully with write-through bytes. BUT the parent
+strips `%` suffixes and stores all numerics as doubles, so an integer
+array does NOT materialize as contiguous 2-bytes-per-element memory:
+VARPTR(US%(0)) addresses a 4-byte Microsoft-single of element 0 only.
+A future core can never read the VARPTR-array routine image out of
+parent memory — those files go through the loader EXTRACTOR's
+VARPTR-array idiom (above), which decodes the DATA values directly.
+The varptr/ pile is NOT auto-unblocked by the ship; re-classification
+is a future measurement (recorded in the parent STATUS.md). Phase A's
+count already reflects all of this: the gate 5 now need only the core.
 
 ## Technical reference (verified in the 2026-08-07 session)
 
@@ -297,8 +313,9 @@ of 2026-08-13 the parent's stub re-scan moved 90 usr/def files (80 ran
 clean — some unknown fraction have load-bearing USR results that only
 play-testing or Phase A can flag) and re-filed the deep-ML pile:
 varptr 359, raw-bytes-in-code 135, inp 54, system 7. The gate question
-is now "how many of these does Stage 1 (+VARPTR, parent-side) actually
-unlock" — Phase A's output IS the gate decision input. This is the
+is now "how many of these does Stage 1 (+VARPTR, parent-side — the
+VARPTR half shipped 2026-08-14) actually unlock" — Phase A's output IS
+the gate decision input. This is the
 estimating twin of the parent's standing lesson: "measure the
 refutation before shipping a plausible heuristic" — here, count the
 unlocked programs before building the emulator.
