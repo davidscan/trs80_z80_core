@@ -1,0 +1,10 @@
+{
+  "repo": "SingleStepTests/z80",
+  "url": "https://github.com/SingleStepTests/z80",
+  "sha": "ebe1875d48f374bcfd4b505d8eb8ee751568b5f7",
+  "pinned_date": "2026-04-10T23:17:11Z",
+  "license": "MIT",
+  "file_count": 1604,
+  "total_bytes": 1374635394,
+  "cases_per_file": 1000
+}
