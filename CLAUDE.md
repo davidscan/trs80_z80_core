@@ -51,5 +51,9 @@ STANDING RULES (do not relearn these the hard way):
   fallback path (no python3) must behave exactly like the shipped stub.
 - Commit with `git commit -F <msgfile>`; use absolute paths in shell
   commands; every increment committed and green before the next.
-- This repo is LOCAL-ONLY as created (no remote). Ask the user before
-  creating a GitHub remote or pushing anywhere.
+- Remote: private GitHub davidscan/trs80-z80-core (created 2026-08-14
+  at the user's direction; hyphenated to match the parent's naming).
+  KEEP IT PRIVATE — the findings quote one-line loader excerpts from
+  magazine listings. No LICENSE file yet (user ruling 2026-08-14);
+  GPLv3 mirroring the parent remains the default assumption when one
+  is added.
