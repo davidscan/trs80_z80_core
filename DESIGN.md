@@ -155,12 +155,20 @@ sound-exclusion count, in one measured pass. The decode table it
 builds is THE shared declarative opcode table (see "Architecture: the
 reusable seams") — the core's decoder and the future assembler are its
 other consumers; nothing is thrown away.
-ACCEPTANCE ANCHORS (ruled 2026-08-13, see CLAUDE.md "ANCHORS BEFORE
-TRUST"): the table validates against known-good disassembly first; the
-classifier must bucket Space Chase (sound) and endgame SCAN3 (keyboard)
-correctly before corpus-wide counts are reported; Phase A ends in a
+ACCEPTANCE ANCHORS (ruled 2026-08-13, wording corrected 2026-08-14,
+see CLAUDE.md "ANCHORS BEFORE TRUST"): the table validates against
+known-good disassembly first; the classifier must be checked against
+Space Chase and endgame SCAN3, and its buckets reconciled with the
+evidence, before corpus-wide counts are reported; Phase A ends in a
 findings doc + gate count presented to the user — never a rolling start
 into Stage 1.
+CORRECTION (Z80_FINDINGS FINDING 2): this section previously called
+endgame SCAN3 a KEYBOARD scan. It is not. The 214-byte block at B000H
+never touches 3800H-38FFH; it walks a caller-supplied table with IX and
+finds a minimum via SBC HL,DE — PURE COMPUTE. SCAN3 is the EVENT-CLOCK
+scan (the parent's FINDING 29 notes say so, and line 1240 calls it as
+`KJ=USR 1(VARPTR(IC(1)))` over the event-clock array `IC()`). Space
+Chase's expectation (sound-only) held.
 
 PHASE A INPUT SET (settled 2026-08-13, second session's question):
 - Primary sweep: ../awk_BASIC_interpreter/programs/runnable/ (3,280)
@@ -192,6 +200,14 @@ manifest of every ML payload in the collection).
   "N files unextractable" is a reported category, not silence.
   raw-bytes-in-code/ files are a fourth input form (bytes literal in
   the file): bucket as raw, don't force through the loader parser.
+  MEASURED (FINDING 6): that category's 135 files are NOT 135 machine-
+  language programs — `B1.bas`'s "raw bytes" are the two-byte fragment
+  `W\x08`, i.e. damage. A "decodes cleanly and contains a RET" filter
+  passes 27.8% of RANDOM byte strings drawn from the same length
+  distribution, so raw-byte payloads carry almost no signal and are
+  EXCLUDED from the gate population. Only structurally-anchored idioms
+  — a declared load address and a declared count the DATA satisfies
+  exactly — are counted.
   Ready-made fixture: endgame's DATA block is count- and
   address-locked against its printed assembly (parent FINDING 29).
 - CLASSIFIER (Z80 knowledge, consumes the shared opcode table).
@@ -199,10 +215,17 @@ manifest of every ML payload in the collection).
   operand addresses (OUT (FFH), reads 3800H-38FFH, writes 3C00H-3FFFH,
   CALL 0A7FH/0A9AH), visible regardless of load address; only
   relative-branch resolution needs the base.
-- ESCALATION PATH, recorded not built: for loaders static extraction
-  cannot crack, the parent interpreter is the extraction ORACLE — run
-  the listing under the shipped USR stub until the first USR call and
-  dump the poked bytes from mem[]. Dynamic fallback, static default.
+- ESCALATION PATH — BUILT 2026-08-14 (`phasea/oracle.py`, FINDINGS
+  13-18): for loaders static extraction cannot crack, the parent
+  interpreter is the extraction ORACLE — run the listing under the
+  shipped USR stub until the first USR call and dump the poked bytes
+  from mem[]. Dynamic fallback, static default. It instruments a
+  SCRATCH COPY of the parent's src/p*.awk (env-var-gated, so the build
+  is inert unless asked, and the parent repo is never modified), and it
+  is validated against the payloads static extraction already resolves
+  before its output counts — zero contradictions required (FINDING 13).
+  Applied to FINDING 7's 96 unresolvable loaders it recovered 56
+  strict-formed payloads and moved the gate number by one.
 Rationale (2026-08-13): the old gate proxy (the parent's usr/ blocked
 category, 143 files) dissolved when the stub re-scan moved 90 files
 and re-filed the rest under deeper blockers; grep can no longer answer
@@ -225,18 +248,30 @@ STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
   fast-video routines (writes to 3C00H-3FFFH land in the interpreter's
   SCR and RENDER — the mapping already exists), AND — new since Stage 0
   shipped — direct keyboard-matrix scan routines, because reads of
-  3800H-38FFH callback into the LIVE matrix. Endgame's SCAN3 may
-  therefore be a STAGE 1 acceptance case, not Stage 2 as originally
-  assumed; Phase A's disassembly of it settles which.
+  3800H-38FFH callback into the LIVE matrix. SETTLED by Phase A:
+  endgame's SCAN3 IS a Stage 1 acceptance case — but for a stronger
+  reason than anticipated. Not because the keyboard matrix went live in
+  Stage 0, but because the routine never needed the keyboard at all
+  (FINDING 2, pure compute). It needs the CPU, the 0A7FH trap, and
+  parent-side VARPTR.
 
 STAGE 2: the HLE trap table, grown CORPUS-DRIVEN (the basclean
-methodology): implement a ROM entry point only when Phase A shows a
-measured real listing calls it. Known candidates (from Microsoft BASIC
-Decoded and the Paay ROM reference): 002BH keyboard scan-once, 0049H
-wait-key, 0033H character-to-display, 003BH character-to-printer
-(likely route to the parent's LPRINT stream or refuse), 0060H delay.
-Start Z80_FINDINGS.md on the first real listing, findings-numbered like
-basclean's.
+methodology): implement a ROM entry point only when a measured real
+listing calls it. MEASURED (Z80_FINDINGS FINDINGS 9 and 18) — the list
+is short, and it took the dynamic oracle to find any of it:
+  002BH keyboard scan-once      6 callers
+  0033H character to display    6 callers
+  1BC0H (not a documented Level II entry)   1 caller
+  0028H RST 28H, the Disk BASIC DOS vector  3 callers — belongs with
+        the CMD blocker, not with HLE
+  0049H wait-key, 003BH char-to-printer, 0060H delay:  ZERO callers,
+        measured twice. Do not build them on spec.
+Note the history, because it is the methodology working: FINDING 9
+measured ALL five named candidates at zero callers over the statically
+extractable population and concluded Stage 2 was unjustified. Closing
+FINDING 7 with the oracle put callers on two of them. The rule stands —
+implement on measured evidence — but "measured" had to include the
+dynamically-resolved loaders before it meant anything.
 
 PARALLEL, PARENT-SIDE: VARPTR — SHIPPED in the parent 2026-08-14
 (7e6f0749), with one consequence for this repo. The parent's varptr/
@@ -292,11 +327,12 @@ count already reflects all of this: the gate 5 now need only the core.
   suite from day one; the passing suite pins mechanical behavior, not
   "the emulator works" — real-listing acceptance is the bar.
 - Acceptance corpus: the parent's rescued listings with USR routines.
-  Known today: Space Chase (80 Micro 5/1982; sound-only USR — should
-  run with sound silently swallowed) and ENDGAME/BAS (80 Micro 5/1985;
-  SCAN3 keyboard routine is load-bearing — possibly Stage 1 now that
-  the matrix is live; Phase A settles it). Phase A's classification
-  grows this list from the corpus.
+  Space Chase (80 Micro 5/1982) is sound-only USR — runs with sound
+  silently swallowed. ENDGAME/BAS (80 Micro 5/1985) is a Stage 1 case:
+  SCAN3 is the EVENT-CLOCK scan, pure compute, NOT the keyboard scan
+  this document called it before Phase A measured it (FINDING 2). Phase
+  A's classification grew this list to 46 statically-extractable
+  payloads, and the oracle added 56 more (FINDING 14).
 - Regression contract with the parent: t1-t24 transcripts exit 0 and
   t7's RND line is the only run-to-run variance; batch mode exit codes
   unchanged; a new t25+ transcript for coprocess USR (with the
@@ -319,6 +355,28 @@ the gate decision input. This is the
 estimating twin of the parent's standing lesson: "measure the
 refutation before shipping a plausible heuristic" — here, count the
 unlocked programs before building the emulator.
+
+MEASURED AND CLOSED 2026-08-14. Phase A returned **5**; closing
+FINDING 7's 96 unresolvable loaders with the dynamic oracle returned
+**6**. The measured machine-code population more than doubled (46 →
+102 files) and the unlock count moved by one, because what is scarce
+in this corpus is not machine code — it is a listing whose ONLY
+obstacle is the absent Z80. Full numbers and method in Z80_FINDINGS.md
+(FINDINGS 13-18).
+
+NOTE THE GATE NEVER SET A THRESHOLD. It specifies a measurement and a
+decision procedure — present to the user, user rules — not a number
+that means "build". That was deliberate, and it means no arithmetic
+settles the ruling; the judgment is the user's and was never
+pre-committed.
+
+WHAT THE CLOSING RUN FOUND THAT THE GATE DOES NOT SCORE: two
+PARENT-side defects each worth more listings than the core is —
+`USR n(` at the call site (134 listings, FINDING 17) and the
+`PEEK(16396)` cassette/disk probe answering 255 instead of 201 (88
+listings, FINDING 16). Both are parent-owned and unbuilt. A ruling on
+the core should be taken knowing the cheapest listings-per-hour on the
+table right now are not in this repo.
 
 ## Decisions
 

@@ -22,15 +22,30 @@ STANDING RULES (do not relearn these the hard way):
   loader bytes. Do not write opcode-execution code until its numbers
   are in and the user has ruled the gate met. Phase A itself is in-gate
   (measurement, not emulator) — confirmed with the user 2026-08-13.
-- ANCHORS BEFORE TRUST (Phase A discipline, ruled 2026-08-13): validate
-  before believing, in this order. (1) The opcode table must pass a
-  validation set against known-good disassembly BEFORE any classifier
-  output is trusted. (2) The classifier must correctly bucket the two
-  ground-truth anchors — Space Chase (sound-only USR) and ENDGAME/BAS
-  SCAN3 (keyboard scan) — BEFORE its corpus-wide counts mean anything.
-  A count produced without both checks passing is not a measurement.
-  (This is the parent repo's standing lesson — plausible heuristics
-  die under measurement — applied prophylactically.)
+- ANCHORS BEFORE TRUST (Phase A discipline, ruled 2026-08-13; wording
+  corrected 2026-08-14): validate before believing, in this order.
+  (1) The opcode table must pass a validation set against known-good
+  disassembly BEFORE any classifier output is trusted. (2) The
+  classifier must be checked against the two ground-truth anchors —
+  Space Chase and ENDGAME/BAS SCAN3 — and its buckets for them
+  reconciled with the evidence, BEFORE its corpus-wide counts mean
+  anything. A count produced without both checks passing is not a
+  measurement. (Parent's standing lesson — plausible heuristics die
+  under measurement — applied prophylactically.)
+  NOTE, and the reason the wording changed: this rule originally said
+  the classifier must bucket endgame as a KEYBOARD scan. It is not one.
+  SCAN3 is the event-clock scan and is PURE COMPUTE, with no
+  3800H-38FFH access anywhere (Z80_FINDINGS FINDING 2, corroborated by
+  the parent's own FINDING 29 notes and by line 1240's
+  `KJ=USR 1(VARPTR(IC(1)))`). The anchor earned its keep by refuting
+  its own stated expectation — so the rule is "check the anchor", never
+  "make the anchor come out the way we assumed". An anchor that cannot
+  be wrong is not an anchor.
+  (3) Applies to any NEW measurement instrument too, not just the
+  classifier: the dynamic extraction oracle was validated against the
+  payloads static extraction already resolved, and had to contradict
+  none of them, before its output on the unresolvable 96 counted
+  (FINDING 13).
 - THE GATE RULING IS A REVIEWED CHECKPOINT: Phase A ends in a findings
   document (Z80_FINDINGS.md, numbered like basclean's) plus the gate
   count, presented to the USER for the go/no-go ruling on the core.

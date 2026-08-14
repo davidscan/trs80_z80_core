@@ -14,22 +14,30 @@ attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
-**STATUS: PHASE A COMPLETE; GATE RULING DEFERRED (2026-08-14).**
-Phase A — the static disassembler/classifier over the corpus's
-DATA/POKE loader bytes — ran over 4345 listings and produced the gate
-number: **5 blocked listings unlocked by the core (parent VARPTR
-shipped 2026-08-14, so the 5 now need only the core),
-21-23 correctness gains, Stage 2's candidate traps measured at zero
-callers**. See Z80_FINDINGS.md (12 findings; FINDING 8 resolved
-2026-08-14). The user's ruling on the gate: **stop here for now,
-discuss further** — Stage 1 (the core itself) is NOT started, and no
-core code should be written until the user rules the gate met.
-Durable Phase A artifacts: the validated 1780-entry opcode table
-(z80/table.py), disassembler, extractor/classifier, sweep, 64 tests.
-Open lever recorded, not built: the dynamic extraction oracle over
-the 96 unresolvable loaders (DESIGN.md escalation path). The debt to
-the PARENT repo — the one-line `DEF USR 0=` parse fix (findings
-correction 4) — was PAID there 2026-08-14, verified on both files.
+**STATUS: GATE MEASURED TO COMPLETION; RULING WITH THE USER
+(2026-08-14).** Phase A — the static disassembler/classifier over the
+corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
+**5** unlocked listings. The one remaining hole in that measurement,
+FINDING 7's 96 loaders static extraction could not resolve, was then
+closed by building the dynamic extraction oracle (`phasea/oracle.py`,
+DESIGN.md's recorded escalation path). Result: the measured
+machine-code population more than **doubled, 46 → 102 files**, and the
+gate number moved **5 → 6**. What is scarce in this corpus is not
+machine code; it is a listing whose ONLY obstacle is the absent Z80.
+
+The oracle also turned up two **parent-side** defects each worth more
+listings than the core is: `USR n(` at the call site raises ?SN (134
+listings — FINDING 8's sibling), and `PEEK(16396)` answers 255 where a
+cassette Level II answers 201, sending 88 listings down their Disk
+branch into CMD. Both parent-owned, both unbuilt.
+
+See Z80_FINDINGS.md (18 findings). Stage 1 (the core itself) is NOT
+started and no core code has been written; the gate never set a
+numeric threshold, so the ruling is the user's. Durable artifacts: the
+validated 1780-entry opcode table (z80/table.py), disassembler,
+extractor/classifier, sweep, the oracle, the pinned single-step vector
+suite (tools/fetch_vectors.py), 97 tests. The debt to the PARENT repo —
+the one-line `DEF USR 0=` parse fix — was PAID there 2026-08-14.
 
 Read DESIGN.md for everything: goal, staged plan, technical reference
 (addresses, ROM entry points, ports), the coprocess seam, testing

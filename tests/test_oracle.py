@@ -1,0 +1,206 @@
+"""The dynamic extraction oracle -- FINDING 7's escalation path.
+
+The oracle drives the PARENT interpreter, so most of what can go wrong
+here is a mismatch with parent source that has moved underneath us.
+The patch-point test is the important one: it fails loudly the moment
+an instrumentation anchor stops matching, rather than silently
+producing an uninstrumented build whose measurements are all zero.
+
+Tests that need the parent repo or gawk skip cleanly when they are
+absent, the same pattern the anchor tests use for the local-only
+corpus sibling.
+"""
+
+import os
+import subprocess
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from phasea import oracle                                     # noqa: E402
+
+HAVE_PARENT = os.path.isdir(oracle.SRC)
+HAVE_GAWK = subprocess.run(['which', 'gawk'],
+                           capture_output=True).returncode == 0
+
+
+class TestRunGrouping(unittest.TestCase):
+    """(addr, byte) log -> contiguous payload runs."""
+
+    def test_contiguous_run(self):
+        pokes = [(100, 1), (101, 2), (102, 3), (103, 4)]
+        self.assertEqual(oracle.runs_from_pokes(pokes),
+                         [(100, bytes([1, 2, 3, 4]))])
+
+    def test_gap_splits_runs(self):
+        pokes = [(100, 1), (101, 2), (102, 3), (103, 4),
+                 (200, 9), (201, 9), (202, 9), (203, 9)]
+        self.assertEqual(oracle.runs_from_pokes(pokes),
+                         [(100, bytes([1, 2, 3, 4])), (200, bytes([9] * 4))])
+
+    def test_last_write_wins(self):
+        """A loader that patches a byte after depositing it -- the whole
+        reason the oracle sees things static extraction cannot."""
+        pokes = [(10, 0), (11, 0), (12, 0), (13, 0), (11, 0x14)]
+        self.assertEqual(oracle.runs_from_pokes(pokes),
+                         [(10, bytes([0, 0x14, 0, 0]))])
+
+    def test_short_runs_are_dropped(self):
+        self.assertEqual(oracle.runs_from_pokes([(5, 1), (6, 2)]), [])
+
+    def test_empty(self):
+        self.assertEqual(oracle.runs_from_pokes([]), [])
+
+
+class TestCompareTiering(unittest.TestCase):
+    """Oracle output vs static ground truth.
+
+    The criterion is deliberately NOT byte equality: a loader deposits
+    DATA literals and then pokes runtime values into the operands
+    before calling USR. quest_2.bas ships LD H,00H / LD L,00H / LD C,00H
+    and pokes pitch 20 and duration 50 in. Byte-inequality there is the
+    oracle being right.
+    """
+
+    def test_exact(self):
+        d = bytes(range(20))
+        self.assertEqual(oracle.compare(d, d, 100, 100), 'exact')
+
+    def test_contained_in_a_longer_run(self):
+        want = bytes(range(10))
+        got = bytes(range(20))
+        self.assertEqual(oracle.compare(want, got, 105, 100), 'contradiction')
+        self.assertEqual(oracle.compare(want, got, 100, 100), 'exact')
+
+    def test_runtime_patched_operands_are_agreement(self):
+        want = bytes([0x26, 0x00, 0x2E, 0x00, 0x0E, 0x00] + [1] * 26)
+        got = bytes([0x26, 0x14, 0x2E, 0x01, 0x0E, 0x32] + [1] * 26)
+        self.assertEqual(oracle.compare(want, got, 0, 0), 'patched')
+
+    def test_wholesale_difference_is_a_contradiction(self):
+        want = bytes([1] * 40)
+        got = bytes([2] * 40)
+        self.assertEqual(oracle.compare(want, got, 0, 0), 'contradiction')
+
+    def test_run_too_short_is_a_contradiction(self):
+        self.assertEqual(oracle.compare(bytes(30), bytes(10), 0, 0),
+                         'contradiction')
+
+
+class TestRegionDiscrimination(unittest.TestCase):
+    """FINDING 5's not-every-POKE-loop-is-a-loader, applied dynamically."""
+
+    def test_video_fill_is_screen_data(self):
+        self.assertEqual(oracle.region_of(15360, bytes(1024)), 'screen-data')
+
+    def test_printer_window_is_a_device_stream(self):
+        self.assertEqual(oracle.region_of(14312, bytes(2)), 'device-stream')
+
+    def test_ordinary_ram_is_candidate_ml(self):
+        self.assertEqual(oracle.region_of(32740, bytes(27)), 'candidate-ml')
+
+
+@unittest.skipUnless(HAVE_PARENT, 'parent interpreter sources not present')
+class TestPatchPoints(unittest.TestCase):
+    """Every instrumentation anchor must still match the parent EXACTLY.
+
+    This is the test that earns its keep. If the parent's st_poke,
+    dopeek, USR stub, or exec loop is edited, the anchor stops matching
+    and the build aborts -- instead of quietly producing an interpreter
+    with no instrumentation, whose every measurement would read zero
+    and look like a finding.
+    """
+
+    def test_each_patch_matches_exactly_once(self):
+        for module, old, _new in oracle.PATCHES:
+            with open(os.path.join(oracle.SRC, module)) as f:
+                text = f.read()
+            self.assertEqual(
+                text.count(old), 1,
+                'patch anchor in %s no longer matches exactly once -- the '
+                'parent source moved; re-verify before trusting any oracle '
+                'output' % module)
+
+    def test_every_patch_is_env_gated(self):
+        """Nothing may execute unless a TRS80_* var asks for it.
+
+        Textual check only -- the real guarantee that instrumentation
+        does not perturb the measurement is the behavioural one in
+        TestInstrumentedBuild.test_uninstrumented_behaviour_is_unchanged,
+        which diffs this build against the shipped interpreter.
+        """
+        gates = ('TRS80_POKELOG', 'TRS80_CASSETTE', 'TRS80_LINELOG')
+        for module, old, new in oracle.PATCHES:
+            self.assertGreater(len(new), len(old),
+                               '%s: patch removes code' % module)
+            added = [ln for ln in new.splitlines()
+                     if ln not in old.splitlines()]
+            self.assertTrue(added, '%s: patch adds nothing' % module)
+            self.assertTrue(
+                any(g in new for g in gates),
+                '%s: patch is not gated on an environment variable' % module)
+
+    def test_no_patch_touches_the_shipped_interpreter(self):
+        """The parent repo is data here, never a build target."""
+        shipped = os.path.join(oracle.PARENT, 'trs80basic.awk')
+        if not os.path.exists(shipped):
+            self.skipTest('parent has no built interpreter')
+        with open(shipped) as f:
+            text = f.read()
+        for gate in ('TRS80_POKELOG', 'TRS80_CASSETTE', 'TRS80_LINELOG'):
+            self.assertNotIn(gate, text,
+                             'instrumentation leaked into the parent repo')
+
+
+@unittest.skipUnless(HAVE_PARENT and HAVE_GAWK, 'needs parent sources + gawk')
+class TestInstrumentedBuild(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.interp = oracle.build(force=True)
+
+    def test_build_produces_an_interpreter(self):
+        self.assertTrue(os.path.getsize(self.interp) > 100000)
+
+    def test_uninstrumented_behaviour_is_unchanged(self):
+        """The instrumentation must not perturb what it measures."""
+        prog = os.path.join(oracle.OUT, 'selftest.bas')
+        with open(prog, 'w') as f:
+            f.write('10 PRINT "HELLO"\n20 PRINT 6*7\n')
+        env = {k: v for k, v in os.environ.items()
+               if k not in ('TRS80_POKELOG', 'TRS80_CASSETTE', 'TRS80_LINELOG')}
+        mine = subprocess.run(['gawk', '-f', self.interp, '--', prog],
+                              capture_output=True, env=env)
+        theirs = subprocess.run(
+            ['gawk', '-f', os.path.join(oracle.PARENT, 'trs80basic.awk'),
+             '--', prog], capture_output=True, env=env)
+        self.assertEqual(mine.stdout, theirs.stdout)
+        self.assertEqual(mine.returncode, theirs.returncode)
+
+    def test_poke_log_records_what_a_loader_deposits(self):
+        prog = os.path.join(oracle.OUT, 'loader.bas')
+        with open(prog, 'w') as f:
+            f.write('10 FOR I=0 TO 3:READ D:POKE 32000+I,D:NEXT\n'
+                    '20 DATA 62,1,211,255\n')
+        got = oracle.run_listing(prog, timeout=20)
+        self.assertEqual(oracle.runs_from_pokes(got['pokes']),
+                         [(32000, bytes([62, 1, 211, 255]))])
+
+    def test_cassette_counterfactual_is_off_by_default(self):
+        prog = os.path.join(oracle.OUT, 'probe.bas')
+        with open(prog, 'w') as f:
+            f.write('10 POKE 32000,PEEK(16396)\n'
+                    '20 POKE 32001,PEEK(16396)\n'
+                    '30 POKE 32002,PEEK(16396)\n'
+                    '40 POKE 32003,PEEK(16396)\n')
+        off = oracle.run_listing(prog, timeout=20, cassette=False)
+        on = oracle.run_listing(prog, timeout=20, cassette=True)
+        self.assertEqual(oracle.runs_from_pokes(off['pokes']),
+                         [(32000, bytes([255] * 4))])
+        self.assertEqual(oracle.runs_from_pokes(on['pokes']),
+                         [(32000, bytes([201] * 4))])
+
+
+if __name__ == '__main__':
+    unittest.main()

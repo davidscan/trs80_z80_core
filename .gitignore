@@ -12,3 +12,6 @@ zexall*
 out/
 __pycache__/
 *.pyc
+
+# macOS Finder droppings.
+.DS_Store
