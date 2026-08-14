@@ -9,17 +9,21 @@ ruling on Stage 1.
 Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 (runnable 3283 + blocked 1062 = **4345 listings**). Reproduce with
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover
--s tests` (64 tests).
+-s tests` (64 tests). FINDING 8 resolved 2026-08-14 by batch runs
+under the parent interpreter; the sweep numbers are unchanged.
 
 ---
 
 ## THE GATE NUMBER
 
 **5 blocked listings are unlocked by the Z80 core plus the parent's
-VARPTR item, and nothing else.** Up to **2 more** are plausible but
-unconfirmed (FINDING 8). A further **21 already-runnable listings**
-would stop silently returning a stubbed USR value and start returning
-the real one — a correctness gain, not a runnability gain.
+VARPTR item, and nothing else.** The "up to 2 more" reported on
+2026-08-13 was resolved on 2026-08-14: both ?SN errors reproduce, and
+their cause is a parent-side `DEF USR 0=` parse gap, not the missing
+core (FINDING 8) — the gate number is 5, full stop. A further
+**21 already-runnable listings** (23 once the parent parse gap is
+fixed) would stop silently returning a stubbed USR value and start
+returning the real one — a correctness gain, not a runnability gain.
 
 That is the honest answer to "how many rescued listings does Stage 1
 (+VARPTR) actually unlock". It is far below what the blocked-category
@@ -33,8 +37,9 @@ sizes suggest, and the reasons are FINDINGS 3, 4 and 5.
 | **blocked listings unlocked by core + VARPTR alone** | **5** |
 | blocked, ML clean, but *also* blocked by CMD (Disk BASIC) | 14 |
 | blocked, ML clean, but needing a Stage 2 ROM trap | 4 |
-| blocked, ?SN on or near the loader line (unconfirmed) | 4 |
-| runnable listings whose USR result becomes correct | 21 |
+| blocked, ?SN from the parent's `DEF USR 0=` parse gap (FINDING 8) | 2 |
+| blocked, ?SN unrelated to the loader | 2 |
+| runnable listings whose USR result becomes correct | 21 (+2 after the parent fix) |
 
 ---
 
@@ -139,6 +144,20 @@ The five that *are* unlocked by core + VARPTR alone:
     varptr/MAIL32.bas                 varptr/MAIL48.bas
     varptr/m3t1s2d.bas
 
+Two caveats on the five, recorded 2026-08-14 (assessment review):
+
+- `xwingcf2.bas` has the weakest entry evidence of the five: its USR
+  vector poke resolved only the high byte (`hi-only-127`), so
+  classification fell back to entry offset 0. The payload is
+  strict-formed; the entry-address linkage is not locked.
+- "Plus the parent's VARPTR item" is category-level, not
+  mechanism-level: **none of the five enters through
+  `DEF USR=VARPTR(...)`** — the varptr/ three use literal DEF USR
+  addresses and vector pokes, and need parent VARPTR only because
+  their listings call VARPTR elsewhere. The entry-idiom VARPTR files
+  (the 359-file category's namesake pattern) contributed exactly one
+  gate file, `ld8509b.bas` — and it is Stage-2-blocked on `RST 28H`.
+
 ## FINDING 5 — not every POKE loop is a machine-code loader
 
 The corpus forced a discrimination the plan did not anticipate.
@@ -197,7 +216,7 @@ first USR call and dump the poked bytes from `mem[]`. **Not built.** If
 the gate is ruled met, this is the cheapest way to grow the measured
 population, and it would resolve up to 96 more files.
 
-## FINDING 8 — three ?SN blockers sit on the loader line itself
+## FINDING 8 — the loader-line ?SN blockers are a parent-side `DEF USR 0=` parse gap (RESOLVED 2026-08-14)
 
 Four `sn-when-run/` listings have clean ML. Their recorded `?SN` lines:
 
@@ -207,10 +226,27 @@ Four `sn-when-run/` listings have clean ML. Their recorded `?SN` lines:
 - `sleuth2.bas` line 29 — a PRINT and an assignment; unrelated to ML
 
 For the first two the syntax error is *on the machine-language loader
-line*. They are plausibly USR-blocked and would join the gate
-population, but the ?SN has not been reproduced under the interpreter,
-so they are **counted as 0 and reported as "up to +2"**. Confirming
-them costs one batch run each.
+line*, so as of 2026-08-13 they were plausibly USR-blocked, counted as
+0, and reported as "up to +2" pending one batch run each.
+
+**Those runs were made 2026-08-14, and the +2 dissolves.** Both ?SN
+errors reproduce under the parent interpreter, exactly on the loader
+lines. Minimal repros isolate the cause to one token: `DEF USR 0=`
+**with a space before the slot digit** raises `?SN`, while
+`DEF USR0=`, `DEFUSR0=`, and `DEF USR=` all parse. The FOR/READ/POKE
+and `&H` portions of both lines run clean in isolation. Real Level II
+tokenizes past insignificant spaces, so this is a parse gap in the
+parent's DEF USR stub — FINDING 12's lexical lesson mirrored: the same
+tokenizer that permits `READD` also permits `USR 0`.
+
+Consequence: **neither file is gate constituency.** The blocker is a
+one-line fix in the PARENT repo (owed to its queue, per the standing
+split — not built here). Once fixed, both run today under the shipped
+stub: both payloads are sound routines (quest_2's 32 bytes disassemble
+to a textbook square wave — `OUT (FFH),A` alternating 1 and 0 around
+nested `DJNZ` delay loops, `RET` landing on exactly the last byte), so
+they join the FINDING 10 sound set and the runnable-half correctness
+column (21 → 23), not the unlocked 5. The gate number stays **5**.
 
 ## FINDING 9 — the Stage 2 trap priority list is short and mostly not Level II
 
@@ -320,3 +356,7 @@ material. The sweep output is gitignored.
 2. Stage 2's named candidates (`002BH`, `0049H`, `0033H`, `003BH`,
    `0060H`) have **zero** measured callers (FINDING 9).
 3. `raw-bytes-in-code` (135 files) is not 135 ML programs (FINDING 6).
+4. Owed to the PARENT repo's queue, not DESIGN.md: the DEF USR stub
+   rejects `DEF USR 0=` (space before the slot digit) with `?SN`
+   (FINDING 8). One-line lexical fix; unblocks `morsmstr.bas` and
+   `quest_2.bas` to stub level regardless of the gate ruling.
