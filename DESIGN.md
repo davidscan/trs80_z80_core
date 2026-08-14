@@ -155,6 +155,48 @@ classifier must bucket Space Chase (sound) and endgame SCAN3 (keyboard)
 correctly before corpus-wide counts are reported; Phase A ends in a
 findings doc + gate count presented to the user — never a rolling start
 into Stage 1.
+
+PHASE A INPUT SET (settled 2026-08-13, second session's question):
+- Primary sweep: ../awk_BASIC_interpreter/programs/runnable/ (3,280)
+  PLUS programs/blocked/ (1,065, all categories). Both halves matter:
+  blocked/ is the gate constituency; runnable/ includes the 148 files
+  the USR stub + DEF FN re-selections moved, and classifying THEIR
+  routines answers "does the stubbed USR result silently matter"
+  statically. These listings are byte-exact detokenized tape images —
+  no OCR damage.
+- SKIP programs/Model1/ and the zip archive (same content
+  re-organized; double-counts), programs/dialect/ (non-Level-II).
+  LargeCollection/Detokenized/ is empty.
+- The ~10 transcribed fixtures in ../awk_BASIC_interpreter/OCRsamples/
+  (LOCAL-ONLY sibling; includes BOTH anchors, spacechase + endgame):
+  read IN PLACE by path, NEVER copy into this repo — transcriptions of
+  copyrighted magazine listings, same rule as ROM bytes.
+- Mechanical: blocked/ files carry a line-0 `0 REM *** BLOCKED: ... ***`
+  annotation header — ignore it during extraction.
+
+LOADER EXTRACTION (settled 2026-08-13): TWO MODULES, ONE PIPELINE,
+with a defined JSON intermediate {file, idiom, base (int|symbolic),
+bytes, provenance, confidence} — itself a durable corpus artifact (a
+manifest of every ML payload in the collection).
+- EXTRACTOR (BASIC-idiom knowledge). v1 handles the three dominant
+  idioms: literal-address FOR/READ/POKE loops, direct POKE sequences,
+  and the VARPTR-array idiom — where DATA values land in an INTEGER
+  ARRAY, two little-endian bytes per US%(n) element, base symbolic.
+  Computed addresses it cannot resolve are FLAGGED, never guessed —
+  "N files unextractable" is a reported category, not silence.
+  raw-bytes-in-code/ files are a fourth input form (bytes literal in
+  the file): bucket as raw, don't force through the loader parser.
+  Ready-made fixture: endgame's DATA block is count- and
+  address-locked against its printed assembly (parent FINDING 29).
+- CLASSIFIER (Z80 knowledge, consumes the shared opcode table).
+  Symbolic base is mostly harmless: classification keys on ABSOLUTE
+  operand addresses (OUT (FFH), reads 3800H-38FFH, writes 3C00H-3FFFH,
+  CALL 0A7FH/0A9AH), visible regardless of load address; only
+  relative-branch resolution needs the base.
+- ESCALATION PATH, recorded not built: for loaders static extraction
+  cannot crack, the parent interpreter is the extraction ORACLE — run
+  the listing under the shipped USR stub until the first USR call and
+  dump the poked bytes from mem[]. Dynamic fallback, static default.
 Rationale (2026-08-13): the old gate proxy (the parent's usr/ blocked
 category, 143 files) dissolved when the stub re-scan moved 90 files
 and re-filed the rest under deeper blockers; grep can no longer answer
