@@ -19,29 +19,44 @@ still not started; no core code has been written.
 Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 (runnable 3283 + blocked 1062 = **4345 listings**). Reproduce with
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover
--s tests` (64 tests). FINDING 8 resolved 2026-08-14 by batch runs
+-s tests` (98 tests). FINDING 8 resolved 2026-08-14 by batch runs
 under the parent interpreter; the sweep numbers are unchanged.
 PARENT-SIDE UPDATE, later the same day: the FINDING 8 fix SHIPPED in
 the parent (c61fdae5) and the parent's VARPTR item shipped too — see
-the addendum after the gate table; the gate number is still 5.
+the addendum after the gate table; neither moved the number. The
+FINDING 16/17 fixes shipped that evening (parent 8c38dca6) and did not
+move it either — they change how many listings RUN, not how many are
+blocked on the core alone. Post-fix figures are re-measured throughout
+FINDINGS 14-18.
 
 ---
 
 ## THE GATE NUMBER
 
-**5 blocked listings are unlocked by the Z80 core plus the parent's
-VARPTR item, and nothing else.** The "up to 2 more" reported on
-2026-08-13 was resolved on 2026-08-14: both ?SN errors reproduce, and
-their cause is a parent-side `DEF USR 0=` parse gap, not the missing
-core (FINDING 8) — the gate number is 5, full stop. A further
-**21 already-runnable listings** (23 now that the parent parse gap is
-fixed — see the addendum) would stop silently returning a stubbed USR
+### Current answer: **6**
+
+**6 blocked listings are unlocked by the Z80 core and nothing else** —
+the measurement is complete as of 2026-08-14, with FINDING 7's 96
+unresolvable loaders closed by the oracle. A further **23
+already-runnable listings** would stop silently returning a stubbed USR
 value and start returning the real one — a correctness gain, not a
 runnability gain.
 
 That is the honest answer to "how many rescued listings does Stage 1
-(+VARPTR) actually unlock". It is far below what the blocked-category
-sizes suggest, and the reasons are FINDINGS 3, 4 and 5.
+actually unlock". It is far below what the blocked-category sizes
+suggest, and the reasons are FINDINGS 3, 4, 5 and 15.
+
+**The gate never set a numeric threshold** — it specifies a measurement
+and a decision procedure (present to the user, user rules), not a
+number that means "build". No arithmetic settles the ruling.
+
+### How it got here (history, kept deliberately)
+
+Phase A returned **5**, on the statically extractable population only.
+The "up to 2 more" reported on 2026-08-13 was resolved on 2026-08-14:
+both ?SN errors reproduce, and their cause is a parent-side
+`DEF USR 0=` parse gap, not the missing core (FINDING 8). Closing
+FINDING 7 with the dynamic oracle then moved 5 → 6 (FINDINGS 13-15).
 
 PARENT-SIDE ADDENDUM (2026-08-14, after the ruling was recorded): the
 parent shipped two of the items this measurement leaned on, and the
@@ -71,7 +86,7 @@ gate number does not move.
 | listings swept | 4345 |
 | …using USR | 566 |
 | …carrying cleanly extractable machine code (static) | 46 |
-| …**plus** recovered by the oracle from the unresolvable 96 (FINDING 14) | **+56** |
+| …**plus** recovered by the oracle from the unresolvable 96 (FINDING 14) | **+61** |
 | **blocked listings unlocked by core + VARPTR alone** | **6** |
 | blocked, ML clean, but *also* blocked by CMD (Disk BASIC) | 14 |
 | blocked, ML clean, but needing a Stage 2 ROM trap | 4 (+7, FINDING 18) |
@@ -81,7 +96,7 @@ gate number does not move.
 
 **THE GATE NUMBER MOVED BY ONE: 5 → 6.** Closing FINDING 7 more than
 doubled the measured machine-code population — 46 statically
-extractable payloads became 102 — and changed the unlock count by a
+extractable payloads became 107 — and changed the unlock count by a
 single file. That gap is the whole result. The machine code was
 always there; what was missing was a listing whose ONLY obstacle is
 the absent Z80, and running 96 more loaders produced exactly one more
@@ -188,13 +203,18 @@ This is the trap the old proxy fell into. A file sitting in
 USR. Counting the ML payload as gate evidence would have inflated the
 number roughly fourfold.
 
-The five that *are* unlocked by core + VARPTR alone:
+The five that *are* unlocked by core + VARPTR alone (statically
+measured; the sixth arrived later from the oracle):
 
     raw-bytes-in-code/dmbsfh1.bas     raw-bytes-in-code/xwingcf2.bas
     varptr/MAIL32.bas                 varptr/MAIL48.bas
     varptr/m3t1s2d.bas
 
-Two caveats on the five, recorded 2026-08-14 (assessment review):
+    varptr/engindb3.bas   <- the 6th, added by FINDING 15: the only one
+                             of 14 hanging listings whose loop is
+                             actually gated on the USR result
+
+Two caveats on the first five, recorded 2026-08-14 (assessment review):
 
 - `xwingcf2.bas` has the weakest entry evidence of the five: its USR
   vector poke resolved only the high byte (`hi-only-127`), so
@@ -297,7 +317,8 @@ stub: both payloads are sound routines (quest_2's 32 bytes disassemble
 to a textbook square wave — `OUT (FFH),A` alternating 1 and 0 around
 nested `DJNZ` delay loops, `RET` landing on exactly the last byte), so
 they join the FINDING 10 sound set and the runnable-half correctness
-column (21 → 23), not the unlocked 5. The gate number stays **5**.
+column (21 → 23), not the unlocked set. The gate number stayed **5** at
+this point; FINDING 15 later moved it to 6.
 
 ## FINDING 9 — the Stage 2 trap priority list is short and mostly not Level II
 
@@ -432,35 +453,47 @@ precisely the population the gate is about.
 
 ## FINDING 14 — the oracle resolves most of the 96, and the ML population doubles
 
-Of the 96: 80 deposited bytes, 66 yielded candidate machine code, and
-**56 yielded STRICT-formed payloads** (the ≥90%-coverage,
-ends-exactly-on-RET filter whose random-data false-positive rate
-FINDING 6 measured at 5.3%). 49 of the 56 are covered by Stage 1 alone.
+Of the 96, measured against the parent as it then stood: 80 deposited
+bytes, 66 yielded candidate machine code, and **56 yielded
+STRICT-formed payloads** (the ≥90%-coverage, ends-exactly-on-RET filter
+whose random-data false-positive rate FINDING 6 measured at 5.3%).
 
-Buckets, by strict payload: sound 40, video 8, ROM-calling 7,
-keyboard 1, pure-compute 1. Sound still dominates, exactly as
+RE-MEASURED against the parent after FINDINGS 16 and 17 shipped there,
+which is the number to quote now: 86 deposited, 73 candidate, **61
+strict-formed**, 57 reached a USR call (from 25). 54 of the 61 are
+covered by Stage 1 alone; the other 7 need a Stage 2 trap (FINDING 18).
+
+Buckets, by strict payload: sound 44, video 8, ROM-calling 7,
+pure-compute 3, keyboard 1. Sound still dominates, exactly as
 FINDING 10 found statically.
 
 So the corpus's measured machine-code population goes from 46 files to
-102. **This is the finding that most argues the corpus is richer than
+107. **This is the finding that most argues the corpus is richer than
 the gate number suggests** — and FINDING 15 is why that richness does
 not convert.
 
 ## FINDING 15 — a hanging listing is not an unlocked listing
 
-13 of the resolved files hang under the stub. The tempting reading is
+14 of the resolved files hang under the stub. The tempting reading is
 that a hang means the program is spinning on a USR result the stub gets
-wrong, so a working core would release all 13. That reading is a
+wrong, so a working core would release all 14. That reading is a
 plausible heuristic, and it dies under measurement like the others.
 
 Each was re-run under a line-number trace, the true spin cycle recovered
 by period detection, and the cycle's source read with BASIC comments
-stripped:
+stripped. Reproduce with `python3 -m phasea.oracle --hangs --files
+<list>`; the analysis lives in the module (`analyse_hang`) rather than
+in a scratch script precisely because it is the number holding the gate
+down:
 
 | | files |
 |---|---|
-| loop is unconditional — a perfect core changes nothing | 12 |
+| loop is unconditional — a perfect core changes nothing | 13 |
 | **USR result actually gates the loop** | **1** |
+
+(13 hangs when first measured, 14 after the parent's FINDING 16/17
+fixes let more listings reach their loader. The USR-gated count stayed
+at exactly one through both runs.)
 
 The one is `varptr/engindb3.bas`. `liongrp2.bas` is the instructive
 near-miss: its cycle is
@@ -594,7 +627,7 @@ findings-correction 2 below is withdrawn rather than applied.
 - `phasea/classify.py`, `phasea/sweep.py` — the classifier and the
   corpus runner, which refuses to publish counts unless the anchors
   pass.
-- 64 tests, including both anchors read in place from the local-only
+- 98 tests, including both anchors read in place from the local-only
   sibling and skipped cleanly when it is absent.
 
 Nothing in this repo contains ROM bytes, ROM disassembly, or corpus

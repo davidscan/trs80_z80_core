@@ -56,6 +56,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 
 import subprocess
 import sys
@@ -254,6 +255,76 @@ def region_of(base, data):
 
 
 # --------------------------------------------------------------------
+# FINDING 15: is a hanging listing actually waiting on a USR result?
+# --------------------------------------------------------------------
+# This is the analysis that holds the gate number down, so it lives in
+# the module rather than in a scratch script: 13 of the resolved
+# listings hang under the stub, and the tempting reading is that a
+# working core would release all 13. Measured, it releases one.
+
+def strip_basic_comments(line):
+    """Drop ' ... and REM ... tails.
+
+    Not cosmetic. liongrp2.bas's spin cycle is
+        110 ' X$=INKEY$:IF X$=""110
+        120 X=USR(0): GOTO 110
+    Line 110 is a REM, so the loop is unconditional and a perfect Z80
+    changes nothing -- but the commented-out text contains both an IF
+    and the variable USR was assigned to, so an analysis that reads the
+    raw source calls it USR-gated. It is the difference between
+    reporting 13 unlocks and reporting 1.
+    """
+    return re.sub(r'\bREM\b.*$', '', re.sub(r"'.*$", '', line), flags=re.I)
+
+
+def spin_cycle(trace, max_period=60):
+    """Shortest repeating suffix of a line-number trace, else the tail set."""
+    tail = trace[-2000:]
+    for p in range(1, max_period):
+        if len(tail) > 4 * p and all(tail[-i - 1] == tail[-i - 1 - p]
+                                     for i in range(3 * p)):
+            return tail[-p:], p
+    return sorted(set(tail[-30:]), key=lambda x: int(x)), None
+
+
+def analyse_hang(path, timeout=8.0):
+    """Trace one hanging listing and decide whether USR gates its loop."""
+    log = os.path.join(OUT, 'linelog.txt')
+    if os.path.exists(log):
+        os.remove(log)
+    env = dict(os.environ, TRS80_LINELOG=log)
+    try:
+        subprocess.run(['gawk', '-f', INTERP, '--', '--seed', '1', path],
+                       input=FEED, capture_output=True, env=env,
+                       cwd=os.path.dirname(path), timeout=timeout)
+    except subprocess.TimeoutExpired:
+        pass
+    if not os.path.exists(log):
+        return {'file': os.path.basename(path), 'verdict': 'no-trace'}
+    with open(log) as f:
+        trace = [ln.strip() for ln in f if ln.strip()]
+    cycle, period = spin_cycle(trace)
+
+    src = {}
+    with open(path, encoding='latin-1') as f:
+        for line in f:
+            m = re.match(r'\s*(\d+)\s', line)
+            if m:
+                src.setdefault(m.group(1), strip_basic_comments(line.rstrip()))
+    body = ' '.join(src.get(n, '') for n in cycle).upper()
+    uvars = set(re.findall(r'([A-Z][A-Z0-9]?)\s*=\s*USR', body))
+    gated = [v for v in uvars if re.search(r'\bIF\b[^:]*\b%s\b' % v, body)]
+    if 'USR' not in body:
+        verdict = 'no-usr-in-cycle'
+    elif gated:
+        verdict = 'usr-gates-the-loop'
+    else:
+        verdict = 'unconditional-loop'
+    return {'file': os.path.basename(path), 'verdict': verdict,
+            'period': period, 'cycle': cycle[:12], 'usr_vars': sorted(uvars)}
+
+
+# --------------------------------------------------------------------
 # validation: the oracle against static ground truth
 # --------------------------------------------------------------------
 
@@ -380,6 +451,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--validate', action='store_true')
     ap.add_argument('--run', action='store_true')
+    ap.add_argument('--hangs', action='store_true',
+                    help='FINDING 15: do the hanging listings wait on USR?')
     ap.add_argument('--files', help='JSON list of corpus-relative keys')
     ap.add_argument('--timeout', type=float, default=10.0)
     ap.add_argument('--limit', type=int)
@@ -422,6 +495,22 @@ def main():
         if args.json:
             json.dump(res, open(args.json, 'w'), indent=1)
         return 0 if not t.get('contradiction') else 1
+
+    if args.hangs:
+        print('tracing %d hanging listing(s)' % len(paths))
+        res = [analyse_hang(p, args.timeout) for p in paths]
+        tally = Counter(r['verdict'] for r in res)
+        for r in res:
+            print('  %-24s %-20s cycle=%s' % (r['file'], r['verdict'],
+                                              ','.join(r.get('cycle') or [])[:28]))
+        print()
+        for k, v in tally.most_common():
+            print('  %-24s %d' % (k, v))
+        print('\n  a working core releases %d of %d'
+              % (tally.get('usr-gates-the-loop', 0), len(res)))
+        if args.json:
+            json.dump(res, open(args.json, 'w'), indent=1)
+        return 0
 
     if args.run:
         print('running the oracle over %d listing(s)' % len(paths))

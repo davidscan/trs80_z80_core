@@ -8,13 +8,48 @@ stub fallback (language and seam RULED 2026-08-13 — see DESIGN.md).
 
 READ ORDER on a fresh session:
 1. README.md (one screen: what and why)
-2. DESIGN.md (the authoritative context: language/seam ruling, staged
+2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 18 numbered findings
+3. DESIGN.md (the authoritative context: language/seam ruling, staged
    plan incl. Phase A, technical reference, testing strategy, the gate,
    decisions)
-3. ../awk_BASIC_interpreter/STATUS.md — the parent's resume doc; its
+4. ../awk_BASIC_interpreter/STATUS.md — the parent's resume doc; its
    roadmap entries "Machine-language call support" and "Program-memory
    mapping" are the coordination points, and its RESUME INSTRUCTIONS
    explain the parent's build/test workflow.
+
+WHERE THINGS STAND (2026-08-14, end of the gate-closing session)
+- The gate is MEASURED TO COMPLETION and the ruling is WITH THE USER.
+  Gate number **6**. Phase A gave 5; closing FINDING 7's 96
+  unresolvable loaders with the dynamic oracle added exactly one
+  (varptr/engindb3.bas). The gate never set a numeric threshold, so no
+  arithmetic settles it — the judgment is the user's.
+- STAGE 1 IS NOT STARTED. No opcode-execution code exists. Do not
+  write any until the user rules the gate met (see the reviewed-
+  checkpoint rule below).
+- Built and green: the 1780-entry opcode table + disassembler, the
+  extractor/classifier/sweep, the dynamic oracle (phasea/oracle.py),
+  and the pinned single-step vector suite (tools/fetch_vectors.py,
+  1604 files fetched into the gitignored tests/vectors/). 98 tests:
+  `python3 -m unittest discover -s tests`.
+- The user's own standing view, recorded so it is not relitigated: the
+  two PARENT-side defects the oracle found were each worth more
+  listings than the core is. Both shipped there 2026-08-14 (8c38dca6).
+- OPEN, in the user's hands: (a) the gate ruling; (b) whether the core
+  is wanted for its own sake as the road to an ASSEMBLER and
+  standalone execution, which the gate does not score and which is a
+  separate decision on separate grounds (DESIGN.md "reusable seams").
+- OPEN, owed to the PARENT and NOT done: a re-scan of its blocked/
+  categories. FINDING 16 means some blocked/cmd/ files were never Disk
+  BASIC programs — they were cassette programs told they were on a
+  disk — so the category sizes currently overstate CMD and may
+  understate the gate population itself. Worth doing BEFORE any
+  re-ruling. Parent-owned; see the ask-first rule below.
+- KNOWN LATENT ISSUE, recorded not fixed (DESIGN.md decision 3): the
+  parent's spaced-call fix dispatches `USR n(` as name `USR`, DISCARDING
+  the slot digit, while `USRn(` keeps it. Harmless under the stub
+  (which ignores the slot), but the coprocess call frame must carry the
+  slot, so that dispatch point has to pass it through when the plumbing
+  is built.
 
 STANDING RULES (do not relearn these the hard way):
 - PHASE A BEFORE THE CORE (DESIGN.md "The gate"): the first artifact is

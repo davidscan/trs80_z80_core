@@ -332,7 +332,9 @@ count already reflects all of this: the gate 5 now need only the core.
   SCAN3 is the EVENT-CLOCK scan, pure compute, NOT the keyboard scan
   this document called it before Phase A measured it (FINDING 2). Phase
   A's classification grew this list to 46 statically-extractable
-  payloads, and the oracle added 56 more (FINDING 14).
+  payloads, and the oracle added 61 more (FINDING 14; 56 when first
+  measured, 61 once the parent's FINDING 16/17 fixes let more listings
+  reach their loader).
 - Regression contract with the parent: t1-t28 transcripts exit 0 and
   t7's RND line is the only run-to-run variance (t25-t28 arrived with
   the parent's 2026-08-14 batch: RND LCG, Model III display modes,
@@ -361,7 +363,7 @@ unlocked programs before building the emulator.
 MEASURED AND CLOSED 2026-08-14. Phase A returned **5**; closing
 FINDING 7's 96 unresolvable loaders with the dynamic oracle returned
 **6**. The measured machine-code population more than doubled (46 →
-102 files) and the unlock count moved by one, because what is scarce
+107 files) and the unlock count moved by one, because what is scarce
 in this corpus is not machine code — it is a listing whose ONLY
 obstacle is the absent Z80. Full numbers and method in Z80_FINDINGS.md
 (FINDINGS 13-18).

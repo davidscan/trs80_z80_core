@@ -21,7 +21,7 @@ corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
 FINDING 7's 96 loaders static extraction could not resolve, was then
 closed by building the dynamic extraction oracle (`phasea/oracle.py`,
 DESIGN.md's recorded escalation path). Result: the measured
-machine-code population more than **doubled, 46 → 102 files**, and the
+machine-code population more than **doubled, 46 → 107 files**, and the
 gate number moved **5 → 6**. What is scarce in this corpus is not
 machine code; it is a listing whose ONLY obstacle is the absent Z80.
 
@@ -41,7 +41,7 @@ started and no core code has been written; the gate never set a
 numeric threshold, so the ruling is the user's. Durable artifacts: the
 validated 1780-entry opcode table (z80/table.py), disassembler,
 extractor/classifier, sweep, the oracle, the pinned single-step vector
-suite (tools/fetch_vectors.py), 97 tests. The debt to the PARENT repo —
+suite (tools/fetch_vectors.py), 98 tests. The debt to the PARENT repo —
 the one-line `DEF USR 0=` parse fix — was PAID there 2026-08-14.
 
 Read DESIGN.md for everything: goal, staged plan, technical reference
