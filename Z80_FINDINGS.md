@@ -686,3 +686,47 @@ grew coverage of the spaced call form and the probe on purpose.
    re-scan runs, the blocked-category sizes overstate the CMD blocker
    and understate everything behind it — including, possibly, the gate
    population itself.
+
+## FINDING 19 — Dancing Demon profiled: the coprocess needs a screen, a keyboard, and a clock, but not a ROM (2026-09-02)
+
+The famous acceptance question ("does it run Dancing Demon?") now has
+numbers behind it. The 1986 Powersoft image in the parent corpus
+(`programs/LargeCollection/Dancing Demon (1986)(...)[BAS]/dncdm86a.bas`)
+is `1 GOTO 259` plus **10,931 bytes of Z80 stored as 106 fake BASIC
+lines** (line numbers 2..258), loading at **42F6H** — the payload sits
+inside the tokenized program image itself, not in a DATA/POKE loader,
+so Phase A's extractor idioms never see it. Extraction recipe: walk the
+image's line records (2-byte next-ptr, 2-byte lineno, body to the 00
+terminator), concatenate the bodies of lines 2..258 *including* each
+00, base = record offset mapped from 42E9H.
+
+A linear sweep with `z80/disasm.py` (8,068 insns, 0 undecodable —
+first outside consumer of the module, and it held) says the payload
+touches:
+
+- **video RAM, heavily**: 34 immediates in 3C00-3FFFH (`LD DE,3C01H`,
+  `3F80H`, `3C40H`...) — the animation writes the screen *during* the
+  USR call, not before RET;
+- **the keyboard matrix, once**: `LD HL,38FFH` — the all-rows poll;
+- **sound, exactly twice**: `OUT (C),H` / `OUT (C),L` at 43FC/4401H —
+  one compact cassette-latch routine, trivially no-op'd;
+- **system RAM**: patches 4018H, reads (40A4H) — expects the 4000H
+  communication region to look sane (the parent already seeds part of
+  it, FINDING 16's MEM[16396]);
+- **no ROM calls at all** under the sweep — self-contained.
+
+Linear-sweep caveat applies: LD 2,602 / ADD 1,978 mnemonic counts smell
+of interleaved data decoding as code, so these are signals, not a
+control-flow proof. The proof is running it.
+
+**What this buys the Stage-1 discussion:** "silent Dancing Demon
+dances" is a near-ideal north-star acceptance test for the coprocess.
+It needs exactly the three capabilities the protocol has to decide on
+anyway — (a) sustained execution with video writes streamed or synced
+to the parent's live display buffer, not just memory-at-RET; (b) key
+state fed into coprocess reads of 3800-38FFH (the parent's keyboard
+layer already holds it); (c) cycle-paced execution so the demon dances
+at 1.77 MHz tempo — and it needs nothing we dread (no ROM emulation,
+sound isolable to two instructions). It is visually self-verifying and
+famous enough to be worth the trouble. Call-and-return USR (memory in,
+run, memory out) is demonstrably NOT enough for this class of program.
