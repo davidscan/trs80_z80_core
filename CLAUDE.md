@@ -93,11 +93,14 @@ missed two same-day events, recorded below)
   stub (which ignores the slot), but the coprocess call frame must carry
   the slot, so that dispatch point has to pass it through when the
   plumbing is built.
-- COMPANION-SIDE STALENESS, reported not edited (2026-09-04):
-  trs80basic/STATUS.local.md's "Machine-language call support" entry
-  still says 12 findings and "GATE RULING DEFERRED"; the archive's
-  README.md still describes itself as the interpreter (its own STATUS
-  already lists deleting the duplicate src/ as owed).
+- COMPANION-SIDE STATE (2026-09-04): trs80basic/STATUS.local.md's
+  "Machine-language call support" entry was rewritten the same day as a
+  PEER coordination entry (integration shape, seam rules, state on this
+  side, what trs80basic owns) and points back at this block as the
+  authoritative state here — keep the two in step when either changes.
+  Still stale, reported not edited: the archive's README.md describes
+  itself as the interpreter (its own STATUS already lists deleting the
+  duplicate src/ as owed).
 
 STANDING RULES (do not relearn these the hard way):
 - PHASE A BEFORE THE CORE (DESIGN.md "The gate") — SATISFIED 2026-08-14,

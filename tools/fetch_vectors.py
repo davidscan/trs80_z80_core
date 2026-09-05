@@ -2,7 +2,7 @@
 """Fetch the single-step Z80 test vectors -- DESIGN.md decision 4.
 
     Third-party data. NEVER committed. Fetch script + gitignore, per
-    the parent repo's no-third-party-material practice.
+    the interpreter repo's no-third-party-material practice.
 
 The suite is SingleStepTests/z80 (MIT): 1604 JSON files, 1000 test
 cases each, ~1.6M cases, 1.37 GB extracted. Each case is one

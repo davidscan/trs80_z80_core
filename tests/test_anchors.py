@@ -13,7 +13,8 @@ but the sweep refuses to publish counts if they did not run.
 
 ON THE ENDGAME ANCHOR. DESIGN.md described it as "endgame SCAN3
 (keyboard scan)". Phase A measured it as a PURE-COMPUTE routine with no
-3800H-38FFH access at all, and the parent's own FINDING 29 notes agree:
+3800H-38FFH access at all, and awk_BASIC_interpreter's own FINDING 29
+notes agree:
 SCAN3 is "the whole EVENT-CLOCK scan", and line 1240 calls it as
 USR 1(VARPTR(IC(1))) where IC() is the event-clock array. The
 expectation was a mis-gloss; the measurement stands. These tests assert

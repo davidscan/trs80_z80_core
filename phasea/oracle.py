@@ -5,27 +5,26 @@ bounds static extraction cannot resolve: bases computed from INPUT,
 bases built from other variables, and one loader assembled inside a
 string. DESIGN.md "LOADER EXTRACTION" records the fallback:
 
-    for loaders static extraction cannot crack, the parent interpreter
+    for loaders static extraction cannot crack, the interpreter
     is the extraction ORACLE -- run the listing under the shipped USR
     stub until the first USR call and dump the poked bytes from mem[].
     Dynamic fallback, static default.
 
 This is that. It is MEASUREMENT, not emulator: it runs BASIC under the
-parent's existing interpreter and reads what the loader deposited. No
+companion interpreter (../trs80basic) and reads what the loader deposited. No
 Z80 executes anywhere in this module.
 
-HOW THE INTERPRETER IS INSTRUMENTED, AND WHY IT IS NOT MODIFIED ("the
-parent" below is the pre-split name for the interpreter repo; since
-2026-08-28 that is ../trs80basic, and the corpus is the only thing this
-module reads from ../awk_BASIC_interpreter). The interpreter repo is not
-touched. `build()` copies its `src/p*.awk` into out/, adds
+HOW THE INTERPRETER IS INSTRUMENTED, AND WHY IT IS NOT MODIFIED. The
+interpreter is a PEER (../trs80basic since the 2026-08-28 split; the
+corpus is the only thing this module reads from ../awk_BASIC_interpreter),
+and its repo is not touched. `build()` copies its `src/p*.awk` into out/, adds
 two lines, and concatenates a scratch interpreter exactly the way the
-parent's own build does (`cat src/p*.awk > trs80basic.awk`). Both added
+interpreter's own build does (`cat src/p*.awk > trs80basic.awk`). Both added
 lines are gated on TRS80_POKELOG being present in the environment, so
 with the variable unset the scratch build is behaviorally identical to
 the shipped one -- the instrumentation cannot perturb what it measures.
-Parent-owned code stays parent-owned (CLAUDE.md standing split); this
-is a harness in THIS repo that happens to drive the parent's code.
+Interpreter-owned code stays interpreter-owned (CLAUDE.md standing
+split); this is a harness in THIS repo that happens to drive a peer's code.
 
     p80_stmt.awk  st_poke   -- log every (address, byte) actually poked,
                                after the interpreter's own normalisation
@@ -82,7 +81,7 @@ PROGRAMS = os.path.join(CORPUS, 'programs')
 OUT = os.path.join(HERE, 'out', 'oracle')
 INTERP = os.path.join(OUT, 'trs80basic-oracle.awk')
 
-# Video RAM and the other device windows the parent maps. A run landing
+# Video RAM and the other device windows the interpreter maps. A run landing
 # wholly inside video is screen data, not a routine -- FINDING 5's
 # discrimination, applied to dynamic output too.
 VIDEO = (15360, 16383)
@@ -94,7 +93,7 @@ PRINTER = (14312, 14313)
 # the instrumented build
 # --------------------------------------------------------------------
 # (module, exact text to find, replacement). Exact-match, single
-# occurrence, asserted -- if the parent's source moves under us the
+# occurrence, asserted -- if the interpreter's source moves under us the
 # build fails loudly rather than silently instrumenting nothing.
 
 PATCHES = [
@@ -155,7 +154,7 @@ def build(force=False):
             n = text.count(old)
             if n != 1:
                 sys.exit('patch point in %s matched %d times, expected 1 -- '
-                         'the parent source has moved; re-verify the patch'
+                         'the interpreter source has moved; re-verify the patch'
                          % (name, n))
             text = text.replace(old, new)
             applied += 1

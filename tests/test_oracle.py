@@ -1,9 +1,8 @@
 """The dynamic extraction oracle -- FINDING 7's escalation path.
 
 The oracle drives the companion interpreter (../trs80basic since the
-2026-08-28 split; "parent" below is its pre-split name), so most of what
-can go wrong here is a mismatch with interpreter source that has moved
-underneath us.
+2026-08-28 split), so most of what can go wrong here is a mismatch with
+interpreter source that has moved underneath us.
 The patch-point test is the important one: it fails loudly the moment
 an instrumentation anchor stops matching, rather than silently
 producing an uninstrumented build whose measurements are all zero.
@@ -105,9 +104,9 @@ class TestRegionDiscrimination(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_INTERP, 'interpreter sources not present')
 class TestPatchPoints(unittest.TestCase):
-    """Every instrumentation anchor must still match the parent EXACTLY.
+    """Every instrumentation anchor must still match the interpreter EXACTLY.
 
-    This is the test that earns its keep. If the parent's st_poke,
+    This is the test that earns its keep. If the interpreter's st_poke,
     dopeek, USR stub, or exec loop is edited, the anchor stops matching
     and the build aborts -- instead of quietly producing an interpreter
     with no instrumentation, whose every measurement would read zero
@@ -121,7 +120,7 @@ class TestPatchPoints(unittest.TestCase):
             self.assertEqual(
                 text.count(old), 1,
                 'patch anchor in %s no longer matches exactly once -- the '
-                'parent source moved; re-verify before trusting any oracle '
+                'interpreter source moved; re-verify before trusting any oracle '
                 'output' % module)
 
     def test_every_patch_is_env_gated(self):
@@ -144,15 +143,15 @@ class TestPatchPoints(unittest.TestCase):
                 '%s: patch is not gated on an environment variable' % module)
 
     def test_no_patch_touches_the_shipped_interpreter(self):
-        """The parent repo is data here, never a build target."""
+        """The interpreter repo is data here, never a build target."""
         shipped = os.path.join(oracle.INTERP_REPO, 'trs80basic.awk')
         if not os.path.exists(shipped):
-            self.skipTest('parent has no built interpreter')
+            self.skipTest('trs80basic has no built interpreter')
         with open(shipped) as f:
             text = f.read()
         for gate in ('TRS80_POKELOG', 'TRS80_CASSETTE', 'TRS80_LINELOG'):
             self.assertNotIn(gate, text,
-                             'instrumentation leaked into the parent repo')
+                             'instrumentation leaked into the interpreter repo')
 
 
 @unittest.skipUnless(HAVE_INTERP and HAVE_GAWK, 'needs interpreter sources + gawk')
@@ -189,13 +188,13 @@ class TestInstrumentedBuild(unittest.TestCase):
         self.assertEqual(oracle.runs_from_pokes(got['pokes']),
                          [(32000, bytes([62, 1, 211, 255]))])
 
-    def test_parent_answers_the_dos_probe_with_a_ret(self):
+    def test_interpreter_answers_the_dos_probe_with_a_ret(self):
         """PEEK(16396) must be 201 -- FINDING 16, now shipped upstream.
 
         This began life as a gated COUNTERFACTUAL in the oracle: the
-        parent answered 255 (absent RAM), which sent every listing using
+        interpreter answered 255 (absent RAM), which sent every listing using
         the am-I-under-Disk-BASIC probe down its DISK branch into CMD.
-        The parent shipped 201 on 2026-08-14, so the counterfactual is
+        The interpreter shipped 201 on 2026-08-14, so the counterfactual is
         retired and this is a cross-repo regression guard instead -- if
         the probe ever goes back to 255, 88 rescued listings quietly
         take the wrong branch again and this test says so.
@@ -210,7 +209,7 @@ class TestInstrumentedBuild(unittest.TestCase):
         self.assertEqual(oracle.runs_from_pokes(got['pokes']),
                          [(32000, bytes([201] * 4))])
 
-    def test_parent_accepts_the_spaced_usr_call_form(self):
+    def test_interpreter_accepts_the_spaced_usr_call_form(self):
         """X=USR 0(n) must parse -- FINDING 17, now shipped upstream.
 
         The loader POKEs come BEFORE the call on purpose: run_listing
