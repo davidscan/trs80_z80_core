@@ -1,21 +1,32 @@
 # CLAUDE.md — session bootstrap for trs80_z80_core
 
 You are in the planning space for a Z80 core in PYTHON 3 that will give
-the TRS-80 LEVEL II BASIC interpreter (../awk_BASIC_interpreter) the
+the TRS-80 LEVEL II BASIC interpreter (../trs80basic) the
 ability to execute machine-language routines called from BASIC via USR.
 It attaches to the awk interpreter as a persistent coprocess with a
 stub fallback (language and seam RULED 2026-08-13 — see DESIGN.md).
 
-READ ORDER on a fresh session:
+READ ORDER on a fresh session (local files only — cross-repo pointers rot,
+so they live in COMPANION REPOS below and are not part of the read order):
 1. README.md (one screen: what and why)
 2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 18 numbered findings
 3. DESIGN.md (the authoritative context: language/seam ruling, staged
    plan incl. Phase A, technical reference, testing strategy, the gate,
    decisions)
-4. ../awk_BASIC_interpreter/STATUS.md — the parent's resume doc; its
-   roadmap entries "Machine-language call support" and "Program-memory
-   mapping" are the coordination points, and its RESUME INSTRUCTIONS
-   explain the parent's build/test workflow.
+
+COMPANION REPOS — this is an INDEPENDENT project with two peers, not a
+sub-project of either. Neither is a "parent".
+- `../trs80basic` — the TRS-80 LEVEL II BASIC interpreter this core attaches
+  to. Integration shape ratified 2026-09-04: COMPANION ENGINE, NEVER
+  VENDORED — a p77 shim in trs80basic, `TRS80_Z80` discovery, releases may
+  bundle. NOT BUILT YET: as of 2026-09-04 there is no p77 shim and no
+  `TRS80_Z80` reference in its `src/`. Its working notes are
+  `STATUS.local.md` there (gitignored — exists only in a local checkout),
+  which holds the coordination entries "Machine-language call support" and
+  "Program-memory mapping".
+- `../awk_BASIC_interpreter` — the private CORPUS ARCHIVE, measurement data
+  only (`programs/`, `programs/runnable/`, `OCRsamples/`, `blocked/`). It
+  is NOT the interpreter any more; that moved to trs80basic on 2026-08-28.
 
 WHERE THINGS STAND (2026-08-14, end of the gate-closing session)
 - The gate is MEASURED TO COMPLETION and the ruling is WITH THE USER.
@@ -32,20 +43,24 @@ WHERE THINGS STAND (2026-08-14, end of the gate-closing session)
   1604 files fetched into the gitignored tests/vectors/). 98 tests:
   `python3 -m unittest discover -s tests`.
 - The user's own standing view, recorded so it is not relitigated: the
-  two PARENT-side defects the oracle found were each worth more
-  listings than the core is. Both shipped there 2026-08-14 (8c38dca6).
+  two INTERPRETER-side defects the oracle found were each worth more
+  listings than the core is. Both shipped 2026-08-14 (8c38dca6, in
+  awk_BASIC_interpreter's history —
+  pre-split; that code now lives in trs80basic).
 - OPEN, in the user's hands: (a) the gate ruling; (b) whether the core
   is wanted for its own sake as the road to an ASSEMBLER and
   standalone execution, which the gate does not score and which is a
   separate decision on separate grounds (DESIGN.md "reusable seams").
-- OPEN, owed to the PARENT and NOT done: a re-scan of its blocked/
-  categories. FINDING 16 means some blocked/cmd/ files were never Disk
+- OPEN, owed to the CORPUS ARCHIVE (awk_BASIC_interpreter) and NOT done: a
+  re-scan of its blocked/ categories. FINDING 16 means some blocked/cmd/
+  files were never Disk
   BASIC programs — they were cassette programs told they were on a
   disk — so the category sizes currently overstate CMD and may
   understate the gate population itself. Worth doing BEFORE any
-  re-ruling. Parent-owned; see the ask-first rule below.
+  re-ruling. Corpus-side work, not interpreter work.
 - KNOWN LATENT ISSUE, recorded not fixed (DESIGN.md decision 3): the
-  parent's spaced-call fix dispatches `USR n(` as name `USR`, DISCARDING
+  interpreter's spaced-call fix dispatches `USR n(` as name `USR`,
+  DISCARDING
   the slot digit, while `USRn(` keeps it. Harmless under the stub
   (which ignores the slot), but the coprocess call frame must carry the
   slot, so that dispatch point has to pass it through when the plumbing
@@ -53,7 +68,7 @@ WHERE THINGS STAND (2026-08-14, end of the gate-closing session)
 
 STANDING RULES (do not relearn these the hard way):
 - PHASE A BEFORE THE CORE (DESIGN.md "The gate"): the first artifact is
-  the static disassembler/classifier over the parent corpus's DATA/POKE
+  the static disassembler/classifier over the corpus archive's DATA/POKE
   loader bytes. Do not write opcode-execution code until its numbers
   are in and the user has ruled the gate met. Phase A itself is in-gate
   (measurement, not emulator) — confirmed with the user 2026-08-13.
@@ -65,13 +80,14 @@ STANDING RULES (do not relearn these the hard way):
   Space Chase and ENDGAME/BAS SCAN3 — and its buckets for them
   reconciled with the evidence, BEFORE its corpus-wide counts mean
   anything. A count produced without both checks passing is not a
-  measurement. (Parent's standing lesson — plausible heuristics die
+  measurement. (The corpus project's standing lesson — plausible
+  heuristics die
   under measurement — applied prophylactically.)
   NOTE, and the reason the wording changed: this rule originally said
   the classifier must bucket endgame as a KEYBOARD scan. It is not one.
   SCAN3 is the event-clock scan and is PURE COMPUTE, with no
   3800H-38FFH access anywhere (Z80_FINDINGS FINDING 2, corroborated by
-  the parent's own FINDING 29 notes and by line 1240's
+  awk_BASIC_interpreter's own FINDING 29 notes and by line 1240's
   `KJ=USR 1(VARPTR(IC(1)))`). The anchor earned its keep by refuting
   its own stated expectation — so the rule is "check the anchor", never
   "make the anchor come out the way we assumed". An anchor that cannot
@@ -89,49 +105,41 @@ STANDING RULES (do not relearn these the hard way):
   review to the numbers).
 - NEVER commit ROM bytes, ROM disassembly text, or verbatim code from
   ROM-derived repositories. HLE traps are reimplemented from documented
-  behavior only. (Same rule that kept the parent repo releasable.)
+  behavior only. (Same rule that kept the interpreter repo releasable.)
   The downloaded JSON test-vector suites are also never committed:
   fetch script + gitignore.
-- IN THE PARENT REPO, DOCUMENTATION ONLY — ASK BEFORE ANY CODE CHANGE
-  (ruled 2026-08-14, after this was got wrong). From a session in THIS
-  repo, edits to ../awk_BASIC_interpreter are limited by default to its
-  DOCUMENTATION: STATUS.md, README.md, RELEASE_NOTES.md and the like.
-  Everything else there — `src/p*.awk`, the built `trs80basic.awk`,
-  `programs/tests/t*.txt`, the launcher, the corpus — is CODE, and
-  changing it needs the user's EXPLICIT permission for that specific
-  change. If the permission is not 100% clear, STOP AND ASK before
-  making the change, not after.
-  Do NOT infer permission from: a measured defect owed to the parent's
-  queue, a fix being obviously correct or one line long, a general
-  "go ahead", or an instruction to "make the changes in the parent" —
-  that last phrasing was meant as "update the parent's docs" on
-  2026-08-14 and was read as authorization to patch its source. The
-  two fixes made that day (FINDINGS 16/17, parent 8c38dca6) were KEPT
-  by the user's ruling — do not revert them — but the standing rule is
-  ask first.
-  Reporting a parent-side defect and offering to fix it is always fine;
-  writing the fix without a clear yes is not.
-- Parent-owned items (string packing/VARPTR, program-memory mapping)
-  stay in the PARENT repo — do not build them here. (Keyboard-matrix
-  PEEK and the USR stub shipped there 2026-08-13; VARPTR/string
-  packing, program-memory mapping, and the FINDING 8 DEF USR parse fix
-  shipped there 2026-08-14, as did the FINDING 16/17 fixes — the 400CH
-  DOS probe and the USR call-site space. Note: parent VARPTR does NOT
+- CHANGES TO trs80basic LAND ON A DEVELOPMENT BRANCH, NEVER main. The
+  two projects interact both ways, but trs80basic's main is staged for a
+  public release, so integration work (the p77 shim, the call frame
+  carrying the slot digit, TRS80_Z80 discovery) goes on a development
+  branch there and is merged by the user. Reporting a defect and
+  offering a fix is always fine. This replaces the older "documentation
+  only, ask first" rule, written 2026-08-14 when that repo was this
+  project's parent and held the only copy of the interpreter. The
+  incident behind it still stands as the thing to avoid: "make the
+  changes in the parent" was meant as "update the docs" and was read as
+  authorization to patch interpreter source.
+- Interpreter-owned items (string packing/VARPTR, program-memory
+  mapping) stay in trs80basic — do not build them here. (Keyboard-matrix
+  PEEK and the USR stub shipped there 2026-08-13; VARPTR/string packing,
+  program-memory mapping, and the FINDING 8 DEF USR parse fix shipped
+  there 2026-08-14, as did the FINDING 16/17 fixes — the 400CH DOS probe
+  and the USR call-site space. Note: the interpreter's VARPTR does NOT
   give integer arrays a contiguous 2-byte image — VARPTR-array loaders
   still route through the extractor; see DESIGN.md.)
-- The parent's regression bar is part of THIS project's bar: any
-  AUTHORIZED change that touches the interpreter (see the ask-first
-  rule above) must leave t1-t28 exiting 0 (t7's RND line varies run to
-  run) and batch exit codes unchanged; the coprocess fallback path (no
-  python3) must behave exactly like the shipped stub. Baseline the
-  transcripts BEFORE editing, so "unchanged" is a diff and not a
-  belief, and keep the pre-change build around to tell an inherent
-  variance apart from a regression.
+- trs80basic's regression bar is part of THIS project's bar: any change
+  that touches the interpreter (see the development-branch rule above)
+  must leave t1-t28 exiting 0 (t7's RND line varies run to run) and
+  batch exit codes unchanged; the coprocess fallback path (no python3)
+  must behave exactly like the shipped stub. Baseline the transcripts
+  BEFORE editing, so "unchanged" is a diff and not a belief, and keep
+  the pre-change build around to tell an inherent variance apart from a
+  regression.
 - Commit with `git commit -F <msgfile>`; use absolute paths in shell
   commands; every increment committed and green before the next.
-- Remote: private GitHub davidscan/trs80-z80-core (created 2026-08-14
-  at the user's direction; hyphenated to match the parent's naming).
-  KEEP IT PRIVATE — the findings quote one-line loader excerpts from
-  magazine listings. No LICENSE file yet (user ruling 2026-08-14);
-  GPLv3 mirroring the parent remains the default assumption when one
-  is added.
+- Remote: private GitHub davidscan/trs80-z80-core (created 2026-08-14 at
+  the user's direction; hyphenated to match the naming
+  of the repo that was then the parent). KEEP IT PRIVATE — the findings quote one-line loader
+  excerpts from magazine listings. No LICENSE file yet (user ruling
+  2026-08-14); GPLv3 mirroring trs80basic remains the default assumption
+  when one is added.

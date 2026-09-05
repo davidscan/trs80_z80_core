@@ -2,9 +2,9 @@
 
 A Z80 CPU core **in Python 3**, scoped to executing machine-language
 subroutines **called from BASIC** (`USR`) — never standalone machine
-language. Companion sub-project to the TRS-80 LEVEL II BASIC interpreter
-at `../awk_BASIC_interpreter` (private GitHub:
-davidscan/trs80-basic-interpreter).
+language. Companion project to the TRS-80 LEVEL II BASIC interpreter at
+`../trs80basic` (private GitHub: davidscan/trs80basic) — an independent
+peer, not a sub-project.
 
 Renamed from `awk_Z80_core` 2026-08-13 when the language ruling changed:
 the user deemed the machine-language portion outside the scope of BASIC,

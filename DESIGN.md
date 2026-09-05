@@ -1,7 +1,7 @@
 # DESIGN — Z80 core for USR calls from BASIC
 
 Agreed with the user 2026-08-07 (conversation in the parent repo's
-session; summarized in ../awk_BASIC_interpreter/STATUS.md under
+session; summarized in ../trs80basic/STATUS.local.md under
 "Machine-language call support"), REVISED 2026-08-13 after ML Stage 0
 shipped in the parent and the language ruling changed to Python. This
 document is the authoritative context for starting the work.
