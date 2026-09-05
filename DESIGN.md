@@ -6,6 +6,16 @@ session; summarized in ../trs80basic/STATUS.local.md under
 shipped in the parent and the language ruling changed to Python. This
 document is the authoritative context for starting the work.
 
+TERMINOLOGY (added 2026-09-04): "the parent" throughout this document
+is the pre-split ../awk_BASIC_interpreter, which then held both the
+interpreter and the corpus. Since 2026-08-28 the interpreter is
+../trs80basic and awk_BASIC_interpreter is the corpus archive only;
+neither is a parent (CLAUDE.md "COMPANION REPOS"). Interpreter-side
+history cited by hash (c61fdae5, 7e6f0749, 8c38dca6) lives in
+awk_BASIC_interpreter's git history; the code is in trs80basic.
+"Parent STATUS.md" means trs80basic/STATUS.local.md, a gitignored local
+file. The wording is kept because the decisions were made under it.
+
 ## Goal and non-goals
 
 GOAL: unmodified rescued BASIC listings that load short Z80 routines via
@@ -141,8 +151,8 @@ bytes) and program-memory mapping (read-only tokenized image at 42E9H,
 validated against tok.py, plus MEMORY SIZE enforcement). CAVEAT for
 this repo: parent VARPTR serves the STRING idiom; numeric/array
 VARPTR returns per-element 4-byte-single addresses, NOT a contiguous
-2-byte-integer image (see the VARPTR paragraph below). See the parent
-STATUS.md roadmap.
+2-byte-integer image (see the VARPTR paragraph below). See the
+"Machine-language call support" entry in trs80basic/STATUS.local.md.
 
 PHASE A (this repo's FIRST artifact, before any core code): a static
 Z80 DISASSEMBLER/CLASSIFIER run over the parent corpus's DATA/POKE
@@ -172,7 +182,12 @@ Chase's expectation (sound-only) held.
 
 PHASE A INPUT SET (settled 2026-08-13, second session's question):
 - Primary sweep: ../awk_BASIC_interpreter/programs/runnable/ (3,280)
-  PLUS programs/blocked/ (1,065, all categories). Both halves matter:
+  PLUS programs/blocked/ (1,065, all categories) — counts as of
+  2026-08-13. The archive re-filed blocked/ on 2026-08-14 (280 moved
+  to runnable/, varptr/ retired, blocked/ 1,065 → 779); the sweep re-run
+  2026-09-04 reads 4,339 listings with the same 46-file gate
+  population, now 17 blocked / 29 runnable (Z80_FINDINGS FINDING 20).
+  Both halves matter:
   blocked/ is the gate constituency; runnable/ includes the 148 files
   the USR stub + DEF FN re-selections moved, and classifying THEIR
   routines answers "does the stubbed USR result silently matter"
@@ -286,9 +301,13 @@ VARPTR(US%(0)) addresses a 4-byte Microsoft-single of element 0 only.
 A future core can never read the VARPTR-array routine image out of
 parent memory — those files go through the loader EXTRACTOR's
 VARPTR-array idiom (above), which decodes the DATA values directly.
-The varptr/ pile is NOT auto-unblocked by the ship; re-classification
-is a future measurement (recorded in the parent STATUS.md). Phase A's
-count already reflects all of this: the gate 5 now need only the core.
+The varptr/ pile was NOT auto-unblocked by the ship; it was
+RE-CLASSIFIED by the archive's blocked/ re-scan the same evening
+(9ee96ca3): 223 files moved to runnable/
+on VARPTR alone and the category was retired — which carried four of
+the six gate files into runnable/ without making any of them run
+(Z80_FINDINGS FINDING 20). Phase A's count already reflects all of
+this: the gate 6 need only the core.
 
 ## Technical reference (verified in the 2026-08-07 session)
 
@@ -326,6 +345,13 @@ count already reflects all of this: the gate 5 now need only the core.
 - Adopt the parent repo's culture: pin everything in a regression
   suite from day one; the passing suite pins mechanical behavior, not
   "the emulator works" — real-listing acceptance is the bar.
+- North-star for the coprocess (Z80_FINDINGS FINDING 19, 2026-09-02):
+  "silent Dancing Demon dances". Its 10.9 KB payload lives inside the
+  tokenized program image, writes video DURING the USR call, polls the
+  keyboard matrix, and calls no ROM — so it needs streamed video
+  writes, live key state, and cycle pacing, and NOT ROM emulation.
+  Call-and-return USR (memory in, run, memory out) is not enough for
+  that class of program; the protocol has to decide this.
 - Acceptance corpus: the parent's rescued listings with USR routines.
   Space Chase (80 Micro 5/1982) is sound-only USR — runs with sound
   silently swallowed. ENDGAME/BAS (80 Micro 5/1985) is a Stage 1 case:
@@ -375,12 +401,28 @@ settles the ruling; the judgment is the user's and was never
 pre-committed.
 
 WHAT THE CLOSING RUN FOUND THAT THE GATE DOES NOT SCORE: two
-PARENT-side defects each worth more listings than the core is —
+INTERPRETER-side defects each worth more listings than the core is —
 `USR n(` at the call site (134 listings, FINDING 17) and the
 `PEEK(16396)` cassette/disk probe answering 255 instead of 201 (88
-listings, FINDING 16). Both are parent-owned and unbuilt. A ruling on
-the core should be taken knowing the cheapest listings-per-hour on the
-table right now are not in this repo.
+listings, FINDING 16). Both were interpreter-owned and both SHIPPED
+there the same day (8c38dca6): 53 blocked listings improved, zero
+regressions. The ruling on the core was taken knowing the cheapest
+listings-per-hour on the table were not in this repo.
+
+RULED 2026-08-14 (user, in the companion session; recorded in
+awk_BASIC_interpreter's PROJECT_MAP.md and CLAUDE.md "WHERE THINGS
+STAND"): the rescue count does not justify Stage 1 and no longer has
+to. The project is re-founded on its own merits — the user wants a
+standalone assembler/disassembler in addition to in-BASIC machine-code
+handling — with four goals in priority order: run BASIC with embedded
+machine code (core + thin optional bridge), run magazine assembly
+listings, write new assembly, disassemble. The pure-library core is
+split from the coprocess plumbing so that a 2-to-6-listing payoff never
+has to justify touching the interpreter's regression bar. The gate is
+CLOSED as a decision input; it survives as the measurement record.
+The evening's blocked/ re-scan then moved four of the six gate files
+to runnable/ (literal reading 2, intent 6, none of them runs — FINDING
+20), which changed the bookkeeping and nothing about the ruling.
 
 ## Decisions
 
@@ -397,8 +439,9 @@ RULED 2026-08-13:
    the reusable seams").
 
 STILL OPEN (decide when work starts):
-1. LICENSE: parent is GPLv3 (c) 2026 David Forbis; mirroring it here is
-   the default assumption. No LICENSE file until code exists.
+1. LICENSE: trs80basic is GPLv3 (c) 2026 David Forbis; mirroring it
+   here is the default assumption. No LICENSE file yet — user ruling
+   2026-08-14, with Phase A code already present.
 2. R register: the parent's authentic-RND roadmap item reads R for
    seeding (RANDOM at 01D3H). Emulating R crudely (increment per
    instruction) lets the two items share it. Low stakes.
@@ -408,7 +451,15 @@ STILL OPEN (decide when work starts):
    frame must carry the USR SLOT NUMBER, and the parent's spaced-call
    fix (8c38dca6) currently DISCARDS the slot digit of `USR n(` before
    dispatch — that dispatch point must pass it through when the
-   plumbing is built. Recorded in the parent STATUS.md ML entry too.
+   plumbing is built. Recorded in trs80basic/STATUS.local.md's ML
+   entry too.
+4. INTEGRATION SHAPE — RATIFIED 2026-09-02/04 (user): companion
+   engine, NEVER vendored. A p77 protocol shim in trs80basic, the engine
+   discovered via `TRS80_Z80`, releases may bundle the engine (the
+   Windows-zip/gawk precedent). The first protocol message carries a
+   version; a mismatch is a clean error. Protocol design itself is
+   DEFERRED to the big-picture talk; no handshake/protocol code before
+   it. Nothing of this is built as of 2026-09-04.
 
 ## Standing practices inherited from the parent repo
 

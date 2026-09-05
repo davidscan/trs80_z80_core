@@ -12,14 +12,24 @@ and the user ruled **stop here for now, discuss further**. The user
 then agreed the measurement was incomplete while FINDING 7's 96
 unresolvable loaders stayed unmeasured, and directed that the gate be
 CLOSED — the oracle built and run — before ruling. That work is
-FINDINGS 13-18 below, completed 2026-08-14. The gate is now measured
-to completion and is back with the user for the ruling. Stage 1 is
-still not started; no core code has been written.
+FINDINGS 13-18 below, completed 2026-08-14. The gate was measured to
+completion and presented, and the user RULED the same evening (in the
+companion session; recorded in awk_BASIC_interpreter's PROJECT_MAP.md):
+the rescue count does not justify the core and no longer has to — the
+project is wanted for its own sake, four goals in priority order
+(CLAUDE.md "WHERE THINGS STAND"). The gate is closed as a decision
+input and survives here as the measurement record. The same evening's
+blocked/ re-scan changed the bookkeeping of the six gate files without
+unlocking any (FINDING 20, recorded 2026-09-04). Stage 1 is still not
+started; no core code has been written.
 
 Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 (runnable 3283 + blocked 1062 = **4345 listings**). Reproduce with
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover
--s tests` (98 tests). FINDING 8 resolved 2026-08-14 by batch runs
+-s tests` (98 tests). The archive re-filed blocked/ on 2026-08-14, so a
+re-run today reads 4339 listings with the same 46-file gate population
+split differently between the halves — the deltas are tabulated in
+FINDING 20; the numbers below are left as measured. FINDING 8 resolved 2026-08-14 by batch runs
 under the parent interpreter; the sweep numbers are unchanged.
 PARENT-SIDE UPDATE, later the same day: the FINDING 8 fix SHIPPED in
 the parent (c61fdae5) and the parent's VARPTR item shipped too — see
@@ -79,7 +89,8 @@ gate number does not move.
   "LOADER EXTRACTION"). The gate constituency of 5 now needs ONLY the
   core, but nothing about the count changes, and the parent's varptr/
   blocked pile (359) is NOT auto-unblocked — re-classification is a
-  future measurement, recorded in the parent STATUS.md.
+  future measurement, recorded in the parent STATUS.md. (Done that
+  evening: varptr/ retired, four gate files re-filed — FINDING 20.)
 
 | | files |
 |---|---|
@@ -87,7 +98,7 @@ gate number does not move.
 | …using USR | 566 |
 | …carrying cleanly extractable machine code (static) | 46 |
 | …**plus** recovered by the oracle from the unresolvable 96 (FINDING 14) | **+61** |
-| **blocked listings unlocked by core + VARPTR alone** | **6** |
+| **blocked listings unlocked by core + VARPTR alone** | **6** (2 by the literal wording after the 2026-08-14 re-scan moved four of them to runnable/; none of the six runs — FINDING 20) |
 | blocked, ML clean, but *also* blocked by CMD (Disk BASIC) | 14 |
 | blocked, ML clean, but needing a Stage 2 ROM trap | 4 (+7, FINDING 18) |
 | blocked, ?SN from the parent's `DEF USR 0=` parse gap (FINDING 8; parent fix shipped 2026-08-14, both now run at stub level) | 2 |
@@ -214,6 +225,10 @@ measured; the sixth arrived later from the oracle):
                              of 14 hanging listings whose loop is
                              actually gated on the USR result
 
+(Paths as of 2026-08-13. The archive's re-scan that evening retired
+varptr/ and moved MAIL32, MAIL48, m3t1s2d and engindb3 to runnable/;
+the two raw-bytes-in-code files stay blocked. FINDING 20.)
+
 Two caveats on the first five, recorded 2026-08-14 (assessment review):
 
 - `xwingcf2.bas` has the weakest entry evidence of the five: its USR
@@ -282,9 +297,9 @@ from other variables, and one loader assembled inside a string
 These are reported as a category, never guessed at. DESIGN.md's
 recorded escalation path applies: the parent interpreter is the
 extraction oracle — run the listing under the shipped USR stub to the
-first USR call and dump the poked bytes from `mem[]`. **Not built.** If
-the gate is ruled met, this is the cheapest way to grow the measured
-population, and it would resolve up to 96 more files.
+first USR call and dump the poked bytes from `mem[]`. **Not built** as
+of 2026-08-13 — BUILT 2026-08-14, FINDINGS 13-18. It was the cheapest
+way to grow the measured population, and it resolved 61 of the 96.
 
 ## FINDING 8 — the loader-line ?SN blockers are a parent-side `DEF USR 0=` parse gap (RESOLVED 2026-08-14)
 
@@ -536,7 +551,9 @@ filed under `cmd/`, 28 under `varptr/`) and 22 runnable. The 29 in
 they are not Disk BASIC programs, they are cassette programs being told
 they are on a disk. This attacks FINDING 4's largest confound directly,
 and means **a re-scan of the parent's blocked/ categories is now owed** —
-recorded in the parent's STATUS.md, not done here.
+recorded in the parent's STATUS.md, not done here. (PAID the same
+evening; the cmd/ half was measured by reachability rather than
+re-filed, and contributed zero to the gate — FINDING 20.)
 
 The fix was PARENT-OWNED (memory map, CLAUDE.md standing split) and was
 made there: `MEM[16396] = 201` seeded at init (p10) rather than
@@ -678,14 +695,15 @@ byte-identical to the pre-change build except t7 (documented RND
 variance, confirmed to vary on the unchanged build too) and t23, which
 grew coverage of the spaced call form and the probe on purpose.
 
-## Now owed BACK to the parent (not done)
+## Now owed BACK to the parent — PAID 2026-08-14 (recorded 2026-09-04)
 
-7. A re-scan of `blocked/`. FINDING 16 means some files are mis-filed:
-   several `blocked/cmd/` listings were never Disk BASIC programs, they
-   were cassette programs being told they were on a disk. Until that
-   re-scan runs, the blocked-category sizes overstate the CMD blocker
-   and understate everything behind it — including, possibly, the gate
-   population itself.
+7. [PAID] A re-scan of `blocked/`. FINDING 16 means some files are
+   mis-filed: several `blocked/cmd/` listings were never Disk BASIC
+   programs, they were cassette programs being told they were on a
+   disk. Done the same evening (awk_BASIC_interpreter 9ee96ca3 +
+   89d9269b) and verified from this side; the cmd/ half was measured
+   rather than re-filed, and the gate population did not grow.
+   FINDING 20.
 
 ## FINDING 19 — Dancing Demon profiled: the coprocess needs a screen, a keyboard, and a clock, but not a ROM (2026-09-02)
 
@@ -730,3 +748,78 @@ at 1.77 MHz tempo — and it needs nothing we dread (no ROM emulation,
 sound isolable to two instructions). It is visually self-verifying and
 famous enough to be worth the trouble. Call-and-return USR (memory in,
 run, memory out) is demonstrably NOT enough for this class of program.
+
+## FINDING 20 — the blocked/ re-scan moved four gate files without unlocking any (measured 2026-08-14, recorded 2026-09-04)
+
+The re-scan owed to the corpus archive after FINDINGS 16/17 was PAID
+the same evening (awk_BASIC_interpreter `9ee96ca3` and `89d9269b`) and
+verified from this side at once. The verification was offered as a
+finding and never written down, so the gate numbers above were being
+quoted as if the re-scan had not happened. Recorded now; the run under
+the current interpreter was repeated 2026-09-04.
+
+**What the re-scan did.** All 1,065 blocked listings re-scanned; 280
+moved to `runnable/` (223 on VARPTR alone, 24 NAME+VARPTR, 9 NAME, 22
+on the `DEF USR` spacing fix alone, 2 splice); `varptr/`, `name/` and
+`merge/` retired; `blocked/` 1,065 → 779; `cmd/` 386 → 500 and
+`raw-bytes-in-code/` 135 → 139 as the deeper blockers surfaced.
+
+**The FINDING 16 half was measured, not re-filed — correctly.** `blocked/`
+is a static classifier and those `cmd/` listings still contain `CMD`,
+so they cannot be promoted. Instead a reachability scan gave the 779 a
+second verdict: BLOCKED 541, BLOCKED-RUNS-ANYWAY 238. Crossed against
+FINDING 4's 14 CMD-blocked ML-clean listings, exactly one
+(`cmd/newmap.bas`) reaches END without its CMD — and only on empty
+stdin: its line 160 GOSUB is an `INKEY$` poll, EOF returns an empty
+key, `ASC(E$)` falls out of range and it takes the END branch at its
+first prompt. Fed a drive number it goes straight to line 200's
+`CMD"ROUTE,PR,DO"` and dies `?SN`. **The CMD confound contributes zero
+to the gate.** (That EOF-key-poll degenerate exit was a third
+BLOCKED-RUNS-ANYWAY cause the archive had not named; it was reported
+and the archive measured it in `655ea0b1`: of the 238, only 7 reach
+their own END and 231 halt at a key poll.)
+
+**Effect on the six gate files.** `MAIL32`, `MAIL48`, `m3t1s2d` and
+`engindb3` left `blocked/varptr/` for `runnable/` under the VARPTR-alone
+attribution; only `raw-bytes-in-code/dmbsfh1.bas` and `xwingcf2.bas`
+stay blocked. By the gate's literal wording — "blocked listings unlocked
+by the core and nothing else" — the number is now **2**, and one of the
+two is `xwingcf2`, the weak-entry-evidence file of FINDING 4. By the
+gate's intent it is still **6**: none of the six runs to completion.
+Re-run 2026-09-04 under trs80basic, `--seed 1`, empty stdin, 6 s:
+
+| file | outcome |
+|---|---|
+| `runnable/MAIL32.bas`, `MAIL48.bas` | exit 1, `?BATCH: END OF INPUT AT LINE 160` — interactive, untested by an empty-stdin gate |
+| `runnable/m3t1s2d.bas` | exit 1, `?OD ERROR IN 191` |
+| `runnable/engindb3.bas` | exit 1, `?BATCH: END OF INPUT AT LINE 50`; fed ENTERs on 2026-08-14 it timed out spinning on the USR-gated loop FINDING 15 found |
+| `blocked/raw-bytes-in-code/dmbsfh1.bas`, `xwingcf2.bas` | exit 1, `?BATCH: END OF INPUT` |
+
+So the core-dependency claim survives and only the bookkeeping changed:
+the archive's headline stats count those four as rescued, and the
+core's measured contribution has collapsed almost entirely into the
+correctness column. This was the last unmeasured input to the ruling,
+and it moved the number down or sideways depending on which reading is
+held — the ruling (RULING STATUS above) was taken with it in hand.
+
+**Sweep re-run 2026-09-04** against the re-filed corpus, so the numbers
+above can be reconciled with a run today:
+
+| | 2026-08-14 | 2026-09-04 |
+|---|---|---|
+| listings swept | 4345 | 4339 |
+| using USR | 566 | 560 |
+| gate population (structural, strict) | 46 | 46 |
+| …blocked / runnable | 25 / 21 | 17 / 29 |
+| unresolvable loaders (FINDING 7) | 96 | 91 |
+| strict-filter random baseline | 5.3% | 3.7% |
+
+The population is the same 46 files; only their halves moved. The
+random baseline drifts because it is drawn with a fixed seed from the
+length distribution of the raw-byte runs, and that distribution
+changed with the six files that left the input set — a reminder that
+it is a calibration, not a constant.
+
+The oracle was also re-validated the same day after being repointed at
+trs80basic's `src/` (the interpreter's post-split home): 22 exact, 7
+patched, 16 silent, 0 contradictions — identical to FINDING 13.

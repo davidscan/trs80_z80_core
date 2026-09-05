@@ -1,12 +1,14 @@
 """The dynamic extraction oracle -- FINDING 7's escalation path.
 
-The oracle drives the PARENT interpreter, so most of what can go wrong
-here is a mismatch with parent source that has moved underneath us.
+The oracle drives the companion interpreter (../trs80basic since the
+2026-08-28 split; "parent" below is its pre-split name), so most of what
+can go wrong here is a mismatch with interpreter source that has moved
+underneath us.
 The patch-point test is the important one: it fails loudly the moment
 an instrumentation anchor stops matching, rather than silently
 producing an uninstrumented build whose measurements are all zero.
 
-Tests that need the parent repo or gawk skip cleanly when they are
+Tests that need the interpreter repo or gawk skip cleanly when they are
 absent, the same pattern the anchor tests use for the local-only
 corpus sibling.
 """
@@ -20,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from phasea import oracle                                     # noqa: E402
 
-HAVE_PARENT = os.path.isdir(oracle.SRC)
+HAVE_INTERP = os.path.isdir(oracle.SRC)
 HAVE_GAWK = subprocess.run(['which', 'gawk'],
                            capture_output=True).returncode == 0
 
@@ -101,7 +103,7 @@ class TestRegionDiscrimination(unittest.TestCase):
         self.assertEqual(oracle.region_of(32740, bytes(27)), 'candidate-ml')
 
 
-@unittest.skipUnless(HAVE_PARENT, 'parent interpreter sources not present')
+@unittest.skipUnless(HAVE_INTERP, 'interpreter sources not present')
 class TestPatchPoints(unittest.TestCase):
     """Every instrumentation anchor must still match the parent EXACTLY.
 
@@ -143,7 +145,7 @@ class TestPatchPoints(unittest.TestCase):
 
     def test_no_patch_touches_the_shipped_interpreter(self):
         """The parent repo is data here, never a build target."""
-        shipped = os.path.join(oracle.PARENT, 'trs80basic.awk')
+        shipped = os.path.join(oracle.INTERP_REPO, 'trs80basic.awk')
         if not os.path.exists(shipped):
             self.skipTest('parent has no built interpreter')
         with open(shipped) as f:
@@ -153,7 +155,7 @@ class TestPatchPoints(unittest.TestCase):
                              'instrumentation leaked into the parent repo')
 
 
-@unittest.skipUnless(HAVE_PARENT and HAVE_GAWK, 'needs parent sources + gawk')
+@unittest.skipUnless(HAVE_INTERP and HAVE_GAWK, 'needs interpreter sources + gawk')
 class TestInstrumentedBuild(unittest.TestCase):
 
     @classmethod
@@ -173,7 +175,7 @@ class TestInstrumentedBuild(unittest.TestCase):
         mine = subprocess.run(['gawk', '-f', self.interp, '--', prog],
                               capture_output=True, env=env)
         theirs = subprocess.run(
-            ['gawk', '-f', os.path.join(oracle.PARENT, 'trs80basic.awk'),
+            ['gawk', '-f', os.path.join(oracle.INTERP_REPO, 'trs80basic.awk'),
              '--', prog], capture_output=True, env=env)
         self.assertEqual(mine.stdout, theirs.stdout)
         self.assertEqual(mine.returncode, theirs.returncode)

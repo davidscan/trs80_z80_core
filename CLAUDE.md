@@ -9,7 +9,7 @@ stub fallback (language and seam RULED 2026-08-13 — see DESIGN.md).
 READ ORDER on a fresh session (local files only — cross-repo pointers rot,
 so they live in COMPANION REPOS below and are not part of the read order):
 1. README.md (one screen: what and why)
-2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 18 numbered findings
+2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 20 numbered findings
 3. DESIGN.md (the authoritative context: language/seam ruling, staged
    plan incl. Phase A, technical reference, testing strategy, the gate,
    decisions)
@@ -28,50 +28,86 @@ sub-project of either. Neither is a "parent".
   only (`programs/`, `programs/runnable/`, `OCRsamples/`, `blocked/`). It
   is NOT the interpreter any more; that moved to trs80basic on 2026-08-28.
 
-WHERE THINGS STAND (2026-08-14, end of the gate-closing session)
-- The gate is MEASURED TO COMPLETION and the ruling is WITH THE USER.
-  Gate number **6**. Phase A gave 5; closing FINDING 7's 96
-  unresolvable loaders with the dynamic oracle added exactly one
-  (varptr/engindb3.bas). The gate never set a numeric threshold, so no
-  arithmetic settles it — the judgment is the user's.
-- STAGE 1 IS NOT STARTED. No opcode-execution code exists. Do not
-  write any until the user rules the gate met (see the reviewed-
-  checkpoint rule below).
+WHERE THINGS STAND (audited 2026-09-04 against the companion repos, a
+sweep re-run, and the session records; the 2026-08-14 handoff had
+missed two same-day events, recorded below)
+- THE GATE IS RULED. Measured to completion 2026-08-14: gate number
+  **6** (Phase A 5; the oracle added varptr/engindb3.bas). The gate
+  never set a numeric threshold. The user RULED the same day, in the
+  companion session (recorded in awk_BASIC_interpreter's
+  PROJECT_MAP.md, "set 2026-08-14"): the rescue count does not justify
+  the core and no longer has to — the project is re-founded on its own
+  merits. The user's words: "I do want to have a standalone
+  assembler/de-assembler in addition to the in-BASIC machine code
+  handling." FOUR GOALS, in the user's priority order: (1) run BASIC
+  programs that contain embedded machine code — string packing,
+  DATA/POKE loaders, USR — i.e. the core plus a thin optional bridge;
+  (2) extract assembly-language listings from magazines and run them
+  (probably an OCR revisit); (3) write new assembly, "for the joy of
+  it" — needs the assembler; (4) disassemble, e.g. the code embedded in
+  BASIC programs — mostly built. Stage 1 planning proceeds from these
+  goals, not from the gate number.
+- STAGE 1 IS NOT STARTED. No opcode-execution code and no protocol
+  code exists. What gates it now is the BIG-PICTURE TALK the user asked
+  for on 2026-08-14 ("I need us to step back to project-level and
+  discuss big picture concepts"); protocol work is DEFERRED to that
+  talk. Agenda constraints already ratified (2026-09-02): companion
+  engine, never vendored; p77 shim in trs80basic; TRS80_Z80 discovery;
+  releases may bundle; the first protocol message carries a version and
+  a mismatch is a clean error. Do not start handshake/protocol code
+  before the talk. FINDING 19 (Dancing Demon) is input to it: call-and-
+  return USR is not enough for that class of program.
+- THE blocked/ RE-SCAN WAS PAID 2026-08-14 (awk_BASIC_interpreter
+  9ee96ca3 + 89d9269b) and verified from this side the same evening,
+  but never written into this repo until now — Z80_FINDINGS FINDING 20.
+  Effect: 280 files moved to runnable/, varptr/ retired, blocked/ 1065
+  → 779; the FINDING 16 cmd/ confound was measured by reachability (238
+  BLOCKED-RUNS-ANYWAY) rather than re-filed and contributed ZERO to the
+  gate; four of the six gate files (MAIL32, MAIL48, m3t1s2d, engindb3)
+  now sit in runnable/ without any of them running to completion. The
+  gate reads 2 by its literal wording and 6 by its intent.
 - Built and green: the 1780-entry opcode table + disassembler, the
   extractor/classifier/sweep, the dynamic oracle (phasea/oracle.py),
   and the pinned single-step vector suite (tools/fetch_vectors.py,
   1604 files fetched into the gitignored tests/vectors/). 98 tests:
   `python3 -m unittest discover -s tests`.
+- WHERE THE CODE LOOKS (repointed 2026-09-04): phasea/oracle.py builds
+  its scratch interpreter from ../trs80basic/src and tests/test_oracle.py
+  diffs against ../trs80basic/trs80basic.awk; the sweep, the oracle and
+  the anchor tests read listings from ../awk_BASIC_interpreter (corpus
+  only — its duplicate src/ is scheduled for deletion there). Re-
+  validated after the repoint: 22 exact / 7 patched / 16 silent / 0
+  contradictions, identical to FINDING 13. Sweep re-run 2026-09-04:
+  4339 listings (was 4345), 560 USR listings, 91 unresolvable loaders
+  (was 96), gate population still the same 46 files, now 17 blocked /
+  29 runnable (was 25 / 21). Z80_FINDINGS.md keeps the 2026-08-14
+  numbers as measured; FINDING 20 carries the deltas.
 - The user's own standing view, recorded so it is not relitigated: the
   two INTERPRETER-side defects the oracle found were each worth more
   listings than the core is. Both shipped 2026-08-14 (8c38dca6, in
-  awk_BASIC_interpreter's history —
-  pre-split; that code now lives in trs80basic).
-- OPEN, in the user's hands: (a) the gate ruling; (b) whether the core
-  is wanted for its own sake as the road to an ASSEMBLER and
-  standalone execution, which the gate does not score and which is a
-  separate decision on separate grounds (DESIGN.md "reusable seams").
-- OPEN, owed to the CORPUS ARCHIVE (awk_BASIC_interpreter) and NOT done: a
-  re-scan of its blocked/ categories. FINDING 16 means some blocked/cmd/
-  files were never Disk
-  BASIC programs — they were cassette programs told they were on a
-  disk — so the category sizes currently overstate CMD and may
-  understate the gate population itself. Worth doing BEFORE any
-  re-ruling. Corpus-side work, not interpreter work.
+  awk_BASIC_interpreter's history — pre-split; that code now lives in
+  trs80basic and was confirmed present there 2026-09-04).
 - KNOWN LATENT ISSUE, recorded not fixed (DESIGN.md decision 3): the
   interpreter's spaced-call fix dispatches `USR n(` as name `USR`,
-  DISCARDING
-  the slot digit, while `USRn(` keeps it. Harmless under the stub
-  (which ignores the slot), but the coprocess call frame must carry the
-  slot, so that dispatch point has to pass it through when the plumbing
-  is built.
+  DISCARDING the slot digit, while `USRn(` keeps it. Harmless under the
+  stub (which ignores the slot), but the coprocess call frame must carry
+  the slot, so that dispatch point has to pass it through when the
+  plumbing is built.
+- COMPANION-SIDE STALENESS, reported not edited (2026-09-04):
+  trs80basic/STATUS.local.md's "Machine-language call support" entry
+  still says 12 findings and "GATE RULING DEFERRED"; the archive's
+  README.md still describes itself as the interpreter (its own STATUS
+  already lists deleting the duplicate src/ as owed).
 
 STANDING RULES (do not relearn these the hard way):
-- PHASE A BEFORE THE CORE (DESIGN.md "The gate"): the first artifact is
-  the static disassembler/classifier over the corpus archive's DATA/POKE
-  loader bytes. Do not write opcode-execution code until its numbers
-  are in and the user has ruled the gate met. Phase A itself is in-gate
-  (measurement, not emulator) — confirmed with the user 2026-08-13.
+- PHASE A BEFORE THE CORE (DESIGN.md "The gate") — SATISFIED 2026-08-14,
+  kept because the discipline recurs: the first artifact was the static
+  disassembler/classifier over the corpus archive's DATA/POKE loader
+  bytes, and no opcode-execution code was written until its numbers
+  were in and the user had ruled (see WHERE THINGS STAND). Phase A
+  itself was in-gate (measurement, not emulator) — confirmed with the
+  user 2026-08-13. The same rule applies to the next build: measure
+  before building, and the next reviewed stop is the big-picture talk.
 - ANCHORS BEFORE TRUST (Phase A discipline, ruled 2026-08-13; wording
   corrected 2026-08-14): validate before believing, in this order.
   (1) The opcode table must pass a validation set against known-good
@@ -97,10 +133,11 @@ STANDING RULES (do not relearn these the hard way):
   payloads static extraction already resolved, and had to contradict
   none of them, before its output on the unresolvable 96 counted
   (FINDING 13).
-- THE GATE RULING IS A REVIEWED CHECKPOINT: Phase A ends in a findings
+- THE GATE RULING IS A REVIEWED CHECKPOINT (DONE 2026-08-14; the
+  pattern stands for the next checkpoint): Phase A ended in a findings
   document (Z80_FINDINGS.md, numbered like basclean's) plus the gate
   count, presented to the USER for the go/no-go ruling on the core.
-  Do not slide from measurement into Stage 1 in the same breath —
+  Do not slide from measurement into building in the same breath —
   present, stop, and let the user rule (they may bring a heavier
   review to the numbers).
 - NEVER commit ROM bytes, ROM disassembly text, or verbatim code from

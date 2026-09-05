@@ -26,8 +26,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from phasea.extract import extract_file                        # noqa: E402
 from phasea.classify import classify, ROM_NAMES                # noqa: E402
 
-PARENT = '../awk_BASIC_interpreter'
-PROGRAMS = os.path.join(PARENT, 'programs')
+# The corpus archive. The interpreter is NOT here any more (it moved to
+# ../trs80basic 2026-08-28); the sweep reads listings only.
+CORPUS = '../awk_BASIC_interpreter'
+PROGRAMS = os.path.join(CORPUS, 'programs')
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 

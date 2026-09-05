@@ -14,8 +14,11 @@ This is that. It is MEASUREMENT, not emulator: it runs BASIC under the
 parent's existing interpreter and reads what the loader deposited. No
 Z80 executes anywhere in this module.
 
-HOW THE PARENT IS INSTRUMENTED, AND WHY IT IS NOT MODIFIED. The parent
-repo is not touched. `build()` copies its `src/p*.awk` into out/, adds
+HOW THE INTERPRETER IS INSTRUMENTED, AND WHY IT IS NOT MODIFIED ("the
+parent" below is the pre-split name for the interpreter repo; since
+2026-08-28 that is ../trs80basic, and the corpus is the only thing this
+module reads from ../awk_BASIC_interpreter). The interpreter repo is not
+touched. `build()` copies its `src/p*.awk` into out/, adds
 two lines, and concatenates a scratch interpreter exactly the way the
 parent's own build does (`cat src/p*.awk > trs80basic.awk`). Both added
 lines are gated on TRS80_POKELOG being present in the environment, so
@@ -68,9 +71,14 @@ from phasea.extract import extract_file                        # noqa: E402
 from phasea.classify import classify                           # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PARENT = '../awk_BASIC_interpreter'
-SRC = os.path.join(PARENT, 'src')
-PROGRAMS = os.path.join(PARENT, 'programs')
+# Two neighbours, not one. The interpreter moved to ../trs80basic on
+# 2026-08-28; the corpus stayed in ../awk_BASIC_interpreter, which keeps a
+# duplicate of src/ that is scheduled for deletion there. Build from the
+# live interpreter, read listings from the archive.
+INTERP_REPO = '../trs80basic'
+CORPUS = '../awk_BASIC_interpreter'
+SRC = os.path.join(INTERP_REPO, 'src')
+PROGRAMS = os.path.join(CORPUS, 'programs')
 OUT = os.path.join(HERE, 'out', 'oracle')
 INTERP = os.path.join(OUT, 'trs80basic-oracle.awk')
 
@@ -134,7 +142,7 @@ def build(force=False):
     os.makedirs(OUT, exist_ok=True)
     mods = sorted(n for n in os.listdir(SRC) if n.endswith('.awk'))
     if not mods:
-        sys.exit('no parent sources at %s' % SRC)
+        sys.exit('no interpreter sources at %s' % SRC)
 
     applied = 0
     chunks = []
