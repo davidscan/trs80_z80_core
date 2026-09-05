@@ -28,6 +28,33 @@ sub-project of either. Neither is a "parent".
   only (`programs/`, `programs/runnable/`, `OCRsamples/`, `blocked/`). It
   is NOT the interpreter any more; that moved to trs80basic on 2026-08-28.
 
+REFERENCE LIBRARY (assembled 2026-09-05 — scanned books, not code; local
+only, never committed): `../trs80_references/trs80_z80_core/` holds the 21
+PDFs selected for this project after a table-of-contents scan of all 76
+documents in `../trs80_references/`; its `goal2/` subdirectory holds 16
+more for goal (2), magazine listings (the ten Wayne Green Encyclopedia
+volumes, Barden's subroutine book, the Richcraft Disassembled Handbooks,
+Custom TRS-80, TRS-80 Graphics). Which to reach for:
+- HLE trap semantics (documented behaviour only): ROM Routines Documented
+  (has the Model I vs III entry-point comparison), the Micro-80 Level II
+  ROM Reference Manual (text layer), Farvour "Microsoft BASIC Decoded"
+  chapters 2 and 4 ONLY — its chapters 7-8 are commented ROM disassembly
+  and fall under the NEVER-commit rule, as do Richcraft volumes 1-2.
+- Opcode table / T-state cross-checks: the Zilog Z80 CPU Technical Manual
+  (two scans of one book), Leventhal, the Reston Z80 Users Manual, Osborne
+  "Z80 Programming for Logic Design"; the Nano Systems reference card
+  lists the undocumented IX/IY half-register instructions.
+- Loader idioms the extractor classifies (string packing, DATA/POKE, array
+  packing, USR argument passing): Level II ROMs (Tab) ch. 2-3, Barden
+  "More TRS-80 Assembly-Language Programming" ch. 4-5, Fast BASIC part II
+  (the five BASIC tables, VARPTR).
+- Model I address-space side effects (3800H keyboard, 3C00H video, port
+  FFH): the 1978 TRS-80 Technical Manual; Assembly Language Made Simple
+  ch. 4 for the memory map.
+The user reorganises that tree themselves (BASIC-side books sit in
+`../trs80_references/trs80basic/`, parked items in "Future reference"), so
+search the whole tree before assuming a file's location.
+
 WHERE THINGS STAND (audited 2026-09-04 against the companion repos, a
 sweep re-run, and the session records; the 2026-08-14 handoff had
 missed two same-day events, recorded below)
