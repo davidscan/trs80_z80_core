@@ -999,6 +999,23 @@ absent-RAM tests change, and they become tests against RAMTOP.
 This also gives the machine-size question a home: a core that presents itself as
 48K should say so in one place, and RAMTOP is that place.
 
+### Addendum: the string-space allocator does not reclaim (same reading)
+
+`sp_materialize()` is a BUMP allocator. `SSP` only ever descends; `sp_free()`
+deletes a variable's mapping cells (`SPK`/`SPT`/`SPV`) but does not raise `SSP`,
+and `sp_reset()` restores it to `HIMEM` wholesale on CLEAR/RUN/NEW. So a program
+that re-VARPTRs in a loop — legitimate, since the documented behaviour is that a
+re-VARPTR after the value changed allocates a fresh region — marches `SSP` down
+toward the 42EBH floor and eventually raises `?OM`, with most of the space it
+passed over dead but unreclaimable.
+
+Harmless for the corpus idiom (pack once, call many times) and NOT a bug in what
+was built: the shipped behaviour is documented and matches the real machine's
+lack of string reclamation without an explicit collection. Recorded because it
+becomes a scaling limit exactly where goal (1) leans hardest — a long-running
+program that repeatedly re-packs a routine. On real hardware this is what
+`FRE("")` triggering garbage collection was for. Interpreter-owned; reported.
+
 ### Note for the protocol, when it comes
 
 The coprocess memory image must carry the protected region. If the call frame

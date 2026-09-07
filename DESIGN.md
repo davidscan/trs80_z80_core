@@ -454,6 +454,34 @@ STANDING RULES:
    because FINDING 19's Dancing Demon payload lives inside the program
    image itself, at 42F6H.
 
+THE INVARIANT, stated so downstream questions settle themselves
+(user's framing, 2026-09-07): **the 16-bit space is a faithful Model I,
+and none of the interpreter's generosity leaks into it.** The 64K is a
+WINDOW the interpreter projects, not the place BASIC's data lives.
+BASIC's storage is unbounded and sits outside; the interpreter
+materialises into the window only what Z80 code must be able to see,
+and it owns that projection policy entirely.
+
+The user proposed inverting the machine-accurate layout — start BASIC's
+mapping at 64K and leave everything below it TRS-80-accurate. That IS
+the architecture, arrived at independently, and it is already what
+happens: variables and the stack are awk structures, not addresses.
+ONE BOUNDARY THE INVERSION CANNOT CROSS, and it is the Z80's, not
+ours: anything BASIC must HAND to machine code needs a 16-bit address.
+VARPTR cannot return 65536; the USR vector at 408EH/408FH is two bytes.
+So the windows — VARPTR'd strings and numerics, the program image at
+42E9H, video, keyboard — stay inside the space by necessity. Everything
+else is free to live outside it, and does.
+
+Consequences that follow from the invariant without further argument:
+report a definite machine size (48K, RAMTOP FFFFH) and never "unlimited",
+because listings compute load addresses from PEEK(16561/16562); do not
+widen the address bus; do not let the size of a BASIC program change
+what Z80 code sees; and when something cannot fit the window, FAIL
+LOUDLY rather than silently show the wrong bytes — a sliding program-
+image window is the tempting answer and the dangerous one, because Z80
+code walking the image with HL would read wrong bytes with no error.
+
 WHERE MACHINE CODE AND BASIC MEET, AND WHY THEY DO NOT COLLIDE
 (verified 2026-09-07 by reading trs80basic; FINDING 22). The
 separation is NOT bank switching and does not need it. BASIC's
