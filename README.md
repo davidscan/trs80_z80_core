@@ -43,7 +43,7 @@ corpus archive's `blocked/` re-scan followed the same evening: 280
 files moved to runnable/, including four of the six gate files —
 without any of them running to completion (FINDING 20).
 
-See Z80_FINDINGS.md (21 findings). Stage 1 (the core itself) is NOT
+See Z80_FINDINGS.md (22 findings). Stage 1 (the core itself) is NOT
 started and no core code has been written. Durable artifacts: the
 validated 1780-entry opcode table (z80/table.py), disassembler,
 extractor/classifier, sweep, the oracle, the pinned single-step vector

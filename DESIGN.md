@@ -454,15 +454,40 @@ STANDING RULES:
    because FINDING 19's Dancing Demon payload lives inside the program
    image itself, at 42F6H.
 
-IF 64K EVER BINDS, there is exactly one honest extension: **bank
-switching**, a port-selected bank register, which is what the era
-actually did (the Model 4 reached 128K this way) and which keeps the
-Z80 at 16 bits so the table, the disassembler and the assembler go on
-describing real hardware. Widening the address bus is rejected: it
-would make the assembler emit code no Z80 could run and the
-disassembler mis-describe the listings goals (2) and (4) exist to read.
-Neither is scheduled; recorded so the question is not reopened from
-scratch.
+WHERE MACHINE CODE AND BASIC MEET, AND WHY THEY DO NOT COLLIDE
+(verified 2026-09-07 by reading trs80basic; FINDING 22). The
+separation is NOT bank switching and does not need it. BASIC's
+variables and stack are outside the 64K, so they cannot grow into
+machine code — that is free. STRING PACKING IS THE DELIBERATE
+EXCEPTION: the idiom puts the routine inside a BASIC string, so those
+bytes must be projected into the address space for VARPTR to locate
+and the core to execute. The interpreter already does this the way the
+real machine did — string space descends from the MEMORY SIZE ceiling
+(HIMEM) toward the 42E9H program text, `?OM` on collision — so
+answering MEMORY SIZE lower really does free the region above, and
+`PEEK(16561/16562)` reports the ceiling so listings can compute a load
+address from it. MEMORY SIZE is therefore NOT vestigial here: it is
+the live mechanism that keeps packed strings clear of poked code.
+A DEFECT SITS IN THE OTHER HALF (FINDING 22): the interpreter treats
+everything above HIMEM as ABSENT rather than PROTECTED, so POKEs into
+the reserved region are discarded. Harmless until a core executes
+them. Interpreter-owned, reported not built.
+
+IF 64K EVER BINDS, the only historically honest extension is **bank
+switching**, a port-selected bank register (the Model 4 reached 128K
+this way), which keeps the Z80 at 16 bits so the table, the
+disassembler and the assembler go on describing real hardware.
+But note what it is NOT: banking does not give machine code a separate
+non-colliding space — it MULTIPLEXES the same 16-bit window, so an
+address means different things depending on a port, and both VARPTR
+addresses and MEMORY-SIZE-reserved addresses stop being meaningful on
+their own. Every listing in the corpus assumes a flat 64K, so banking
+is actively hostile to goal (1) and could only ever serve goal (3),
+where we control both sides of the code. Widening the address bus is
+rejected outright: it would make the assembler emit code no Z80 could
+run and the disassembler mis-describe the listings goals (2) and (4)
+exist to read. Neither is scheduled; recorded so the question is not
+reopened from scratch.
 
 ## Testing strategy
 

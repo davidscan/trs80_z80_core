@@ -923,3 +923,86 @@ understanding that built the table. It took a source from outside the
 project. The card is a two-page scan whose tables are mostly
 unreadable, and it still paid for itself twice — one defect and one
 column that was believed unvalidatable.
+
+---
+
+## FINDING 22 — "protected" and "absent" RAM are the same thing to the interpreter, and goal (1) is what makes that bite (2026-09-07)
+
+Raised by a user question about whether MEMORY SIZE still shields space for
+machine code. Read-only investigation of trs80basic's `src/p75_mem.awk` and
+`src/p80_stmt.awk`; **nothing was edited there** (CLAUDE.md standing rule).
+
+### What is already right, and it is more than expected
+
+The VARPTR string space mirrors the real machine's layout exactly.
+`sp_materialize()` sets `SSP = HIMEM` on first use and allocates DOWNWARD
+(`base = SSP - need + 1`), with a floor of 17131 (42EBH, just above the 42E9H
+program text) and `?OM` if it would reach the program. So string space descends
+from the MEMORY SIZE ceiling toward the program text, exactly as Level II did.
+
+**Consequence: answering MEMORY SIZE with a lower number really does move packed
+strings down and free the region above.** The shield works for string packing
+today, for the same structural reason it worked in 1979. And the top-of-memory
+pointer is served live — `PEEK(16561/16562)` returns `HIMEM` lo/hi (40B1H/40B2H,
+corroborated in ROM Routines Documented, the Micro-80 ROM Reference Manual and
+Farvour) — so a listing that COMPUTES its load address from the ceiling gets a
+correct answer. The default is `HIMEM = 65535`, i.e. the machine presents itself
+as a fully expanded 48K Model I, which is the right default.
+
+### The defect
+
+Both PEEK and POKE treat everything above `HIMEM` as ABSENT RAM:
+
+    st_peek:  if (a > HIMEM) return 255      # absent RAM above MEMORY SIZE
+    st_poke:  else if (a > HIMEM) { }        # absent RAM: discarded
+
+On real hardware the MEMORY SIZE? answer does not make memory absent. It makes
+it **protected** — present, readable, writable RAM that BASIC will not allocate
+into. That is the entire point of the prompt, and it is where machine code goes.
+The two concepts have been collapsed into one, keyed on `HIMEM`.
+
+So the single most classic machine-code-in-BASIC idiom is half-implemented:
+
+    MEMORY SIZE? 32000                     <- string space correctly moves down
+    FOR I=32001 TO 32100: READ B: POKE I,B: NEXT   <- bytes DISCARDED
+    DEF USR0=32001 : X=USR0(0)             <- would execute nothing
+
+The shielding half works; the reserved region is not writable.
+
+### Why it has been harmless until now, and why it stops being
+
+The default `HIMEM` is 65535 and pressing ENTER at the prompt keeps it there, so
+nothing sits above the ceiling unless a program or user actually sets a lower
+one — and until there is a core, no bytes poked above it would ever have been
+EXECUTED, so discarding them cost nothing observable. Treating high addresses as
+absent is even authentic for a genuinely smaller machine: on a 16K Model I,
+addresses above 7FFFH really are absent, and 255-on-read is correct.
+
+Goal (1) is what activates it. The moment a core executes what was poked, the
+distinction between "BASIC must not use this" and "this is not there" becomes
+load-bearing.
+
+### What it needs (REPORTED, not built — this is interpreter-owned)
+
+Two quantities where there is currently one:
+
+- **RAMTOP** — the machine's physical RAM top (FFFFH for 48K, BFFF for 32K,
+  7FFF for 16K). Above it: absent. 255 on read, discard on write. Authentic.
+- **HIMEM** — the MEMORY SIZE? answer, at or below RAMTOP. Between HIMEM and
+  RAMTOP: **protected RAM.** Present, readable, writable, simply never allocated
+  by BASIC's string space. This is the region machine code lives in.
+
+`PEEK(16561/16562)` keeps reporting HIMEM, which is already correct. The string
+allocator keeps descending from HIMEM, which is already correct. Only the two
+absent-RAM tests change, and they become tests against RAMTOP.
+
+This also gives the machine-size question a home: a core that presents itself as
+48K should say so in one place, and RAMTOP is that place.
+
+### Note for the protocol, when it comes
+
+The coprocess memory image must carry the protected region. If the call frame
+ships "the sparse mem[]" and mem[] never received the discarded POKEs, the core
+executes an empty region and returns silently — which is the FINDING 16/17
+failure shape again: a wrong answer with no error. Whatever the protocol does
+about absent versus protected has to be decided once, on this distinction.

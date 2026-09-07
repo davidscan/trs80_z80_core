@@ -9,7 +9,7 @@ stub fallback (language and seam RULED 2026-08-13 — see DESIGN.md).
 READ ORDER on a fresh session (local files only — cross-repo pointers rot,
 so they live in COMPANION REPOS below and are not part of the read order):
 1. README.md (one screen: what and why)
-2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 21 numbered findings
+2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 22 numbered findings
 3. DESIGN.md (the authoritative context: language/seam ruling, staged
    plan incl. Phase A, technical reference, testing strategy, the gate,
    decisions)
