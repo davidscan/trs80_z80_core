@@ -501,6 +501,67 @@ everything above HIMEM as ABSENT rather than PROTECTED, so POKEs into
 the reserved region are discarded. Harmless until a core executes
 them. Interpreter-owned, reported not built.
 
+THE "EVERYTHING EARLY" PATTERN — the model that does work, and the
+period convention behind it (user recollection, MEASURED 2026-09-07).
+
+The user recalled that period programs did all their string packing at
+the very start, and proposed generalising it: assign packed strings
+early where they are addressable, and place embedded code early in the
+program, jumping around it. That is right, it is what the north-star
+program does, and it survives an 800K program where every other model
+fails.
+
+WHY THE CONVENTION EXISTED ON HARDWARE. In Microsoft BASIC a string
+assigned directly from a LITERAL is not copied into string space — the
+descriptor points INTO THE PROGRAM TEXT where the literal sits. So
+packing early put the bytes at a low, predictable, stable address near
+42E9H. It also kept them still: string space is collected, and a packed
+string whose VARPTR you have already handed to DEF USR must not move.
+
+MEASURED HERE (probe at 17129, identical output for a 350-byte program
+and an 850 KB one):
+
+  42E9H: F4 42 | 01 00 | 8D 20 "9000" 00      line 1, GOTO 9000
+  42F4H: 0B 43 | 02 00 | 93 20 5A 5A 5A ...   line 2, REM + payload
+
+The early payload sits at ~42FAH and reads back identically at both
+sizes. `VARPTR(B$)` returned 65533 in both, with the packed bytes just
+below it. **So both halves of the pattern are size-independent.**
+
+TWO REFINEMENTS TO THE RECOLLECTION:
+
+1. You do not GOTO/GOSUB INTO the machine code — BASIC cannot execute
+   it. The jump goes OVER it and the code is entered through USR. That
+   is exactly Dancing Demon's `1 GOTO 259` with the payload in fake
+   BASIC lines 2..258 (FINDING 19).
+2. For STRINGS the convention is unnecessary here, though harmless. The
+   interpreter DEVIATES from hardware — p75: "the bytes are a mem[]-
+   backed COPY (a literal's bytes are not the program line)" — and
+   materialises near HIMEM wherever the assignment appears. That
+   deviation is precisely what makes string packing immune to program
+   size: on real hardware a literal 600K into an 800K program would sit
+   at 617,129 and be unaddressable, which is the failure the user was
+   reaching for. Here it cannot happen.
+
+WHY THIS MATTERS BEYOND STYLE: the pattern SIDESTEPS FINDING 23
+entirely, because it never POKEs. Measured contrast — a DATA/POKE
+loader breaks once the image passes the loader's target (~15 KB for a
+routine at 32000); a payload placed early IN the image works at 850 KB.
+For goal (1) this is the robust shape, and it is what the acceptance
+case already uses.
+
+THREE CAVEATS, so the pattern is not oversold:
+- The program image is READ-ONLY, so this executes an embedded payload
+  but does not let it modify itself (p75, writable mapping unbuilt).
+- The 16-bit next-line links wrap past FFFFH (`% 65536` in pm_build), so
+  code that walks the line-record chain — which is how a payload in the
+  image is located — is only safe while it stays under 64K. Another
+  reason "early" is load-bearing rather than tidy.
+- Pack-then-SAVE captures nothing here, because the bytes are a copy
+  rather than the program line. On hardware that workflow worked, and
+  it was a real period technique; anyone writing NEW packed programs
+  (goal 3) needs to know it does not survive here.
+
 CAN A TRANSLATION TABLE REACH PAST 64K? No, and the reason is worth
 recording because the question recurs (user, 2026-09-07: machine code
 sitting 600K into an 800K program — "any jumps/branches in the embedded
