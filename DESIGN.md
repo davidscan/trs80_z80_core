@@ -24,9 +24,28 @@ awk_BASIC_interpreter/STATUS.md.
 
 ## Goal and non-goals
 
-GOAL: unmodified rescued BASIC listings that load short Z80 routines via
-DATA/POKE and call them with USR(n) should run — the routine executes
-against the interpreter's memory model and returns to BASIC.
+ORIGINAL GOAL (2026-08-07), and still goal (1) of four: unmodified
+rescued BASIC listings that load short Z80 routines via DATA/POKE and
+call them with USR(n) should run — the routine executes against the
+interpreter's memory model and returns to BASIC.
+
+RE-FOUNDED 2026-08-14. The gate measured the rescue payoff at 6
+listings and the user ruled that the count does not justify the core
+and no longer has to: the project is wanted for its own sake. Read the
+rest of this document with FOUR goals in the user's priority order, not
+one — the sections below were largely written when only the first
+existed, so where they say "the goal" they mean goal (1):
+  (1) run BASIC programs containing embedded machine code — string
+      packing, DATA/POKE loaders, USR. The core plus a thin bridge.
+      ACTIVE WORK as of 2026-09-07; the user calls it the highest
+      bang-for-the-buck piece.
+  (2) extract assembly listings from magazines and run them (likely an
+      OCR revisit).
+  (3) write new assembly, "for the joy of it" — needs the assembler.
+  (4) disassemble, e.g. machine code embedded in BASIC — mostly built.
+Goals (2)-(4) do not route through BASIC at all, which is why the core
+is a pure library with the coprocess plumbing kept separate (see
+"Architecture: the reusable seams").
 
 NON-GOALS, standing:
 - Standalone machine-language programs (SYSTEM tapes as primary
@@ -344,8 +363,7 @@ the six gate files into runnable/ without making any of them run
 (Z80_FINDINGS FINDING 20). Phase A's count already reflects all of
 this: the gate 6 need only the core.
 
-## Technical reference (verified in the 2026-08-07 session; CROSS-CHECKED
-## 2026-09-06 against the scanned reference library)
+## Technical reference — verified 2026-08-07, cross-checked 2026-09-06 against the scanned reference library
 
 CROSS-CHECK RESULT (2026-09-06, against ROM Routines Documented, the
 Micro-80 Level II ROM Reference Manual, the Tab Books Level II ROMs and
@@ -664,7 +682,13 @@ reopened from scratch.
   fallback path tested by pointing the interpreter at a missing
   python3).
 
-## The gate (do not start the CORE without it)
+## The gate — CLOSED 2026-08-14, kept as the measurement record
+
+(The heading read "do not start the CORE without it" until 2026-09-07.
+That instruction was discharged on 2026-08-14 and the imperative was
+left standing in the navigation layer, which is the exact hazard this
+document keeps warning about. The name "The gate" is unchanged so
+CLAUDE.md's reference still resolves.)
 
 Count rescued listings blocked on USR before building Stage 1 — now
 operationalized as PHASE A (the disassembler/classifier), which is
