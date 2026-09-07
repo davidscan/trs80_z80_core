@@ -1,20 +1,26 @@
 # DESIGN — Z80 core for USR calls from BASIC
 
-Agreed with the user 2026-08-07 (conversation in the parent repo's
+Agreed with the user 2026-08-07 (conversation in awk_BASIC_interpreter's
 session; summarized in ../trs80basic/STATUS.local.md under
 "Machine-language call support"), REVISED 2026-08-13 after ML Stage 0
-shipped in the parent and the language ruling changed to Python. This
+shipped there and the language ruling changed to Python. This
 document is the authoritative context for starting the work.
 
-TERMINOLOGY (added 2026-09-04): "the parent" throughout this document
-is the pre-split ../awk_BASIC_interpreter, which then held both the
+TERMINOLOGY (note added 2026-09-04; the wording it described was
+CONVERTED 2026-09-07). This document used to say "the parent" for the
+pre-split ../awk_BASIC_interpreter, which then held both the
 interpreter and the corpus. Since 2026-08-28 the interpreter is
 ../trs80basic and awk_BASIC_interpreter is the corpus archive only;
-neither is a parent (CLAUDE.md "COMPANION REPOS"). Interpreter-side
-history cited by hash (c61fdae5, 7e6f0749, 8c38dca6) lives in
-awk_BASIC_interpreter's git history; the code is in trs80basic.
-"Parent STATUS.md" means trs80basic/STATUS.local.md, a gitignored local
-file. The wording is kept because the decisions were made under it.
+neither is a parent (CLAUDE.md "COMPANION REPOS"). Every occurrence has
+now been replaced by the thing it actually named — "the interpreter" /
+trs80basic for interpreter-side work, "the archive" / "the corpus
+archive" / awk_BASIC_interpreter for corpus-side work. Nothing about
+the decisions or the measurements changed; only the names did.
+Interpreter-side history cited by hash (c61fdae5, 7e6f0749, 8c38dca6)
+is PRE-SPLIT and lives in awk_BASIC_interpreter's git history; the code
+those hashes made is in trs80basic today. The interpreter's STATUS is
+trs80basic/STATUS.local.md, a gitignored local file; the archive's is
+awk_BASIC_interpreter/STATUS.md.
 
 ## Goal and non-goals
 
@@ -79,14 +85,14 @@ HL back to the evaluator). The agreed shape:
   honor Ctrl-C (BREAK) during a runaway routine. An instruction budget
   backstops routines that never RET.
 - GRACEFUL DEGRADATION: no python3 on the machine -> USR falls back to
-  the parent's stub (evaluate and return the argument) with a one-time
+  the interpreter's stub (evaluate and return the argument) with a one-time
   notice. trs80basic.awk stays a complete single-file gawk program, the
   Windows zero-install zip stays honest, and the core is an OPTIONAL
   enhancement — the exact pattern the OLLAMA channel established with
   curl.
 
 Consequence for ship location: the old plan (core as src/p95_z80.awk in
-the parent) is DEAD. The core lives here; the parent gains only the
+trs80basic) is DEAD. The core lives here; trs80basic gains only the
 small coprocess plumbing (protocol client + fallback), which is
 legitimately awk.
 
@@ -127,7 +133,8 @@ anyway. Three seams:
 NEAR-TERM ASSEMBLER PAYOFF, noted for when it comes up: magazines often
 printed the assembly SOURCE beside the BASIC DATA/POKE loader (endgame's
 machine-code DATA block was hand-verified against its printed assembly
-listing — see the parent's FINDING 29 work). With an assembler sharing
+listing — see FINDING 29 in awk_BASIC_interpreter's notes). With an
+assembler sharing
 the table: transcribe the printed assembly, assemble it, and diff the
 bytes against the DATA block — OCR damage in DATA blocks, nearly
 unverifiable today, becomes machine-checkable. A basclean-adjacent
@@ -141,21 +148,21 @@ the standalone non-goal.
 
 ## The staged plan
 
-STAGE 0 lived in the PARENT repo and SHIPPED 2026-08-13 (fourth corpus
+STAGE 0 lived in the INTERPRETER repo and SHIPPED 2026-08-13 (fourth corpus
 batch): (a) memory-mapped keyboard matrix for PEEK (3800H-38FFH) —
 live, pty-verified, corpus-measured; (b) the USR/DEF USR parse-and-stub
 (USRn(x) returns its argument; the `DEF USR 0=` space gap of FINDING 8
-fixed 2026-08-14). The formerly-pending parent items BOTH SHIPPED
+fixed 2026-08-14). The formerly-pending interpreter items BOTH SHIPPED
 2026-08-14: string packing / VARPTR (live write-through descriptor +
 bytes) and program-memory mapping (read-only tokenized image at 42E9H,
 validated against tok.py, plus MEMORY SIZE enforcement). CAVEAT for
-this repo: parent VARPTR serves the STRING idiom; numeric/array
+this repo: the interpreter's VARPTR serves the STRING idiom; numeric/array
 VARPTR returns per-element 4-byte-single addresses, NOT a contiguous
 2-byte-integer image (see the VARPTR paragraph below). See the
 "Machine-language call support" entry in trs80basic/STATUS.local.md.
 
 PHASE A (this repo's FIRST artifact, before any core code): a static
-Z80 DISASSEMBLER/CLASSIFIER run over the parent corpus's DATA/POKE
+Z80 DISASSEMBLER/CLASSIFIER run over the corpus archive's DATA/POKE
 loader bytes. For each listing with a loader, decode the poked bytes
 and bucket the routine: sound (cycle-timed OUT 255 loops), keyboard
 (reads 3800H-38FFH), video (writes 3C00H-3FFFH), pure compute,
@@ -176,7 +183,8 @@ CORRECTION (Z80_FINDINGS FINDING 2): this section previously called
 endgame SCAN3 a KEYBOARD scan. It is not. The 214-byte block at B000H
 never touches 3800H-38FFH; it walks a caller-supplied table with IX and
 finds a minimum via SBC HL,DE — PURE COMPUTE. SCAN3 is the EVENT-CLOCK
-scan (the parent's FINDING 29 notes say so, and line 1240 calls it as
+scan (awk_BASIC_interpreter's FINDING 29 notes say so, and line 1240
+calls it as
 `KJ=USR 1(VARPTR(IC(1)))` over the event-clock array `IC()`). Space
 Chase's expectation (sound-only) held.
 
@@ -224,24 +232,26 @@ manifest of every ML payload in the collection).
   — a declared load address and a declared count the DATA satisfies
   exactly — are counted.
   Ready-made fixture: endgame's DATA block is count- and
-  address-locked against its printed assembly (parent FINDING 29).
+  address-locked against its printed assembly (awk_BASIC_interpreter
+  FINDING 29).
 - CLASSIFIER (Z80 knowledge, consumes the shared opcode table).
   Symbolic base is mostly harmless: classification keys on ABSOLUTE
   operand addresses (OUT (FFH), reads 3800H-38FFH, writes 3C00H-3FFFH,
   CALL 0A7FH/0A9AH), visible regardless of load address; only
   relative-branch resolution needs the base.
 - ESCALATION PATH — BUILT 2026-08-14 (`phasea/oracle.py`, FINDINGS
-  13-18): for loaders static extraction cannot crack, the parent
+  13-18): for loaders static extraction cannot crack, the COMPANION
   interpreter is the extraction ORACLE — run the listing under the
   shipped USR stub until the first USR call and dump the poked bytes
   from mem[]. Dynamic fallback, static default. It instruments a
-  SCRATCH COPY of the parent's src/p*.awk (env-var-gated, so the build
-  is inert unless asked, and the parent repo is never modified), and it
+  SCRATCH COPY of trs80basic's src/p*.awk (repointed there 2026-09-04;
+  env-var-gated, so the build is inert unless asked, and trs80basic is
+  never modified), and it
   is validated against the payloads static extraction already resolves
   before its output counts — zero contradictions required (FINDING 13).
   Applied to FINDING 7's 96 unresolvable loaders it recovered 56
   strict-formed payloads and moved the gate number by one.
-Rationale (2026-08-13): the old gate proxy (the parent's usr/ blocked
+Rationale (2026-08-13): the old gate proxy (the archive's usr/ blocked
 category, 143 files) dissolved when the stub re-scan moved 90 files
 and re-filed the rest under deeper blockers; grep can no longer answer
 "what would a working Z80 unlock" — only disassembly can.
@@ -253,11 +263,25 @@ STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
   mem[] via the coprocess protocol (default 255 = absent-RAM reads,
   already authentic).
 - USR interface: entry address from the USR vector at 408EH/408FH
-  (dec 16526/16527, the classic POKE pair) or the parent's DEF USR
+  (dec 16526/16527, the classic POKE pair) or trs80basic's DEF USR
   stub table (shipped 2026-08-13 — the stub already parses and
   evaluates the address; the coprocess route gives it a consumer).
-- Two ROM traps only: 0A7FH (fetch the USR integer argument into HL)
-  and 0A9AH (return HL to BASIC as the function result).
+- Two ROM traps only: 0A7FH and 0A9AH. Named by the USR idiom these
+  are "fetch the argument into HL" and "return HL as the result", but
+  CORRECTED 2026-09-06 against the reference library — a trap must
+  implement the ROM's REAL semantics, not the idiom:
+    0A7FH is CINT — convert the value in ACCUM to a signed 16-bit
+    integer in HL (ROM Routines Documented p36; Micro-80 Level II ROM
+    Reference Manual p17). The USR idiom works only because the
+    argument is already sitting in ACCUM at entry. A faithful trap has
+    to reproduce CINT's type handling and its overflow behaviour (?FC
+    outside -32768..32767), not merely move a number.
+    0A9AH is "ACCUM = HL" — LD (4121H),HL, storing HL into ACCUM as an
+    integer-typed result (Farvour p117).
+  Consequence: the traps are two general ROM services that the USR
+  convention happens to compose, so getting them right also gets any
+  OTHER caller of CINT right — and getting them wrong is invisible
+  until a listing passes an out-of-range or non-integer argument.
 - Exit: RET with the entry-call's return address = done.
 - This alone runs pure-computation routines (sorts, memory fills),
   fast-video routines (writes to 3C00H-3FFFH land in the interpreter's
@@ -268,7 +292,7 @@ STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
   reason than anticipated. Not because the keyboard matrix went live in
   Stage 0, but because the routine never needed the keyboard at all
   (FINDING 2, pure compute). It needs the CPU, the 0A7FH trap, and
-  parent-side VARPTR.
+  interpreter-side VARPTR.
 
 STAGE 2: the HLE trap table, grown CORPUS-DRIVEN (the basclean
 methodology): implement a ROM entry point only when a measured real
@@ -276,11 +300,20 @@ listing calls it. MEASURED (Z80_FINDINGS FINDINGS 9 and 18) — the list
 is short, and it took the dynamic oracle to find any of it:
   002BH keyboard scan-once      6 callers
   0033H character to display    6 callers
-  1BC0H (not a documented Level II entry)   1 caller
+  1BC0H tokenize / COMPRESS a BASIC line    1 caller
   0028H RST 28H, the Disk BASIC DOS vector  3 callers — belongs with
         the CMD blocker, not with HLE
   0049H wait-key, 003BH char-to-printer, 0060H delay:  ZERO callers,
         measured twice. Do not build them on spec.
+CORRECTION 2026-09-06 (reference library, three books agreeing): this
+list previously read `1BC0H (not a documented Level II entry)`. It IS
+documented — "COMPRESS BASIC LINE" (ROM Routines Documented p62),
+"TOKENIZE INPUT ROUTINE" (Level II ROMs, Tab Books, p375), and the
+tokenization pass in Farvour p11. So the single caller is calling a
+real, specified entry point, and "undocumented" was never the reason to
+defer it; the corpus-driven rule is (one caller does not yet earn a
+trap). Note also that a program calling the line tokenizer is doing
+self-modifying BASIC, which is a bigger question than the trap.
 Note the history, because it is the methodology working: FINDING 9
 measured ALL five named candidates at zero callers over the statically
 extractable population and concluded Stage 2 was unjustified. Closing
@@ -288,18 +321,18 @@ FINDING 7 with the oracle put callers on two of them. The rule stands —
 implement on measured evidence — but "measured" had to include the
 dynamically-resolved loaders before it meant anything.
 
-PARALLEL, PARENT-SIDE: VARPTR — SHIPPED in the parent 2026-08-14
-(7e6f0749), with one consequence for this repo. The parent's varptr/
+PARALLEL, INTERPRETER-SIDE: VARPTR — SHIPPED 2026-08-14 (7e6f0749,
+pre-split), with one consequence for this repo. The archive's varptr/
 blocked category is the second-largest (359 files as of 2026-08-13)
 and the dominant idiom is DEF USR=VARPTR(US%(0)) — VARPTR used to
 LOCATE the poked routine. The shipped VARPTR returns real, consistent
 addresses (so those loader lines now RUN), and the STRING-packing
-idiom is served faithfully with write-through bytes. BUT the parent
+idiom is served faithfully with write-through bytes. BUT the interpreter
 strips `%` suffixes and stores all numerics as doubles, so an integer
 array does NOT materialize as contiguous 2-bytes-per-element memory:
 VARPTR(US%(0)) addresses a 4-byte Microsoft-single of element 0 only.
 A future core can never read the VARPTR-array routine image out of
-parent memory — those files go through the loader EXTRACTOR's
+interpreter memory — those files go through the loader EXTRACTOR's
 VARPTR-array idiom (above), which decodes the DATA values directly.
 The varptr/ pile was NOT auto-unblocked by the ship; it was
 RE-CLASSIFIED by the archive's blocked/ re-scan the same evening
@@ -309,9 +342,24 @@ the six gate files into runnable/ without making any of them run
 (Z80_FINDINGS FINDING 20). Phase A's count already reflects all of
 this: the gate 6 need only the core.
 
-## Technical reference (verified in the 2026-08-07 session)
+## Technical reference (verified in the 2026-08-07 session; CROSS-CHECKED
+## 2026-09-06 against the scanned reference library)
 
-- Model I CPU: Z80 @ 1.77 MHz (~440K instr/s effective). The parent's
+CROSS-CHECK RESULT (2026-09-06, against ROM Routines Documented, the
+Micro-80 Level II ROM Reference Manual, the Tab Books Level II ROMs and
+Farvour — three or four books per address): every address named in this
+section and in the Stage 2 caller list above is CORROBORATED — 0A7FH,
+0A9AH, 408EH, 40A4H, 42E9H, 37E8H, 002BH, 0033H, 0028H, 0049H, 003BH,
+0060H, 01D3H. Two things changed, both recorded where they belong: the
+1BC0H "undocumented" claim (Stage 2 list, above) and the CINT semantics
+of 0A7FH (Stage 1 traps, above). The books could NOT validate the
+opcode table's cycle column — the OCR'd Zilog/Reston/Leventhal
+instruction tables yield 0-1 parseable rows each — so T-states stay
+"carried but unvalidated" until the core runs the pinned single-step
+vectors against them.
+
+- Model I CPU: Z80 @ 1.77 MHz (~440K instr/s effective). The
+  interpreter's
   `speed` throttle can slow replay toward authentic feel.
 - Memory map (all already meaningful in the interpreter's mem[]):
   3800H-38FFH keyboard matrix (dec 14336-14591; PEEK(14400) = the
@@ -320,16 +368,18 @@ this: the gate 6 need only the core.
   3C00H-3FFFH video (dec 15360-16383) — mapped to SCR, renders.
   37E8H-37E9H printer status — reads 63 (attached/ready) since Stage 0.
   40A4H program-start pointer, 408EH/408FH USR vector, 42E9H program
-  text base (relevant only to the parent's program-mapping item).
+  text base (relevant only to the interpreter's program-mapping item).
 - Port FFH (the only port real listings meaningfully touch): bits 0-1
   cassette output levels (the sound trick — alternate 1/2 for a square
   wave through an external amp), bit 3 = 32-column video mode (pairs
-  with the parent's CHR$(23) roadmap item). OUT elsewhere: no-op or
+  with the interpreter's CHR$(23) roadmap item). OUT elsewhere: no-op or
   error, decide from corpus evidence (Phase A).
 - USR call convention (Level II): X=USR(n) jumps to the vector address;
   the routine may CALL 0A7FH to get n in HL, computes, optionally loads
   HL and JPs/CALLs 0A9AH to return a value; plain RET returns without
-  one.
+  one. This is the IDIOM; 0A7FH and 0A9AH are the general ROM services
+  CINT and "ACCUM = HL" that it composes — see the Stage 1 trap entry
+  for the semantics a trap actually has to implement.
 
 ## Testing strategy
 
@@ -340,9 +390,9 @@ this: the gate 6 need only the core.
   classic ZEXDOC/ZEXALL exercisers are the integration-level check
   (need a tiny CP/M-BDOS print trap to run). RULED 2026-08-13: the
   vector suites are third-party data — gitignore them with a fetch
-  script, never commit them (the parent's no-third-party-material
-  practice).
-- Adopt the parent repo's culture: pin everything in a regression
+  script, never commit them (the no-third-party-material practice
+  inherited from awk_BASIC_interpreter).
+- Adopt the companion repos' culture: pin everything in a regression
   suite from day one; the passing suite pins mechanical behavior, not
   "the emulator works" — real-listing acceptance is the bar.
 - North-star for the coprocess (Z80_FINDINGS FINDING 19, 2026-09-02):
@@ -352,18 +402,19 @@ this: the gate 6 need only the core.
   writes, live key state, and cycle pacing, and NOT ROM emulation.
   Call-and-return USR (memory in, run, memory out) is not enough for
   that class of program; the protocol has to decide this.
-- Acceptance corpus: the parent's rescued listings with USR routines.
+- Acceptance corpus: the corpus archive's rescued listings with USR
+  routines.
   Space Chase (80 Micro 5/1982) is sound-only USR — runs with sound
   silently swallowed. ENDGAME/BAS (80 Micro 5/1985) is a Stage 1 case:
   SCAN3 is the EVENT-CLOCK scan, pure compute, NOT the keyboard scan
   this document called it before Phase A measured it (FINDING 2). Phase
   A's classification grew this list to 46 statically-extractable
   payloads, and the oracle added 61 more (FINDING 14; 56 when first
-  measured, 61 once the parent's FINDING 16/17 fixes let more listings
+  measured, 61 once the interpreter's FINDING 16/17 fixes let more listings
   reach their loader).
-- Regression contract with the parent: t1-t28 transcripts exit 0 and
+- Regression contract with trs80basic: t1-t28 transcripts exit 0 and
   t7's RND line is the only run-to-run variance (t25-t28 arrived with
-  the parent's 2026-08-14 batch: RND LCG, Model III display modes,
+  the interpreter's 2026-08-14 batch: RND LCG, Model III display modes,
   MERGE/NAME, program-memory mapping); batch mode exit codes
   unchanged; a new t29+ transcript for coprocess USR (with the
   fallback path tested by pointing the interpreter at a missing
@@ -375,14 +426,14 @@ Count rescued listings blocked on USR before building Stage 1 — now
 operationalized as PHASE A (the disassembler/classifier), which is
 in-gate work: it is measurement, not emulator. As of 2026-08-07 the
 honest count was ~2 (Space Chase plays stubbed; endgame can't run). As
-of 2026-08-13 the parent's stub re-scan moved 90 usr/def files (80 ran
+of 2026-08-13 the interpreter's stub re-scan moved 90 usr/def files (80 ran
 clean — some unknown fraction have load-bearing USR results that only
 play-testing or Phase A can flag) and re-filed the deep-ML pile:
 varptr 359, raw-bytes-in-code 135, inp 54, system 7. The gate question
-is now "how many of these does Stage 1 (+VARPTR, parent-side — the
+is now "how many of these does Stage 1 (+VARPTR, interpreter-side — the
 VARPTR half shipped 2026-08-14) actually unlock" — Phase A's output IS
 the gate decision input. This is the
-estimating twin of the parent's standing lesson: "measure the
+estimating twin of the corpus project's standing lesson: "measure the
 refutation before shipping a plausible heuristic" — here, count the
 unlocked programs before building the emulator.
 
@@ -428,7 +479,7 @@ to runnable/ (literal reading 2, intent 6, none of them runs — FINDING
 
 RULED 2026-08-13:
 1. LANGUAGE: Python 3 (see "Language and the runtime seam").
-2. SHIP LOCATION: the core lives HERE; the parent gains only the awk
+2. SHIP LOCATION: the core lives HERE; trs80basic gains only the awk
    coprocess plumbing + stub fallback. src/p95_z80.awk is dead.
 3. NAME: renamed awk_Z80_core -> trs80_z80_core (no remote existed;
    rename was free).
@@ -442,13 +493,14 @@ STILL OPEN (decide when work starts):
 1. LICENSE: trs80basic is GPLv3 (c) 2026 David Forbis; mirroring it
    here is the default assumption. No LICENSE file yet — user ruling
    2026-08-14, with Phase A code already present.
-2. R register: the parent's authentic-RND roadmap item reads R for
+2. R register: the interpreter's authentic-RND roadmap item reads R for
    seeding (RANDOM at 01D3H). Emulating R crudely (increment per
    instruction) lets the two items share it. Low stakes.
 3. Coprocess protocol details (framing, delta-vs-full memory sync,
    instruction budget size): design with the plumbing, not before.
-   ONE CONSTRAINT already known (parent review, 2026-08-14): the call
-   frame must carry the USR SLOT NUMBER, and the parent's spaced-call
+   ONE CONSTRAINT already known (interpreter-side review, 2026-08-14):
+   the call frame must carry the USR SLOT NUMBER, and the interpreter's
+   spaced-call
    fix (8c38dca6) currently DISCARDS the slot digit of `USR n(` before
    dispatch — that dispatch point must pass it through when the
    plumbing is built. Recorded in trs80basic/STATUS.local.md's ML
@@ -461,13 +513,13 @@ STILL OPEN (decide when work starts):
    DEFERRED to the big-picture talk; no handshake/protocol code before
    it. Nothing of this is built as of 2026-09-04.
 
-## Standing practices inherited from the parent repo
+## Standing practices inherited from the companion repos
 
 - Measure before shipping; findings documents with numbered findings;
   every increment committed and green on a written regression bar.
 - Commit messages via `git commit -F <file>` (not heredocs); absolute
   paths in shell commands.
-- No third-party copyrighted material in the repo (the parent keeps its
-  scan corpus in a local-only sibling git repo — the same pattern
+- No third-party copyrighted material in the repo (awk_BASIC_interpreter
+  keeps its scan corpus in a local-only sibling git repo — the same pattern
   applies to ROM-derived material and the downloaded test-vector
   suites here).

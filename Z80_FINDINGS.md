@@ -1,10 +1,22 @@
 # Z80_FINDINGS — Phase A
 
 Numbered findings, basclean-style. Phase A is the static Z80
-disassembler/classifier run over the parent corpus's DATA/POKE loader
+disassembler/classifier run over the corpus archive's DATA/POKE loader
 bytes: measurement, not emulator. It ends here, at a reviewed
 checkpoint, with the gate count presented for the user's go/no-go
 ruling on Stage 1.
+
+TERMINOLOGY (converted 2026-09-07): this document used to say "the
+parent" for the pre-split ../awk_BASIC_interpreter, which then held
+both the interpreter and the corpus. Since 2026-08-28 the interpreter
+is ../trs80basic and awk_BASIC_interpreter is the corpus archive only —
+this project is a peer of both, a child of neither (CLAUDE.md
+"COMPANION REPOS"). Every occurrence now names what it meant: "the
+interpreter" / trs80basic for interpreter-side work, "the archive" /
+"the corpus archive" for corpus-side work. Commit hashes cited for
+interpreter-side ships (c61fdae5, 7e6f0749, 8c38dca6) are PRE-SPLIT and
+resolve in awk_BASIC_interpreter's history; that code lives in
+trs80basic now. No measurement, number or ruling changed — only names.
 
 RULING STATUS (2026-08-14): presented, reviewed (independent
 assessment reproduced all numbers; FINDING 8 resolved by measurement),
@@ -30,11 +42,11 @@ Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 re-run today reads 4339 listings with the same 46-file gate population
 split differently between the halves — the deltas are tabulated in
 FINDING 20; the numbers below are left as measured. FINDING 8 resolved 2026-08-14 by batch runs
-under the parent interpreter; the sweep numbers are unchanged.
-PARENT-SIDE UPDATE, later the same day: the FINDING 8 fix SHIPPED in
-the parent (c61fdae5) and the parent's VARPTR item shipped too — see
+under the companion interpreter; the sweep numbers are unchanged.
+INTERPRETER-SIDE UPDATE, later the same day: the FINDING 8 fix SHIPPED
+(c61fdae5) and the VARPTR item shipped too — see
 the addendum after the gate table; neither moved the number. The
-FINDING 16/17 fixes shipped that evening (parent 8c38dca6) and did not
+FINDING 16/17 fixes shipped that evening (8c38dca6) and did not
 move it either — they change how many listings RUN, not how many are
 blocked on the core alone. Post-fix figures are re-measured throughout
 FINDINGS 14-18.
@@ -64,32 +76,33 @@ number that means "build". No arithmetic settles the ruling.
 
 Phase A returned **5**, on the statically extractable population only.
 The "up to 2 more" reported on 2026-08-13 was resolved on 2026-08-14:
-both ?SN errors reproduce, and their cause is a parent-side
+both ?SN errors reproduce, and their cause is an interpreter-side
 `DEF USR 0=` parse gap, not the missing core (FINDING 8). Closing
 FINDING 7 with the dynamic oracle then moved 5 → 6 (FINDINGS 13-15).
 
-PARENT-SIDE ADDENDUM (2026-08-14, after the ruling was recorded): the
-parent shipped two of the items this measurement leaned on, and the
+INTERPRETER-SIDE ADDENDUM (2026-08-14, after the ruling was recorded):
+the interpreter shipped two of the items this measurement leaned on,
+and the
 gate number does not move.
-- The `DEF USR 0=` parse fix shipped (parent c61fdae5) and reproduced
+- The `DEF USR 0=` parse fix shipped (c61fdae5) and reproduced
   this file's prediction exactly: morsmstr.bas batch exit 0, quest_2.bas
   past its line-36 ?SN to an interactive INPUT — both at stub level,
   joining the sound set. The correctness column is 23 actual, no
   longer conditional.
-- The parent's VARPTR item shipped (parent 7e6f0749) — WITH A CAVEAT
+- The interpreter's VARPTR item shipped (7e6f0749) — WITH A CAVEAT
   THAT MATTERS HERE: it serves the STRING-packing idiom faithfully
   (live descriptor, write-through bytes), but for numerics and array
   elements it returns the address of a per-element 4-byte
-  Microsoft-single materialization. The parent strips `%` suffixes and
+  Microsoft-single materialization. The interpreter strips `%` suffixes and
   keeps all numerics as doubles, so `VARPTR(US%(0))` now returns a
   real address WITHOUT a contiguous 2-bytes-per-element integer image
   behind it. The VARPTR-array loader idiom therefore still cannot be
-  read out of parent memory by a future core — those files route
+  read out of interpreter memory by a future core — those files route
   through Phase A's extractor/manifest exactly as planned (DESIGN.md
   "LOADER EXTRACTION"). The gate constituency of 5 now needs ONLY the
-  core, but nothing about the count changes, and the parent's varptr/
+  core, but nothing about the count changes, and the archive's varptr/
   blocked pile (359) is NOT auto-unblocked — re-classification is a
-  future measurement, recorded in the parent STATUS.md. (Done that
+  future measurement, recorded in the archive's STATUS.md. (Done that
   evening: varptr/ retired, four gate files re-filed — FINDING 20.)
 
 | | files |
@@ -101,9 +114,9 @@ gate number does not move.
 | **blocked listings unlocked by core + VARPTR alone** | **6** (2 by the literal wording after the 2026-08-14 re-scan moved four of them to runnable/; none of the six runs — FINDING 20) |
 | blocked, ML clean, but *also* blocked by CMD (Disk BASIC) | 14 |
 | blocked, ML clean, but needing a Stage 2 ROM trap | 4 (+7, FINDING 18) |
-| blocked, ?SN from the parent's `DEF USR 0=` parse gap (FINDING 8; parent fix shipped 2026-08-14, both now run at stub level) | 2 |
+| blocked, ?SN from the interpreter's `DEF USR 0=` parse gap (FINDING 8; fix shipped 2026-08-14, both now run at stub level) | 2 |
 | blocked, ?SN unrelated to the loader | 2 |
-| runnable listings whose USR result becomes correct | 21 (+2 after the parent fix) |
+| runnable listings whose USR result becomes correct | 21 (+2 after the interpreter fix) |
 
 **THE GATE NUMBER MOVED BY ONE: 5 → 6.** Closing FINDING 7 more than
 doubled the measured machine-code population — 46 statically
@@ -113,7 +126,7 @@ always there; what was missing was a listing whose ONLY obstacle is
 the absent Z80, and running 96 more loaders produced exactly one more
 of those (FINDING 15).
 
-The same run turned up two PARENT-side defects worth more listings
+The same run turned up two INTERPRETER-side defects worth more listings
 than the core is (FINDINGS 16 and 17), and reversed part of FINDING 9
 (FINDING 18).
 
@@ -160,7 +173,8 @@ stashed at `B0D6H`. That is **pure computation**.
 
 The refutation is well-corroborated, not a lone disagreement:
 
-- The parent's own FINDING 29 notes call SCAN3 "the whole **event-clock
+- awk_BASIC_interpreter's own FINDING 29 notes call SCAN3 "the whole
+  **event-clock
   scan**" — not a keyboard scan. The name was mis-glossed.
 - Line 1240 invokes it as `KJ=USR 1(VARPTR(IC(1)))`, and `IC()` is the
   event-clock array. The disassembly is exactly a scan of that array.
@@ -180,7 +194,8 @@ check on the opcode table as well:
 whether endgame is a Stage 1 or Stage 2 acceptance case. It is Stage 1
 — and for a stronger reason than anticipated. Not because the keyboard
 matrix went live in Stage 0, but because the routine never needed the
-keyboard. It needs the CPU, the `0A7FH` trap, and parent-side VARPTR.
+keyboard. It needs the CPU, the `0A7FH` trap, and interpreter-side
+VARPTR.
 
 Both the measured bucket and the *absence* of keyboard access are
 asserted in `tests/test_anchors.py`, so the refuted expectation cannot
@@ -235,10 +250,11 @@ Two caveats on the first five, recorded 2026-08-14 (assessment review):
   vector poke resolved only the high byte (`hi-only-127`), so
   classification fell back to entry offset 0. The payload is
   strict-formed; the entry-address linkage is not locked.
-- "Plus the parent's VARPTR item" is category-level, not
+- "Plus the interpreter's VARPTR item" is category-level, not
   mechanism-level: **none of the five enters through
   `DEF USR=VARPTR(...)`** — the varptr/ three use literal DEF USR
-  addresses and vector pokes, and need parent VARPTR only because
+  addresses and vector pokes, and need the interpreter's VARPTR only
+  because
   their listings call VARPTR elsewhere. The entry-idiom VARPTR files
   (the 359-file category's namesake pattern) contributed exactly one
   gate file, `ld8509b.bas` — and it is Stage-2-blocked on `RST 28H`.
@@ -255,7 +271,7 @@ table. None are machine code.
 **598 payloads were bucketed away from candidate-ML on these grounds**
 (464 damage, 62 screen-data, 55 device-stream, 17 table-data). Had they
 been counted as routines, the gate number would have been
-unrecognisable. This is the parent's standing lesson — plausible
+unrecognisable. This is the corpus project's standing lesson — plausible
 heuristics die under measurement — arriving on schedule.
 
 ## FINDING 6 — raw-byte recovery carries no signal, and it is measurable
@@ -295,13 +311,13 @@ from other variables, and one loader assembled inside a string
 (`"FORX="+S$+"TO"+E$+":READY:POKEX,Y"` — a program writing a program).
 
 These are reported as a category, never guessed at. DESIGN.md's
-recorded escalation path applies: the parent interpreter is the
+recorded escalation path applies: the companion interpreter is the
 extraction oracle — run the listing under the shipped USR stub to the
 first USR call and dump the poked bytes from `mem[]`. **Not built** as
 of 2026-08-13 — BUILT 2026-08-14, FINDINGS 13-18. It was the cheapest
 way to grow the measured population, and it resolved 61 of the 96.
 
-## FINDING 8 — the loader-line ?SN blockers are a parent-side `DEF USR 0=` parse gap (RESOLVED 2026-08-14)
+## FINDING 8 — the loader-line ?SN blockers are an interpreter-side `DEF USR 0=` parse gap (RESOLVED 2026-08-14)
 
 Four `sn-when-run/` listings have clean ML. Their recorded `?SN` lines:
 
@@ -315,17 +331,17 @@ line*, so as of 2026-08-13 they were plausibly USR-blocked, counted as
 0, and reported as "up to +2" pending one batch run each.
 
 **Those runs were made 2026-08-14, and the +2 dissolves.** Both ?SN
-errors reproduce under the parent interpreter, exactly on the loader
+errors reproduce under the companion interpreter, exactly on the loader
 lines. Minimal repros isolate the cause to one token: `DEF USR 0=`
 **with a space before the slot digit** raises `?SN`, while
 `DEF USR0=`, `DEFUSR0=`, and `DEF USR=` all parse. The FOR/READ/POKE
 and `&H` portions of both lines run clean in isolation. Real Level II
 tokenizes past insignificant spaces, so this is a parse gap in the
-parent's DEF USR stub — FINDING 12's lexical lesson mirrored: the same
+interpreter's DEF USR stub — FINDING 12's lexical lesson mirrored: the same
 tokenizer that permits `READD` also permits `USR 0`.
 
 Consequence: **neither file is gate constituency.** The blocker was a
-one-line fix in the PARENT repo (owed to its queue, per the standing
+one-line fix in the INTERPRETER repo (owed to its queue, per the standing
 split — not built here; SHIPPED there 2026-08-14, c61fdae5, verified:
 morsmstr exit 0, quest_2 past line 36). Once fixed, both run today under the shipped
 stub: both payloads are sound routines (quest_2's 32 bytes disassemble
@@ -343,7 +359,7 @@ gate population:
 
 | entry | files | what it is |
 |---|---|---|
-| `0A7FH` | 27 | USR argument → HL (GETHL) — **already Stage 1** |
+| `0A7FH` | 27 | CINT: ACCUM → HL, i.e. the USR argument fetch — **already Stage 1** |
 | `0028H` | 3 | `RST 28H`, the Disk BASIC DOS vector |
 | `01F8H` `0212H` `0235H` `0264H` `0287H` `0296H` `03E3H` | 1 each | all in `varptr/MICROED.bas` |
 
@@ -468,12 +484,12 @@ precisely the population the gate is about.
 
 ## FINDING 14 — the oracle resolves most of the 96, and the ML population doubles
 
-Of the 96, measured against the parent as it then stood: 80 deposited
+Of the 96, measured against the interpreter as it then stood: 80 deposited
 bytes, 66 yielded candidate machine code, and **56 yielded
 STRICT-formed payloads** (the ≥90%-coverage, ends-exactly-on-RET filter
 whose random-data false-positive rate FINDING 6 measured at 5.3%).
 
-RE-MEASURED against the parent after FINDINGS 16 and 17 shipped there,
+RE-MEASURED against the interpreter after FINDINGS 16 and 17 shipped there,
 which is the number to quote now: 86 deposited, 73 candidate, **61
 strict-formed**, 57 reached a USR call (from 25). 54 of the 61 are
 covered by Stage 1 alone; the other 7 need a Stage 2 trap (FINDING 18).
@@ -506,7 +522,7 @@ down:
 | loop is unconditional — a perfect core changes nothing | 13 |
 | **USR result actually gates the loop** | **1** |
 
-(13 hangs when first measured, 14 after the parent's FINDING 16/17
+(13 hangs when first measured, 14 after the interpreter's FINDING 16/17
 fixes let more listings reach their loader. The USR-gated count stayed
 at exactly one through both runs.)
 
@@ -526,14 +542,14 @@ the comment and it is an unconditional loop in a damaged listing.
 ## FINDING 16 — one byte of the memory map is worth more than the core
 
 `IF PEEK(16396)=201` is the classic am-I-under-Disk-BASIC probe: 400CH
-holds a RET (201) on a cassette Level II machine. **The parent returns
+holds a RET (201) on a cassette Level II machine. **The interpreter returns
 255** (absent-RAM default), so every listing using the probe takes its
-DISK branch — straight into `CMD`, which the parent does not implement
+DISK branch — straight into `CMD`, which the interpreter does not implement
 — even though the cassette branch is the one that would run, and is
 usually the branch that POKEs the USR vector.
 
 First measured as a counterfactual, by re-running the 96 with the probe
-answering 201; **SHIPPED in the parent 2026-08-14 (8c38dca6)**, so the
+answering 201; **SHIPPED interpreter-side 2026-08-14 (8c38dca6)**, so the
 right-hand column is now simply the truth:
 
 | | before | after (shipped) |
@@ -550,21 +566,21 @@ filed under `cmd/`, 28 under `varptr/`) and 22 runnable. The 29 in
 `cmd/` are there *because* the probe sends them down the Disk branch;
 they are not Disk BASIC programs, they are cassette programs being told
 they are on a disk. This attacks FINDING 4's largest confound directly,
-and means **a re-scan of the parent's blocked/ categories is now owed** —
-recorded in the parent's STATUS.md, not done here. (PAID the same
+and means **a re-scan of the archive's blocked/ categories is now owed** —
+recorded in the archive's STATUS.md, not done here. (PAID the same
 evening; the cmd/ half was measured by reachability rather than
 re-filed, and contributed zero to the gate — FINDING 20.)
 
-The fix was PARENT-OWNED (memory map, CLAUDE.md standing split) and was
+The fix was INTERPRETER-OWNED (memory map, CLAUDE.md standing split) and was
 made there: `MEM[16396] = 201` seeded at init (p10) rather than
 special-cased in `dopeek`, so `POKE 16396` still behaves normally. The
 counterfactual patch has been retired from `phasea/oracle.py`; a
-cross-repo regression test now asserts the parent still answers 201.
+cross-repo regression test now asserts the interpreter still answers 201.
 
 ## FINDING 17 — FINDING 8 has a sibling: `USR n(` at the CALL site
 
 FINDING 8 found that `DEF USR 0=` — with a space before the slot digit
-— raised `?SN`, and the parent shipped the fix (c61fdae5). That fix
+— raised `?SN`, and the interpreter shipped the fix (c61fdae5). That fix
 covered the DEFINITION. **The CALL site is still broken.** Minimal
 repro against the shipped interpreter:
 
@@ -580,7 +596,7 @@ hardware — FINDING 12's lexical lesson for the third time.
 **134 listings corpus-wide use the call form** (118 blocked, 16
 runnable).
 
-**SHIPPED in the parent 2026-08-14 (8c38dca6)**, in `e_prim` (p60): a
+**SHIPPED interpreter-side 2026-08-14 (8c38dca6)**, in `e_prim` (p60): a
 bare single-digit token after a digitless `USR` spelling is consumed
 *if a `(` follows it*, so the correction cannot swallow a digit in any
 other construct. Digit-carrying spellings stay strict.
@@ -589,7 +605,7 @@ The lesson worth keeping: FINDING 8 and FINDING 17 are the same defect
 in the same keyword, and fixing the definition did not fix the call.
 **Check both halves of a lexical fix.**
 
-JOINT IMPACT of FINDINGS 16 and 17, measured in the parent old-build vs
+JOINT IMPACT of FINDINGS 16 and 17, measured in the interpreter old-build vs
 new over the 181 blocked listings that use either construct:
 
 | | files |
@@ -622,7 +638,18 @@ measurable, and the oracle changes it:
 |---|---|---|
 | `002BH` | 6 | keyboard scan-once |
 | `0033H` | 6 | character to display |
-| `1BC0H` | 1 | not a documented Level II entry |
+| `1BC0H` | 1 | tokenize / COMPRESS a BASIC line |
+
+CORRECTION 2026-09-06: this table read "not a documented Level II
+entry" for `1BC0H`. That was an artefact of the classifier's ROM_NAMES
+table, which simply did not carry the address — not of the ROM. The
+scanned reference library names it in three independent books:
+"COMPRESS BASIC LINE" (ROM Routines Documented p62), "TOKENIZE INPUT
+ROUTINE" (Level II ROMs, Tab Books, p375), and Farvour p11 on the
+tokenization pass. `phasea/classify.py` now carries the name, and the
+Stage 2 entry in DESIGN.md is corrected. The caller count is unchanged
+at 1, so nothing about the Stage 2 priority moves; what moves is the
+reason — one caller, not an unknowable entry point.
 
 Seven of the 61 strict-formed payloads need a Stage 2 trap; the other
 54 are Stage 1 alone. So two of the five named candidates now have
@@ -668,16 +695,16 @@ material. The sweep output is gitignored.
    with the measured list instead.
 3. [APPLIED 2026-08-14] `raw-bytes-in-code` (135 files) is not 135 ML
    programs (FINDING 6).
-4. [PAID 2026-08-14] Owed to the PARENT repo's queue, not DESIGN.md:
+4. [PAID 2026-08-14] Owed to the INTERPRETER repo's queue, not DESIGN.md:
    the DEF USR stub rejected `DEF USR 0=` (space before the slot
    digit) with `?SN` (FINDING 8). The one-line lexical fix shipped in
-   the parent (c61fdae5) and unblocked `morsmstr.bas` and
+   the interpreter (c61fdae5) and unblocked `morsmstr.bas` and
    `quest_2.bas` to stub level, as predicted.
 
-## Owed to the PARENT repo's queue (new, 2026-08-14 — BOTH PAID)
+## Owed to the INTERPRETER repo's queue (new, 2026-08-14 — BOTH PAID)
 
-Both found by the oracle, both parent-owned under the standing split,
-both built THERE and shipped the same day in parent commit `8c38dca6`.
+Both found by the oracle, both interpreter-owned under the standing
+split, both built THERE and shipped the same day in commit `8c38dca6`.
 Together they improved **53 blocked listings** with **zero
 regressions** — more than the core itself is measured to unlock, which
 is the single most decision-relevant fact in this document.
@@ -690,12 +717,12 @@ is the single most decision-relevant fact in this document.
    `blocked/cmd/` that are not Disk BASIC programs at all (FINDING 16).
    Fixed by seeding `MEM[16396]` at init (p10).
 
-Parent regression bar held for both: t1-t28 exit 0, every transcript
+The interpreter's regression bar held for both: t1-t28 exit 0, every transcript
 byte-identical to the pre-change build except t7 (documented RND
 variance, confirmed to vary on the unchanged build too) and t23, which
 grew coverage of the spaced call form and the probe on purpose.
 
-## Now owed BACK to the parent — PAID 2026-08-14 (recorded 2026-09-04)
+## Now owed BACK to the archive — PAID 2026-08-14 (recorded 2026-09-04)
 
 7. [PAID] A re-scan of `blocked/`. FINDING 16 means some files are
    mis-filed: several `blocked/cmd/` listings were never Disk BASIC
@@ -708,7 +735,7 @@ grew coverage of the spaced call form and the probe on purpose.
 ## FINDING 19 — Dancing Demon profiled: the coprocess needs a screen, a keyboard, and a clock, but not a ROM (2026-09-02)
 
 The famous acceptance question ("does it run Dancing Demon?") now has
-numbers behind it. The 1986 Powersoft image in the parent corpus
+numbers behind it. The 1986 Powersoft image in the corpus archive
 (`programs/LargeCollection/Dancing Demon (1986)(...)[BAS]/dncdm86a.bas`)
 is `1 GOTO 259` plus **10,931 bytes of Z80 stored as 106 fake BASIC
 lines** (line numbers 2..258), loading at **42F6H** — the payload sits
@@ -729,7 +756,7 @@ touches:
 - **sound, exactly twice**: `OUT (C),H` / `OUT (C),L` at 43FC/4401H —
   one compact cassette-latch routine, trivially no-op'd;
 - **system RAM**: patches 4018H, reads (40A4H) — expects the 4000H
-  communication region to look sane (the parent already seeds part of
+  communication region to look sane (the interpreter already seeds part of
   it, FINDING 16's MEM[16396]);
 - **no ROM calls at all** under the sweep — self-contained.
 
@@ -741,8 +768,9 @@ control-flow proof. The proof is running it.
 dances" is a near-ideal north-star acceptance test for the coprocess.
 It needs exactly the three capabilities the protocol has to decide on
 anyway — (a) sustained execution with video writes streamed or synced
-to the parent's live display buffer, not just memory-at-RET; (b) key
-state fed into coprocess reads of 3800-38FFH (the parent's keyboard
+to the interpreter's live display buffer, not just memory-at-RET; (b) key
+state fed into coprocess reads of 3800-38FFH (the interpreter's
+keyboard
 layer already holds it); (c) cycle-paced execution so the demon dances
 at 1.77 MHz tempo — and it needs nothing we dread (no ROM emulation,
 sound isolable to two instructions). It is visually self-verifying and

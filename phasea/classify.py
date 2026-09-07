@@ -35,11 +35,17 @@ ROM_HI = 0x2FFF                     # Level II ROM occupies 0000-2FFF
 STAGE1_TRAPS = {0x0A7F, 0x0A9A}
 
 # Documented candidates, for naming what we find (DESIGN.md Stage 2).
+# Names cross-checked 2026-09-06 against the scanned reference library
+# (ROM Routines Documented, Micro-80 Level II ROM Reference Manual, Tab
+# Books Level II ROMs, Farvour) — see DESIGN.md "Technical reference".
+# The two Stage 1 traps are named by their ROM SERVICE, not by the USR
+# idiom that composes them: 0A7FH is CINT, 0A9AH stores HL into ACCUM.
 ROM_NAMES = {
     0x0000: 'RESET', 0x002B: 'KBD scan-once', 0x0033: 'char to display',
     0x003B: 'char to printer', 0x0049: 'wait key', 0x0060: 'delay',
-    0x01D3: 'RANDOM', 0x0A7F: 'USR arg -> HL (GETHL)',
-    0x0A9A: 'HL -> BASIC result', 0x1C90: 'CLS', 0x1D78: 'LIST',
+    0x01D3: 'RANDOM', 0x0A7F: 'CINT: ACCUM -> HL (the USR arg fetch)',
+    0x0A9A: 'ACCUM = HL (the USR result store)', 0x1BC0: 'tokenize/COMPRESS a BASIC line',
+    0x1C90: 'CLS', 0x1D78: 'LIST',
     0x28A7: 'PRINT string', 0x3033: 'DOS entry',
 }
 
