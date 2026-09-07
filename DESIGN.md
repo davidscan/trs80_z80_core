@@ -501,6 +501,53 @@ everything above HIMEM as ABSENT rather than PROTECTED, so POKEs into
 the reserved region are discarded. Harmless until a core executes
 them. Interpreter-owned, reported not built.
 
+CAN A TRANSLATION TABLE REACH PAST 64K? No, and the reason is worth
+recording because the question recurs (user, 2026-09-07: machine code
+sitting 600K into an 800K program — "any jumps/branches in the embedded
+code wouldn't be resolvable").
+
+The obstacle is not resolution, it is REPRESENTATION. `JP nn`, `CALL
+nn` and `LD HL,nn` carry a 16-bit operand field. There is no encoding
+of any Z80 instruction that names address 617,129, so no table the
+interpreter keeps can help: the translated address would have to live
+inside the instruction, and there is no room for it. A pointer table
+solves VISIBILITY — which bytes the window shows — and cannot solve
+ADDRESSABILITY. Those are different problems and only the first is ours
+to solve.
+
+THE MECHANISM THAT DOES WORK IS RELOCATION, not translation: copy the
+routine into the 16-bit window and run it there. That is already what
+a DATA/POKE loader does. Its limit is that relocation is only safe for
+POSITION-INDEPENDENT code, and real routines mostly are not — which is
+why the intended load address matters and why every loader idiom names
+one (`FOR I=32000`, `DEF USR=`, the 408EH vector). Worked example from
+FINDING 19: Dancing Demon is 10,931 bytes loading at 42F6H. `JR` and
+`DJNZ` reach +/-127 bytes, so a routine that size CANNOT be internally
+connected by relative jumps alone; it necessarily contains absolute
+JP/CALL into its own body, and therefore must load where it was
+assembled to load.
+
+SO THE 600K CASE DOES NOT ARISE FOR GOAL (1), and that is not a dodge:
+every rescued listing fits 48K by construction, because the machine it
+was written for could not hold more. A program with executable code at
+offset 600K is NEW work, not a rescued listing — goal (3) — and there
+the binding constraint is the Z80 itself, not the interpreter. Code
+that needs to be addressed above FFFFH is not Z80 code.
+
+SELF-MODIFYING CODE, specifically: at a notional 617,129 it cannot
+address itself at all, by the same 16-bit argument. And note a gap that
+holds regardless of size — the program image is READ-ONLY today
+("POKEs into the region land in MEM and are never read back — the
+WRITABLE mapping (self-modifying code) stays unbuilt", p75 header), so
+self-modifying code inside the program image is unsupported now. That
+sits on the north-star path, since the Dancing Demon payload lives in
+the image rather than in a loader.
+
+WHAT ACTUALLY DESERVES THE ATTENTION is not 800K but ~15K: FINDING 23
+measures ordinary programs silently breaking POKE loaders once the
+image grows past the loader's target address. The impossible case is
+easy to rule out; the ordinary one is already happening.
+
 IF 64K EVER BINDS, the only historically honest extension is **bank
 switching**, a port-selected bank register (the Model 4 reached 128K
 this way), which keeps the Z80 at 16 bits so the table, the
