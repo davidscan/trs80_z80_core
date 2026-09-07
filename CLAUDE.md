@@ -212,6 +212,21 @@ STANDING RULES (do not relearn these the hard way):
   behavior only. (Same rule that kept the interpreter repo releasable.)
   The downloaded JSON test-vector suites are also never committed:
   fetch script + gitignore.
+- HANDOFF CHANNEL to trs80basic (convention set by the user 2026-09-07):
+  `handoff/to-trs80basic.md` in THIS repo carries findings owed to the
+  interpreter; the user points that session at the file. The mirror,
+  `trs80basic/handoff/to-trs80-z80-core.md`, is THEIRS to create and
+  ours to read — never write it. Keep the file self-contained (that
+  session does not share our context), give every item a runnable
+  reproduction, and say plainly what is a defect versus a design call
+  that is theirs to decline.
+- ALWAYS `cd` BACK, OR USE ABSOLUTE PATHS / `git -C`. The Bash tool's
+  working directory PERSISTS between calls, so a `cd ../trs80basic` to
+  read something leaves later commands pointed there. On 2026-09-07 a
+  `git add -A` intended for this repo ran in trs80basic that way. It
+  staged nothing — that session had just committed, so the tree was
+  clean — and no commit was created, but the command should never have
+  reached that repo. Address every git command with `git -C <abs path>`.
 - DO NOT EDIT trs80basic AT ALL (user, 2026-09-07). Not main, not a
   development branch, not its docs. READ it freely — the oracle builds
   a scratch copy of its src/ and that is fine, because it modifies
