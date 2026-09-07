@@ -389,6 +389,81 @@ unvalidated" until the core runs the pinned single-step vectors.
   CINT and "ACCUM = HL" that it composes — see the Stage 1 trap entry
   for the semantics a trap actually has to implement.
 
+## The address space — how much room assembly actually gets (2026-09-07)
+
+Asked in the goal-(1) discussion: the interpreter is not bound by real
+hardware and has effectively unlimited room for BASIC programs, so how
+does assembly benefit, and what is the largest space we can address?
+
+**64 KB, hard, and no interpreter generosity changes it.** The Z80
+address bus is 16 bits. A core that addresses more than 65,536 bytes is
+not a Z80, and goals (2) and (4) — run magazine assembly listings,
+disassemble real embedded code — depend on it being one. This is an
+architectural fact being adopted as an invariant, not a budget.
+
+WHAT THE 64K HOLDS on a Model I Level II, and therefore here:
+
+| range | size | what it is |
+|---|---|---|
+| 0000-2FFF | 12K | Level II ROM — NOT present here (see below) |
+| 3000-37FF | 2K | mostly unused; 37E8-37E9 printer status |
+| 3800-38FF | 256B | keyboard matrix — LIVE, callback per read |
+| 3900-3BFF | 768B | keyboard mirrors |
+| 3C00-3FFF | 1K | video RAM — LIVE, writes render |
+| 4000-41FF | 512B | RAM communication region / system variables |
+| 4200-FFFF | ~47K | RAM: BASIC program, variables, strings, stack, ML |
+
+A fully expanded 48K Model I has RAM from 4000H to FFFFH: **49,152
+bytes**. That is the ceiling, we can offer all of it, and offering all
+of it costs nothing — so the answer to "the largest addressable space"
+is 64K total, 48K of it usable RAM.
+
+**THE ASYMMETRY THE QUESTION SENSED IS REAL, AND IT FAVOURS ASSEMBLY —
+just not by enlarging the address space.** BASIC program text,
+variables and strings live in the interpreter's own awk data
+structures, not inside a simulated 64K. So they do not COMPETE for
+address space. On a real 48K machine a large BASIC program left only
+scraps for machine code, and MEMORY SIZE existed to fight over the
+boundary; here the address space is very nearly all available to
+machine code and its data, whatever the size of the BASIC program
+driving it. Assembly gets more usable room than the real machine ever
+offered, without the address space growing by one byte.
+
+WHAT IS PROJECTED INTO THE 64K (everything else is the core's own RAM):
+keyboard 3800-38FF and video 3C00-3FFF as live device callbacks;
+37E8-37E9 printer status; the READ-ONLY tokenized program image at
+42E9H; string bytes reachable through VARPTR, write-through. Numeric
+and array VARPTR do NOT materialise as contiguous memory (see the
+VARPTR paragraph above) — that is a known hole, not a plan.
+
+TWO CONSEQUENCES WORTH STATING PLAINLY, BOTH ALREADY IMPLIED BY
+STANDING RULES:
+
+1. **ROM is not there.** We never commit ROM bytes, so 0000-2FFF holds
+   no data. Documented entry points are HLE traps, which serves code
+   that CALLS the ROM. It does not serve code that READS the ROM — the
+   character generator, the trig and constant tables, anything that
+   PEEKs below 3000H for its contents. That bounds what "runs a
+   magazine listing" can mean, and the bound is a licensing choice we
+   have already made deliberately.
+2. **A BASIC program can outgrow the window that shows it.** Program
+   text is unbounded interpreter-side but the image mapped at 42E9H is
+   inside a 16-bit space. What happens to a program too large to map —
+   truncate the window and say so, refuse and report, or map a
+   sliding window — is UNDECIDED. It is a live question for goal (1)
+   because FINDING 19's Dancing Demon payload lives inside the program
+   image itself, at 42F6H.
+
+IF 64K EVER BINDS, there is exactly one honest extension: **bank
+switching**, a port-selected bank register, which is what the era
+actually did (the Model 4 reached 128K this way) and which keeps the
+Z80 at 16 bits so the table, the disassembler and the assembler go on
+describing real hardware. Widening the address bus is rejected: it
+would make the assembler emit code no Z80 could run and the
+disassembler mis-describe the listings goals (2) and (4) exist to read.
+Neither is scheduled; recorded so the question is not reopened from
+scratch.
+
 ## Testing strategy
 
 - The core is exquisitely testable BEFORE any TRS-80 semantics: the

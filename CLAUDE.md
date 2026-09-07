@@ -74,16 +74,53 @@ missed two same-day events, recorded below)
   it" — needs the assembler; (4) disassemble, e.g. the code embedded in
   BASIC programs — mostly built. Stage 1 planning proceeds from these
   goals, not from the gate number.
+- THE BIG-PICTURE TALK IS CLOSED (user, 2026-09-07). It had gated
+  Stage 1 since 2026-08-14. The user's purpose in asking for it was to
+  step back far enough to see what was being worked on — "I got lost in
+  some of the details" — and that purpose is served; it was never an
+  agenda of open questions. WHAT REPLACES IT AS THE ACTIVE WORK: nail
+  down GOAL (1), integrating machine code into BASIC programming, which
+  the user calls the highest bang-for-the-buck piece. Detailed protocol
+  handshaking is still NOT the topic yet.
 - STAGE 1 IS NOT STARTED. No opcode-execution code and no protocol
-  code exists. What gates it now is the BIG-PICTURE TALK the user asked
-  for on 2026-08-14 ("I need us to step back to project-level and
-  discuss big picture concepts"); protocol work is DEFERRED to that
-  talk. Agenda constraints already ratified (2026-09-02): companion
-  engine, never vendored; p77 shim in trs80basic; TRS80_Z80 discovery;
-  releases may bundle; the first protocol message carries a version and
-  a mismatch is a clean error. Do not start handshake/protocol code
-  before the talk. FINDING 19 (Dancing Demon) is input to it: call-and-
-  return USR is not enough for that class of program.
+  code exists. Constraints ratified 2026-09-02 and still standing:
+  companion engine, never vendored; p77 shim in trs80basic; TRS80_Z80
+  discovery; releases may bundle; the first protocol message carries a
+  version and a mismatch is a clean error. FINDING 19 (Dancing Demon)
+  stands as the north-star acceptance case: call-and-return USR is not
+  enough for that class of program.
+- RULED 2026-09-07 in the goal-(1) discussion, three assumptions the
+  user put and this side agreed with one correction:
+  (a) ONE GENERAL ENGINE, not a per-program package. The core is a
+      general Z80 the interpreter drives at run time; a listing's
+      machine code is just bytes loaded into the shared image. Nothing
+      is pre-packaged per program. This is the ratified companion-engine
+      shape and it is what lets the same engine serve goals (2)-(4).
+  (b) THE CORE IS OPTIONAL and the interpreter degrades without it —
+      correct, but "no-op" is the wrong word and the difference matters.
+      The shipped stub EVALUATES AND RETURNS THE ARGUMENT (USRn(x) -> x)
+      with a one-time notice; POKEd machine-code bytes still land in
+      mem[], so only EXECUTION is stubbed and the memory image stays
+      consistent for a later core. The measured hazard: 8 of the 11
+      trs-80.com string-packing techniques fail SILENTLY today — a
+      side-effect routine produces no effect, no error, exit 0. Whether
+      the fallback should get louder is an OPEN question, not settled.
+  (c) 64K IS A HARD CEILING and no interpreter generosity changes it —
+      the Z80 address bus is 16 bits, so 65,536 bytes, of which a fully
+      expanded Model I gives 48K of RAM (4000H-FFFFH) and we can offer
+      all of it. The asymmetry the question sensed is real but works
+      the other way: BASIC program text, variables and strings live in
+      the interpreter's awk structures, NOT in the 64K, so they do not
+      COMPETE for it — assembly gets more USABLE room than a real 48K
+      machine ever gave, without the address space growing. Two live
+      consequences: ROM is absent (0000-2FFF holds no bytes, by the
+      never-commit-ROM rule), so code that READS the ROM cannot be
+      served, only code that CALLS documented entry points; and a BASIC
+      program can outgrow the 42E9H window that shows it, which is
+      UNDECIDED and matters because Dancing Demon's payload lives in
+      that image. Bank switching is the only honest extension if 64K
+      ever binds; widening the bus is rejected. Full treatment in
+      DESIGN.md "The address space".
 - THE blocked/ RE-SCAN WAS PAID 2026-08-14 (awk_BASIC_interpreter
   9ee96ca3 + 89d9269b) and verified from this side the same evening,
   but never written into this repo until now — Z80_FINDINGS FINDING 20.
@@ -175,17 +212,17 @@ STANDING RULES (do not relearn these the hard way):
   behavior only. (Same rule that kept the interpreter repo releasable.)
   The downloaded JSON test-vector suites are also never committed:
   fetch script + gitignore.
-- CHANGES TO trs80basic LAND ON A DEVELOPMENT BRANCH, NEVER main. The
-  two projects interact both ways, but trs80basic's main is staged for a
-  public release, so integration work (the p77 shim, the call frame
-  carrying the slot digit, TRS80_Z80 discovery) goes on a development
-  branch there and is merged by the user. Reporting a defect and
-  offering a fix is always fine. This replaces the older "documentation
-  only, ask first" rule, written 2026-08-14 when that repo was this
-  project's parent and held the only copy of the interpreter. The
-  incident behind it still stands as the thing to avoid: "make the
-  changes in the parent" was meant as "update the docs" and was read as
-  authorization to patch interpreter source.
+- DO NOT EDIT trs80basic AT ALL (user, 2026-09-07). Not main, not a
+  development branch, not its docs. READ it freely — the oracle builds
+  a scratch copy of its src/ and that is fine, because it modifies
+  nothing there. Everything owed to that side is REPORTED, and the user
+  makes the change: a defect, a patch offered as text, the p77 shim,
+  the call frame carrying the slot digit, TRS80_Z80 discovery. This
+  TIGHTENS the 2026-09-04 rule (development branch, never main), which
+  had itself replaced a "documentation only, ask first" rule from
+  2026-08-14. The incident behind the whole lineage is the thing to
+  avoid: "make the changes in the parent" was meant as "update the
+  docs" and was read as authorization to patch interpreter source.
 - Interpreter-owned items (string packing/VARPTR, program-memory
   mapping) stay in trs80basic — do not build them here. (Keyboard-matrix
   PEEK and the USR stub shipped there 2026-08-13; VARPTR/string packing,
