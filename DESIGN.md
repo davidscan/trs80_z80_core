@@ -56,6 +56,10 @@ NON-GOALS, standing:
   are ANTICIPATED FUTURE CONSUMERS of this core, and the architecture
   keeps those seams open at zero cost (see "Architecture: the reusable
   seams"). Nothing beyond the seams is built until asked.
+  UPDATED 2026-08-14 by the re-founding, one day later: goals (2) and
+  (3) ARE the asking. Standalone execution is no longer hypothetical —
+  it is stated, unscheduled work, so read this bullet as build ORDER
+  ("not yet"), never as a prohibition.
 - Cycle-accurate timing. Sound routines (cycle-counted OUT loops) get
   "returns promptly, silent" semantics — real-TIME pitch requires cycle
   accuracy we will not build. NOTE kept deliberately open (2026-08-13):
