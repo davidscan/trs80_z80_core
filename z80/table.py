@@ -16,11 +16,21 @@ re-derive an encoding by hand.
 Every entry carries: mnemonic, operand pattern, encoding, length,
 cycle cost, flag effects, and the memory/port access it performs.
 
-CYCLE COSTS ARE CARRIED BUT UNVALIDATED IN PHASE A. Nothing in the
-Phase A gate measurement depends on them; they exist because the
-ruling requires the column and because omitting them would design out
-the offline sound-synthesis option (DESIGN.md non-goals). They are
+CYCLE COSTS ARE CARRIED BUT LARGELY UNVALIDATED. Nothing in the Phase
+A gate measurement depends on them; they exist because the ruling
+requires the column and because omitting them would design out the
+offline sound-synthesis option (DESIGN.md non-goals). They are
 validated when the core is built against the single-step vectors.
+ONE PARTIAL EXTERNAL CHECK EXISTS (2026-09-07, Z80_FINDINGS FINDING
+21): the Nano Systems reference card states that every index-half
+instruction costs its H/L-operand equivalent plus 4 T-states, and all
+92 of them satisfy that (tests/test_table.py). That is a rule holding
+over 92 entries, not a per-opcode table; the other 1688 are still
+unchecked against anything outside this file.
+
+The `undoc` flag means "not in Zilog's published instruction set", and
+it is load-bearing: the inverse (assembler) index prefers a documented
+encoding over an undocumented one carrying the same signature.
 """
 
 from dataclasses import dataclass, field, asdict
@@ -467,9 +477,19 @@ def _build_cb(prefix=(0xCB,), idx_reg=None):
         if x == 0:
             mnem = ROT[y]
             operands = [target]
-            # DDCB with z != 6 also copies the result into R[z] (undocumented)
-            undoc = bool(idx_reg and z != 6)
-            if undoc:
+            # TWO INDEPENDENT reasons to flag undocumented here, and the
+            # flag must be the OR of them (corrected 2026-09-07):
+            #  - SLL (y == 6) is not in Zilog's published set at all. The
+            #    Nano Systems Z80 Microprocessor Reference Card (1981) p8
+            #    lists it among the undocumented instructions and is where
+            #    the SLL mnemonic itself comes from ("we have given them
+            #    the mnemonic SLL because it seems most appropriate").
+            #  - DDCB/FDCB with z != 6 also copies the result into R[z],
+            #    which is a separate undocumented behaviour and the only
+            #    one that adds an operand.
+            copies_to_reg = bool(idx_reg and z != 6)
+            undoc = copies_to_reg or y == 6
+            if copies_to_reg:
                 operands = [target, REG(R[z])]
             ops[prefix + (op,)] = Op(
                 prefix, op, mnem, tuple(operands), ln, (cyc_rmw,),

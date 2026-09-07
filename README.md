@@ -43,11 +43,11 @@ corpus archive's `blocked/` re-scan followed the same evening: 280
 files moved to runnable/, including four of the six gate files —
 without any of them running to completion (FINDING 20).
 
-See Z80_FINDINGS.md (20 findings). Stage 1 (the core itself) is NOT
+See Z80_FINDINGS.md (21 findings). Stage 1 (the core itself) is NOT
 started and no core code has been written. Durable artifacts: the
 validated 1780-entry opcode table (z80/table.py), disassembler,
 extractor/classifier, sweep, the oracle, the pinned single-step vector
-suite (tools/fetch_vectors.py), 98 tests. The debt to the interpreter —
+suite (tools/fetch_vectors.py), 104 tests. The debt to the interpreter —
 the one-line `DEF USR 0=` parse fix — was PAID there 2026-08-14.
 
 Read DESIGN.md for everything: goal, staged plan, technical reference

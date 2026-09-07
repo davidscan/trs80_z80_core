@@ -9,7 +9,7 @@ stub fallback (language and seam RULED 2026-08-13 — see DESIGN.md).
 READ ORDER on a fresh session (local files only — cross-repo pointers rot,
 so they live in COMPANION REPOS below and are not part of the read order):
 1. README.md (one screen: what and why)
-2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 20 numbered findings
+2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 21 numbered findings
 3. DESIGN.md (the authoritative context: language/seam ruling, staged
    plan incl. Phase A, technical reference, testing strategy, the gate,
    decisions)
@@ -96,7 +96,7 @@ missed two same-day events, recorded below)
 - Built and green: the 1780-entry opcode table + disassembler, the
   extractor/classifier/sweep, the dynamic oracle (phasea/oracle.py),
   and the pinned single-step vector suite (tools/fetch_vectors.py,
-  1604 files fetched into the gitignored tests/vectors/). 98 tests:
+  1604 files fetched into the gitignored tests/vectors/). 104 tests:
   `python3 -m unittest discover -s tests`.
 - WHERE THE CODE LOOKS (repointed 2026-09-04): phasea/oracle.py builds
   its scratch interpreter from ../trs80basic/src and tests/test_oracle.py

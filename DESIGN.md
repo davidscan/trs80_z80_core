@@ -257,8 +257,10 @@ and re-filed the rest under deeper blockers; grep can no longer answer
 "what would a working Z80 unlock" — only disassembly can.
 
 STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
-- Core: full documented instruction set (~700 opcodes incl. CB/DD/ED/FD
-  prefixes), registers, flags (mind half-carry and DAA — the classic
+- Core: full documented instruction set (the "~700 opcodes" of the
+  2026-08-07 estimate; the built table expands to 1780 encodings —
+  1033 documented, 747 undocumented — incl. CB/DD/ED/FD prefixes),
+  registers, flags (mind half-carry and DAA — the classic
   correctness traps), 64K address space synced with the interpreter's
   mem[] via the coprocess protocol (default 255 = absent-RAM reads,
   already authentic).
@@ -352,11 +354,17 @@ section and in the Stage 2 caller list above is CORROBORATED — 0A7FH,
 0A9AH, 408EH, 40A4H, 42E9H, 37E8H, 002BH, 0033H, 0028H, 0049H, 003BH,
 0060H, 01D3H. Two things changed, both recorded where they belong: the
 1BC0H "undocumented" claim (Stage 2 list, above) and the CINT semantics
-of 0A7FH (Stage 1 traps, above). The books could NOT validate the
-opcode table's cycle column — the OCR'd Zilog/Reston/Leventhal
-instruction tables yield 0-1 parseable rows each — so T-states stay
-"carried but unvalidated" until the core runs the pinned single-step
-vectors against them.
+of 0A7FH (Stage 1 traps, above).
+
+The books could not validate the opcode table's cycle column
+WHOLESALE — the OCR'd Zilog/Reston/Leventhal instruction tables yield
+0-1 parseable rows each — but one book states a RULE that does the job
+for part of it. The Nano Systems reference card (1981) gives the
+index-half instructions as "the corresponding H or L instruction plus 4
+T-states", and all 92 of ours satisfy it exactly (Z80_FINDINGS FINDING
+21, pinned in tests/test_table.py). So 92 entries now have an external
+check and the other 1688 do not; the column stays "carried but largely
+unvalidated" until the core runs the pinned single-step vectors.
 
 - Model I CPU: Z80 @ 1.77 MHz (~440K instr/s effective). The
   interpreter's

@@ -457,5 +457,108 @@ class TestAccessMetadata(unittest.TestCase):
         self.assertEqual(dis1('FF').target, 0x38)
 
 
+class TestUndocumentedAgainstTheReferenceCard(unittest.TestCase):
+    """Layer B' -- the undocumented half of the table checked against an
+    OUTSIDE source: the Nano Systems "Z80 Microprocessor Reference Card"
+    (1981), pages 7-8, the only book in the reference library that
+    tabulates the undocumented set.
+
+    The card is a scan; its dense opcode tables OCR badly and only a few
+    rows survive legibly. So this class pins the three things the card
+    states that ARE checkable, not a wholesale table diff:
+      1. the SHAPE of the index-half-register set,
+      2. the card's stated TIMING RULE (+4 T-states over the H/L form) --
+         the only external check on the cycle column that exists so far,
+      3. the legible rows, and SLL's status as undocumented.
+    Encodings below are authored from the card's own decimal opcode
+    column; no scan text is reproduced.
+    """
+
+    HALVES = ('IXH', 'IXL', 'IYH', 'IYL')
+
+    def _half_entries(self):
+        return {k: v for k, v in TABLE.items()
+                if any(o.kind == 'reg' and o.value in self.HALVES
+                       for o in v.operands)}
+
+    def test_half_register_set_has_the_shape_the_card_describes(self):
+        """IX/IY each gain two addressable 8-bit registers, so every
+        base instruction taking H or L as a register operand has a DD
+        and an FD twin: 26 per prefix, 92 in all."""
+        half = self._half_entries()
+        self.assertEqual(len(half), 92)
+        self.assertEqual(len([k for k in half if k[0] == 0xDD]), 46)
+        self.assertEqual(len([k for k in half if k[0] == 0xFD]), 46)
+        by_mnem = {}
+        for op in half.values():
+            by_mnem[op.mnemonic] = by_mnem.get(op.mnemonic, 0) + 1
+        self.assertEqual(by_mnem['LD'], 52)
+        for alu in ('ADD', 'ADC', 'SUB', 'SBC', 'AND', 'XOR', 'OR', 'CP',
+                    'INC', 'DEC'):
+            self.assertEqual(by_mnem[alu], 4, alu)
+
+    def test_card_timing_rule_holds_for_every_half_register_entry(self):
+        """The card: timing is the corresponding H/L-operand instruction
+        plus 4 T-states, for the DD/FD prefix byte.  This is the FIRST
+        external validation of any part of the cycle column -- it is a
+        rule, not a per-opcode table, but it constrains all 92."""
+        deviations = []
+        for enc, op in sorted(self._half_entries().items()):
+            base = TABLE.get((op.opcode,))
+            self.assertIsNotNone(base, 'no unprefixed base for %r' % (enc,))
+            self.assertEqual(len(op.cycles), len(base.cycles), repr(enc))
+            deltas = set(a - b for a, b in zip(op.cycles, base.cycles))
+            if deltas != {4}:
+                deviations.append((enc, op.cycles, base.cycles))
+        self.assertEqual(deviations, [])
+
+    def test_rows_legible_in_the_card(self):
+        for text, mnemonic, operands in [
+                ('DD6F', 'LD', ('IXL', 'A')),     # card 221,111
+                ('DD68', 'LD', ('IXL', 'B')),     # card 221,104
+                ('DD67', 'LD', ('IXH', 'A')),     # card 221,103
+                ('DD44', 'LD', ('B', 'IXH')),     # card 221,068
+                ('DD45', 'LD', ('B', 'IXL')),     # card 221,069
+                ('FD25', 'DEC', ('IYH',)),        # card 253,037
+                ('FD2C', 'INC', ('IYL',)),        # card 253,044
+                ('FD2D', 'DEC', ('IYL',))]:       # card 253,045
+            op = dis1(text).op
+            self.assertEqual(op.mnemonic, mnemonic, text)
+            self.assertEqual(tuple(o.value for o in op.operands), operands,
+                             text)
+            self.assertTrue(op.undoc, '%s must be flagged undocumented'
+                            % text)
+
+    def test_sll_is_flagged_undocumented(self):
+        """The card is where the SLL mnemonic comes from, and it lists
+        the instruction as undocumented.  The table called it documented
+        until 2026-09-07; the flag drives which encoding the inverse
+        (assembler) index prefers, so it is not cosmetic."""
+        sll = [op for op in TABLE.values() if op.mnemonic == 'SLL']
+        self.assertEqual(len(sll), 24)
+        self.assertTrue(all(op.undoc for op in sll))
+        self.assertTrue(dis1('CB30').op.undoc)          # SLL B
+        self.assertTrue(dis1('CB36').op.undoc)          # SLL (HL)
+        self.assertTrue(dis1('DDCB0136').op.undoc)      # SLL (IX+1)
+
+    def test_documented_undocumented_split(self):
+        """Pinned so the split cannot drift silently.  1033/747 as of
+        2026-09-07 (was recorded as 1043/737 while SLL was misflagged)."""
+        undoc = [op for op in TABLE.values() if op.undoc]
+        self.assertEqual(len(TABLE), 1780)
+        self.assertEqual(len(undoc), 747)
+        self.assertEqual(len(TABLE) - len(undoc), 1033)
+
+    def test_unassigned_ed_opcodes_behave_as_a_nop(self):
+        """The card lists the unassigned ED page as NOP.  The table names
+        them DB (right for a disassembler) but must carry NOP timing and
+        length, because the SAME table feeds the core's decoder."""
+        for low in (0x80, 0x8F, 0x9F, 0x00, 0x3F, 0xC0, 0xFF):
+            op = TABLE[(0xED, low)]
+            self.assertEqual(op.length, 2, hex(low))
+            self.assertEqual(op.cycles, (8,), hex(low))
+            self.assertTrue(op.undoc, hex(low))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

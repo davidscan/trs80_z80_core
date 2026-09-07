@@ -38,7 +38,7 @@ started; no core code has been written.
 Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 (runnable 3283 + blocked 1062 = **4345 listings**). Reproduce with
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover
--s tests` (98 tests). The archive re-filed blocked/ on 2026-08-14, so a
+-s tests` (104 tests). The archive re-filed blocked/ on 2026-08-14, so a
 re-run today reads 4339 listings with the same 46-file gate population
 split differently between the halves — the deltas are tabulated in
 FINDING 20; the numbers below are left as measured. FINDING 8 resolved 2026-08-14 by batch runs
@@ -671,7 +671,7 @@ findings-correction 2 below is withdrawn rather than applied.
 - `phasea/classify.py`, `phasea/sweep.py` — the classifier and the
   corpus runner, which refuses to publish counts unless the anchors
   pass.
-- 98 tests, including both anchors read in place from the local-only
+- 104 tests, including both anchors read in place from the local-only
   sibling and skipped cleanly when it is absent.
 
 Nothing in this repo contains ROM bytes, ROM disassembly, or corpus
@@ -851,3 +851,75 @@ it is a calibration, not a constant.
 The oracle was also re-validated the same day after being repointed at
 trs80basic's `src/` (the interpreter's post-split home): 22 exact, 7
 patched, 16 silent, 0 contradictions — identical to FINDING 13.
+
+---
+
+## FINDING 21 — the undocumented half of the table checked against an outside source, and SLL was misflagged (2026-09-07)
+
+The opcode table's 1780 entries had never been checked against anything
+outside this repo except the 176 hand-authored vectors in
+`tests/test_table.py` — vectors this project wrote, over the documented
+set only. "ANCHORS BEFORE TRUST" applies to the table itself, so the
+reference library was searched for an independent tabulation of the
+UNDOCUMENTED set. Exactly one book has one: the Nano Systems **Z80
+Microprocessor Reference Card** (1981), pages 7-8.
+
+**The queued grep found nothing, for a notation reason.** The plan was
+to grep the card for `IXH`/`IXL`/`IYH`/`IYL`. Zero hits — the card
+names the index halves `HX`, `LX`, `HY`, `LY` and says so explicitly in
+its prose ("HX is the H of IX"). A negative grep is not a negative
+result until the target's own notation has been checked; this one
+would have been read as "the card has nothing" and closed the item.
+
+**What the card could actually validate.** Its opcode tables are dense
+two-page grids and OCR badly — perhaps a dozen rows survive legibly out
+of a few hundred. So a wholesale diff was never available. Three things
+were:
+
+| what the card states | result |
+|---|---|
+| IX/IY each expose two addressable 8-bit registers, so every H/L-operand instruction has a DD and an FD twin | table has **92** such entries, 46 per prefix: 52 LD + 4 each of INC/DEC/ADD/ADC/SUB/SBC/AND/XOR/OR/CP — the shape the card describes |
+| timing is the corresponding H/L instruction **plus 4 T-states** | **92 of 92 conform**, zero deviations |
+| the legible rows (`LD LX,A` = 221,111; `LD B,HX` = 221,068; `DEC HY` = 253,037; `INC LY` = 253,044; and four more) | all **8 match** the table's mnemonic and encoding |
+| the unassigned ED page behaves as a NOP | table names them `DB` (right for a disassembler) but already carries NOP length and timing — corroborated |
+
+**The timing rule is the first external check the cycle column has
+ever had.** The column has been "carried but unvalidated" since Phase A
+(`z80/table.py` docstring), and the earlier read of this library
+concluded the books could not validate it, because the Zilog, Reston
+and Leventhal instruction tables OCR to 0-1 parseable rows each. That
+conclusion was right about TABLES and wrong about the column: the Nano
+card states a RULE instead of tabulating, and a rule survives OCR. It
+constrains 92 entries exactly. The other 1688 remain unchecked, and the
+pinned single-step vectors are still what settles them.
+
+**THE DEFECT: SLL was flagged as documented.** `SLL` is not in Zilog's
+published set at all — the mnemonic itself comes from this card ("we
+have given them the mnemonic SLL because it seems most appropriate"),
+which lists it among the undocumented instructions. The table set
+`undoc` for the CB page from one condition only, "is this a DDCB/FDCB
+variant that also copies the result into `R[z]`", so all 24 SLL entries
+came out `undoc=False`. Two independent reasons to flag it were being
+treated as one. Fixed: the flag is now the OR of them.
+
+This is not cosmetic. The `undoc` flag drives the INVERSE index — the
+seam-3 assembler's mnemonic → encoding direction — where a documented
+encoding must win over an undocumented one with the same signature. A
+misflagged instruction is a wrong answer waiting for the assembler to
+be built, which is goal (3).
+
+**Corrected split: 1780 = 1033 documented + 747 undocumented** (was
+recorded as 1043 + 737). No decode, no disassembly and no classifier
+output changes — the flag is metadata, and the previously-reported
+counts were the only casualty.
+
+All four checks are now pinned in
+`tests/test_table.py::TestUndocumentedAgainstTheReferenceCard`,
+including the split itself, so it cannot drift silently. 104 tests.
+
+**The lesson, and it is the standing one:** the table's own test suite
+could not have found this, because the suite was authored from the same
+understanding that built the table. It took a source from outside the
+project. The card is a two-page scan whose tables are mostly
+unreadable, and it still paid for itself twice — one defect and one
+column that was believed unvalidatable.
