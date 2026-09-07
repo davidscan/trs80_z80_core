@@ -14,8 +14,8 @@ attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
-**STATUS (audited 2026-09-04): PHASE A COMPLETE, GATE RULED, STAGE 1
-NOT STARTED.** Phase A — the static disassembler/classifier over the
+**STATUS (2026-09-07): PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK
+CLOSED, STAGE 1 NOT STARTED.** Phase A — the static disassembler/classifier over the
 corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
 **5** unlocked listings. The one remaining hole in that measurement,
 FINDING 7's 96 loaders static extraction could not resolve, was then
@@ -28,8 +28,9 @@ The user ruled on 2026-08-14 that the rescue count does not justify
 the core and no longer has to: the project is wanted for its own sake,
 with four goals in priority order (CLAUDE.md "WHERE THINGS STAND") —
 run BASIC with embedded machine code, run magazine assembly listings,
-write new assembly, disassemble. Stage 1 waits on a big-picture talk,
-not on a number.
+write new assembly, disassemble. The big-picture talk that gated Stage 1
+from 2026-08-14 was CLOSED by the user 2026-09-07; the active work is
+now GOAL (1), integrating machine code into BASIC programming.
 
 The oracle also turned up two **interpreter-side** defects each worth
 more listings than the core is: `USR n(` at the call site raised ?SN (134
@@ -42,6 +43,14 @@ zero regressions**, the interpreter's bar held (t1-t28 exit 0). The
 corpus archive's `blocked/` re-scan followed the same evening: 280
 files moved to runnable/, including four of the six gate files —
 without any of them running to completion (FINDING 20).
+
+Working through goal (1) turned up three interpreter-side memory-model
+issues, all measured with runnable reproductions and all reported rather
+than fixed (this project does not edit trs80basic): FINDING 22 (memory
+reserved by MEMORY SIZE? is treated as ABSENT, so the classic
+reserve-then-load idiom cannot write it), FINDING 23 (the program image
+shadows POKEd bytes), and an uncapped `PEEK(16634)` that can return >255.
+Handed over in `handoff/to-trs80basic.md`.
 
 See Z80_FINDINGS.md (23 findings). Stage 1 (the core itself) is NOT
 started and no core code has been written. Durable artifacts: the

@@ -754,8 +754,11 @@ STILL OPEN (decide when work starts):
    discovered via `TRS80_Z80`, releases may bundle the engine (the
    Windows-zip/gawk precedent). The first protocol message carries a
    version; a mismatch is a clean error. Protocol design itself is
-   DEFERRED to the big-picture talk; no handshake/protocol code before
-   it. Nothing of this is built as of 2026-09-04.
+   still DEFERRED as of 2026-09-07: the big-picture talk that had held
+   it was CLOSED that day, but the user's direction is to settle goal
+   (1)'s shape first — "we don't need to talk about detailed
+   handshaking yet". No handshake/protocol code before that. Nothing of
+   this is built.
 
 ## Standing practices inherited from the companion repos
 

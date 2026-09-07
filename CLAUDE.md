@@ -51,13 +51,31 @@ Custom TRS-80, TRS-80 Graphics). Which to reach for:
 - Model I address-space side effects (3800H keyboard, 3C00H video, port
   FFH): the 1978 TRS-80 Technical Manual; Assembly Language Made Simple
   ch. 4 for the memory map.
+TEXT LIBRARY (built 2026-09-05/06, rebuilt 2026-09-07) —
+`../trs80_references/trs80_z80_core/md/`: all 37 PDFs (10,063 pages)
+OCR'd to `md/_full/<book>.md` and split on page boundaries into
+`md/<book>/part-NN_pages-AAAA-BBBB.md` (336 parts, each one read), with
+a per-book `INDEX.md` and, for 18 listing-heavy books, an `ADDRESSES.md`
+mapping address -> line -> page. Top-level `md/INDEX.md`. **Grep the
+book directories OR `_full/`, not both** — same text. Parts are
+chapter-aligned, and a page-map cell says what its page holds (a
+heading, a listing's address span, or an honest "(no heading
+recognized)"). Regenerate with `md/_tools/` (build_core_library.py,
+split_core.py, audit_library.py, README.md — read that README before
+changing the splitter). 36 MB, outside the repo, NEVER committed: it
+contains OCR of ROM disassembly.
+NOTE the books cannot validate the opcode table's T-states wholesale —
+their instruction tables OCR to 0-1 parseable rows each. The one
+exception is FINDING 21.
 The user reorganises that tree themselves (BASIC-side books sit in
 `../trs80_references/trs80basic/`, parked items in "Future reference"), so
 search the whole tree before assuming a file's location.
 
 WHERE THINGS STAND (audited 2026-09-04 against the companion repos, a
 sweep re-run, and the session records; the 2026-08-14 handoff had
-missed two same-day events, recorded below)
+missed two same-day events, recorded below. EXTENDED 2026-09-06/07 with
+the reference-library cross-check, FINDINGS 21-23, and the goal-(1)
+rulings — those bullets carry their own dates.)
 - THE GATE IS RULED. Measured to completion 2026-08-14: gate number
   **6** (Phase A 5; the oracle added varptr/engindb3.bas). The gate
   never set a numeric threshold. The user RULED the same day, in the
@@ -121,6 +139,38 @@ missed two same-day events, recorded below)
       that image. Bank switching is the only honest extension if 64K
       ever binds; widening the bus is rejected. Full treatment in
       DESIGN.md "The address space".
+- THREE INTERPRETER-SIDE MEMORY-MODEL ISSUES FOUND 2026-09-07 while
+  working goal (1), all MEASURED with runnable reproductions, all
+  REPORTED not fixed (we do not edit trs80basic), all handed over in
+  `handoff/to-trs80basic.md` — awaiting that session's response as of
+  2026-09-07:
+  * FINDING 22 — memory reserved by MEMORY SIZE? is treated as ABSENT
+    rather than PROTECTED, so the classic reserve-then-load idiom
+    cannot write the reserved region. Interactive only (batch forces
+    HIMEM 65535). THE ONLY ONE OF THE THREE THAT BREAKS LISTINGS WHICH
+    WERE LEGAL ON HARDWARE: 61 corpus listings mention "memory size",
+    36 of those also use USR. Needs RAMTOP (physical top, absent above)
+    split from HIMEM (the MEMORY SIZE answer, protected between them).
+  * FINDING 23 — the program image shadows POKEd bytes for any address
+    below PMEND. Documented in their p75 header; what is new is the
+    SCOPE. Corpus impact approximately ZERO — a legal listing cannot
+    trigger it, because the shadowing condition is exactly what would
+    have corrupted the program on real hardware. It matters for the
+    CORE, for large or new programs, and for self-modifying payloads.
+    CAUTION: an earlier estimate of "~123 affected USR listings" in
+    this session was WRONG (it applied a fixed target address to every
+    listing) and was corrected in FINDING 23 and in the handoff — do
+    not resurrect the number.
+  * `PEEK(16634)` can return >255 (measured 381, 3468) — uncapped
+    PMEND high byte. Zero corpus impact, one-line fix.
+- FINDING 21 (2026-09-07) — the opcode table checked against an OUTSIDE
+  source for the first time, the Nano Systems reference card. SLL was
+  misflagged as documented, which matters because `undoc` drives the
+  inverse (assembler) index; corrected split is 1780 = **1033
+  documented + 747 undocumented** (previously reported 1043 + 737).
+  The card's stated timing rule (index-half = H/L form + 4 T-states)
+  holds 92/92 — the first and so far ONLY external validation of any
+  part of the cycle column.
 - THE blocked/ RE-SCAN WAS PAID 2026-08-14 (awk_BASIC_interpreter
   9ee96ca3 + 89d9269b) and verified from this side the same evening,
   but never written into this repo until now — Z80_FINDINGS FINDING 20.
@@ -142,7 +192,9 @@ missed two same-day events, recorded below)
   only — its duplicate src/ is scheduled for deletion there). Re-
   validated after the repoint: 22 exact / 7 patched / 16 silent / 0
   contradictions, identical to FINDING 13. Sweep re-run 2026-09-04:
-  4339 listings (was 4345), 560 USR listings, 91 unresolvable loaders
+  4339 listings (was 4345), 560 USR listings (the sweep's classifier
+  count — a plain grep for the token reports ~604, because it also hits
+  USR inside REM and string text; do not mix the two), 91 unresolvable loaders
   (was 96), gate population still the same 46 files, now 17 blocked /
   29 runnable (was 25 / 21). Z80_FINDINGS.md keeps the 2026-08-14
   numbers as measured; FINDING 20 carries the deltas.
@@ -174,7 +226,9 @@ STANDING RULES (do not relearn these the hard way):
   were in and the user had ruled (see WHERE THINGS STAND). Phase A
   itself was in-gate (measurement, not emulator) — confirmed with the
   user 2026-08-13. The same rule applies to the next build: measure
-  before building, and the next reviewed stop is the big-picture talk.
+  before building. The big-picture talk that used to be the next
+  reviewed stop was CLOSED 2026-09-07; the next stop is settling goal
+  (1)'s shape, and no core or protocol code before that.
 - ANCHORS BEFORE TRUST (Phase A discipline, ruled 2026-08-13; wording
   corrected 2026-08-14): validate before believing, in this order.
   (1) The opcode table must pass a validation set against known-good
@@ -246,14 +300,14 @@ STANDING RULES (do not relearn these the hard way):
   and the USR call-site space. Note: the interpreter's VARPTR does NOT
   give integer arrays a contiguous 2-byte image — VARPTR-array loaders
   still route through the extractor; see DESIGN.md.)
-- trs80basic's regression bar is part of THIS project's bar: any change
-  that touches the interpreter (see the development-branch rule above)
-  must leave t1-t28 exiting 0 (t7's RND line varies run to run) and
-  batch exit codes unchanged; the coprocess fallback path (no python3)
-  must behave exactly like the shipped stub. Baseline the transcripts
-  BEFORE editing, so "unchanged" is a diff and not a belief, and keep
-  the pre-change build around to tell an inherent variance apart from a
-  regression.
+- trs80basic's regression bar is part of THIS project's bar, even
+  though we no longer edit that repo (see the DO-NOT-EDIT rule above).
+  Anything we ASK for there must leave t1-t28 exiting 0 (t7's RND line
+  varies run to run) and batch exit codes unchanged, and the coprocess
+  fallback path (no python3) must behave exactly like the shipped stub.
+  So a change proposed in handoff/to-trs80basic.md states its expected
+  effect on that bar; and when we measure the interpreter to produce a
+  finding, baseline first so "unchanged" is a diff and not a belief.
 - Commit with `git commit -F <msgfile>`; use absolute paths in shell
   commands; every increment committed and green before the next.
 - Remote: private GitHub davidscan/trs80-z80-core (created 2026-08-14 at
