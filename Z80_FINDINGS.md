@@ -1023,3 +1023,88 @@ ships "the sparse mem[]" and mem[] never received the discarded POKEs, the core
 executes an empty region and returns silently — which is the FINDING 16/17
 failure shape again: a wrong answer with no error. Whatever the protocol does
 about absent versus protected has to be decided once, on this distinction.
+
+---
+
+## FINDING 23 — the program image shadows POKEd machine code, and an unbounded program shadows the whole address space (measured 2026-09-07)
+
+Asked by the user: does an 800K BASIC program break string packing or embedded
+machine code if the loader sits three-quarters of the way through the listing?
+Measured against trs80basic in batch mode; **nothing was edited there**.
+
+### Position in the listing is irrelevant. Total program SIZE is the variable.
+
+`pm_build()` serialises the whole program from 42E9H (17129) upward and sets
+`PMEND = 17129 + crunched size + 2`. `st_peek()` then resolves any address in
+`[17129, min(PMEND, HIMEM)]` from the program image `PMEM[]`, while `st_poke()`
+writes to `MEM[]`. The two never meet — documented in p75's header as "POKEs
+into the region land in MEM and are never read back", with the writable mapping
+deliberately unbuilt. **So a POKE below PMEND is written and then invisible.**
+
+Confirmed by probing at line 1 versus line 9000 of the same 300-line program:
+identical results. Only the total changes anything.
+
+### Measured
+
+Probe: `POKE addr,v` then `PEEK(addr)`, with REM padding to set the size.
+The padding byte is `X` = 88, so **88 means "read the program image instead"**.
+
+| program | PMEND | PEEK 20000 | PEEK 60000 | PEEK 65000 | VARPTR A$ |
+|---|---|---|---|---|---|
+| probe only | 17346 | 222 ✓ | 200 ✓ | 111 ✓ | 65533 |
+| 300 lines (~20 KB) | 37446 | **88** | 200 ✓ | 111 ✓ | 65533 |
+| 13000 lines (~850 KB) | 887944 | **88** | **88** | **88** | 65533 |
+
+So the answer to the 800K case is unambiguous: **every** POKE in the 16-bit
+space is shadowed. A DATA/POKE loader anywhere would deposit nothing a PEEK —
+or a core reading through the same path — can see.
+
+### The rule, and the two thresholds worth knowing
+
+The program image shadows `[42E9H, min(PMEND-1, HIMEM)]`. Therefore a loader
+targeting address T is shadowed once the crunched program exceeds `T - 17129`
+bytes: **~14.8 KB for a routine at 32000, ~42.8 KB for one at 60000.** Once the
+program passes **48,404 bytes (~47 KB)** PMEND clears 65535 and the entire
+usable address space is shadowed. Note how ordinary the first threshold is —
+this is not an exotic-program problem.
+
+### STRING PACKING IS UNAFFECTED — at any program size
+
+`VARPTR(A$)` returned 65533 in every run above. `st_peek()` tests `a in SPK`
+BEFORE the program-image branch, so projected string bytes always win, and
+`sp_materialize()` descends from `HIMEM` with no reference to the program at
+all. String packing therefore keeps working in an 800K program exactly as in a
+20-line one. **Of the two idioms the user asked about, one is immune and the
+other fails silently.**
+
+The corollary is a layering accident rather than a plan: the string floor is a
+hardcoded 17131, not `PMEND`, so for a large program string space and program
+image OVERLAP, with strings shadowing the image. On real hardware they cannot
+overlap — string space is bounded below by the end of the program.
+
+### A plain bug found alongside: PEEK(16634) can return a non-byte
+
+40F9H/40FAH (16633/16634) serve "start of variables" as `PMEND % 256` and
+`int(PMEND / 256)`, uncapped. Measured `PEEK(16634)` = **381** for a 1200-line
+program and **3468** for the 13000-line one. A PEEK must return 0-255. This is
+wrong independently of the core, and independently of any of the above.
+
+### Assessment
+
+The shadowing mechanism is documented and was a reasonable simplification while
+nothing executed the bytes: with no core, a POKE-loader that deposits nothing is
+a program that already did nothing. Goal (1) is what converts it into the
+FINDING 16/17 failure shape — a wrong answer, no error, exit 0. What is NOT
+covered by the existing rationale is the SCOPE: a reader of "POKEs into the
+region" would take "the region" to mean where the program sits, which on real
+hardware is bounded by 48K. An unbounded program makes the region everything.
+
+Interpreter-owned; reported, not built. It bears directly on the DESIGN.md
+address-space invariant: the 16-bit window is only faithful while what is
+projected into it stays inside it, and the program image is the projection that
+does not currently respect its own window.
+
+Also relevant to FINDING 22's severity: batch mode always runs with
+`HIMEM = 65535` (measured in all runs), so the protected-versus-absent discard
+there is reachable only through the interactive MEMORY SIZE? prompt. FINDING 23
+needs no prompt and no unusual program.
