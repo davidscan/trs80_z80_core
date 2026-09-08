@@ -932,6 +932,44 @@ Raised by a user question about whether MEMORY SIZE still shields space for
 machine code. Read-only investigation of trs80basic's `src/p75_mem.awk` and
 `src/p80_stmt.awk`; **nothing was edited there** (CLAUDE.md standing rule).
 
+**STATUS 2026-09-08 — FIXED BY trs80basic, AND THIS FINDING HAD ONLY HALF OF
+IT.** They shipped the RAMTOP/HIMEM split exactly as specified below: `RAMTOP`
+(65535) now drives the absent-RAM tests, `HIMEM` stays the MEMORY SIZE? answer
+driving `PEEK(16561/2)` and `sp_materialize`'s descent. Verified from this side
+— the repro that returned 255 now returns 123, `t1`-`t31` exit 0, and
+`trs80basic.awk` still equals `cat src/*.awk`.
+
+**THE HALF THIS FINDING MISSED, found by them while chasing it: `POKE
+16561/16562` was silently dropped too.** 40B1H was readable but not writable —
+`dopeek` routed those addresses to `pm_sysptr`, so a listing that reserved its
+own space PROGRAMMATICALLY, without the user touching the boot prompt, got no
+reservation. That is the commoner form and it needs no user cooperation: **88
+corpus listings POKE 16561/16562** (byte-level count over runnable+blocked;
+their independent figure was 91, and the gap is a pattern difference not worth
+closing) against the 36 candidates measured below for the prompt-driven form.
+`pm_sethimem()` now moves the live fence.
+
+It also produced a CONFIRMED rescue rather than a candidate count.
+`runnable/wordsmth.bas` probes for RAM by writing and reading back, then lowers
+HIMEM and installs a lowercase driver in the region it reserved. Verbatim A/B,
+`MEMORY SIZE? 48887`, run here against a reverted scratch build:
+
+    BEFORE:  nOT RECOMMENDED FOR USE WITH A 16K MACHINE
+    AFTER:   lOWERCASE IS LOADED.  pLEASE TYPE RUN AGAIN.
+
+A 48K machine was being told it was 16K because the user reserved memory.
+(Their handoff quoted the AFTER line as "48K CONFIRMED - INSTALLING", which
+appears nowhere in the corpus — corrected in `handoff/to-trs80basic.md`. The
+finding was right; only the quote was reconstructed.)
+
+NOTE the "what it needs" section below is now HISTORY, not a request — it is
+what they built. One residual, recorded and NOT requested: `POKE 16561/16562`
+without a following `CLEAR` leaves `SPK` cells above the new fence, so a POKE
+into the freshly reserved region routes to string write-through instead of
+`MEM[]` and is lost on the next reallocation. Defensible as hardware parity; it
+matters only because a byte in the protected region that is not in `MEM[]` is a
+byte the core will not execute.
+
 ### What is already right, and it is more than expected
 
 The VARPTR string space mirrors the real machine's layout exactly.
@@ -1031,6 +1069,36 @@ about absent versus protected has to be decided once, on this distinction.
 Asked by the user: does an 800K BASIC program break string packing or embedded
 machine code if the loader sits three-quarters of the way through the listing?
 Measured against trs80basic in batch mode; **nothing was edited there**.
+
+**STATUS 2026-09-08 — REPORTED, MEASURED BY THE INTERPRETER SIDE, DEFERRED BY
+AGREEMENT.** trs80basic ran the shadow dynamically over all 4,339 corpus files
+(instrumenting the one branch, validated against this finding's own repro) and
+recorded **zero shadow events**; 385 loader listings, 224 of which executed at
+least one POKE, 28,483 addresses written. Their coverage caveat is honest —
+batch stdin means many listings stop at their first `INPUT`, so the zero is a
+lower bound, not a proof. That CONFIRMS this finding's own corrected estimate of
+"approximately zero" (see the CORRECTION below) and refutes the withdrawn 123.
+The writable program-image mapping stays unbuilt, and this side agreed: the
+Dancing Demon payload is READ out of the image, not self-modifying, so goal (1)
+does not need it — with the caveat that FINDING 19's linear sweep is a signal,
+not a control-flow proof, so that "no" is revisable once the core can run it.
+**The `PEEK(16634)` sub-bug below was FIXED the same day** (`pm_sysptr` now
+masks the high byte): the 1200-line program answers 125 where it answered 381,
+verified here. Full exchange in `handoff/to-trs80basic.md`.
+
+**BOUND CORRECTION 2026-09-08 (this finding was right when written and is now
+stale).** The `min(PMEND, HIMEM)` bounds below described the code as it stood on
+2026-09-07, where `st_peek`'s `a > HIMEM` absent-RAM test fired before the
+program-image branch. trs80basic shipped the FINDING 22 fix on 2026-09-08, and
+that test is now `a > RAMTOP`. **So HIMEM no longer bounds the shadow at all:**
+lowering it with `MEMORY SIZE?` or `POKE 16561/16562` does not shrink the
+shadowed range, which is now simply `[17129, PMEND)` capped at RAMTOP. The
+thresholds quoted further down (~14.8 KB for a routine at 32000, ~47 KB to
+shadow everything) are unaffected — they never depended on HIMEM. The full
+post-fix resolution order, which the core must reproduce byte-for-byte, is set
+out in `handoff/to-trs80basic.md` §2 of the 2026-09-08 reply; note in particular
+that `a in SPK` outranks the program image, which is what makes string packing
+immune, and that unwritten memory reads **255**, not 0.
 
 ### Position in the listing is irrelevant. Total program SIZE is the variable.
 

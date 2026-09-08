@@ -218,8 +218,24 @@ rulings — those bullets carry their own dates.)
 - THREE INTERPRETER-SIDE MEMORY-MODEL ISSUES FOUND 2026-09-07 while
   working goal (1), all MEASURED with runnable reproductions, all
   REPORTED not fixed (we do not edit trs80basic), all handed over in
-  `handoff/to-trs80basic.md` — awaiting that session's response as of
-  2026-09-07:
+  `handoff/to-trs80basic.md`.
+  **ANSWERED 2026-09-08 — the channel round-tripped. Two shipped, one
+  measured and deferred by agreement; their reply is
+  `../trs80basic/handoff/to-trs80-z80-core.md` and ours is the REPLY
+  section of `handoff/to-trs80basic.md`.** Verified from this side (t1-t31
+  exit 0, repros flipped, build invariant holds). THREE THINGS A FUTURE
+  SESSION MUST NOT RELEARN THE HARD WAY: (a) they found a HALF THIS SIDE
+  MISSED — `POKE 16561/16562` was silently dropped too, 88 corpus listings,
+  the form needing no user cooperation, and it produced a confirmed rescue
+  (`wordsmth.bas`); (b) the post-fix memory resolution order changed and
+  FINDING 23's `min(PMEND, HIMEM)` bound is STALE — HIMEM no longer bounds
+  the shadow, `a in SPK` outranks the program image, and unwritten memory
+  reads **255** not 0, so the core must model it that way to agree;
+  (c) `grep` SILENTLY UNDERCOUNTS this corpus — 455 of 4,343 files (10.5%)
+  are not valid UTF-8 and BSD grep reports no match on them without
+  `LC_ALL=C`. `phasea/` is immune (byte-safe `latin-1` reader) but every
+  ad-hoc `grep` count is suspect downward; that trap produced a wrong
+  number in this very exchange. The three items as originally reported:
   * FINDING 22 — memory reserved by MEMORY SIZE? is treated as ABSENT
     rather than PROTECTED, so the classic reserve-then-load idiom
     cannot write the reserved region. Interactive only (batch forces
