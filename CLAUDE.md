@@ -23,7 +23,14 @@ sub-project of either. Neither is a "parent".
   `TRS80_Z80` reference in its `src/`. Its working notes are
   `STATUS.local.md` there (gitignored — exists only in a local checkout),
   which holds the coordination entries "Machine-language call support" and
-  "Program-memory mapping".
+  "Program-memory mapping". TWO MORE THINGS THERE as of 2026-09-08:
+  `handoff/to-trs80-z80-core.md`, their half of the channel — gitignored on
+  that side like STATUS.local.md, so it exists only in a local checkout;
+  READ it, NEVER write it. And, COMMITTED in their `fe99d4b`, in
+  `src/p75_mem.awk`, **"THE ADDRESS-RESOLUTION CONTRACT"** — the six-rule
+  precedence order `dopeek` resolves a byte by, written at this project's
+  request as a contract the core must reproduce exactly. It is the single
+  most load-bearing thing on that side for core work.
 - `../awk_BASIC_interpreter` — the private CORPUS ARCHIVE, measurement data
   only (`programs/`, `programs/runnable/`, `OCRsamples/`, `blocked/`). It
   is NOT the interpreter any more; that moved to trs80basic on 2026-08-28.
@@ -219,11 +226,22 @@ rulings — those bullets carry their own dates.)
   working goal (1), all MEASURED with runnable reproductions, all
   REPORTED not fixed (we do not edit trs80basic), all handed over in
   `handoff/to-trs80basic.md`.
-  **ANSWERED 2026-09-08 — the channel round-tripped. Two shipped, one
-  measured and deferred by agreement; their reply is
-  `../trs80basic/handoff/to-trs80-z80-core.md` and ours is the REPLY
-  section of `handoff/to-trs80basic.md`.** Verified from this side (t1-t31
-  exit 0, repros flipped, build invariant holds). THREE THINGS A FUTURE
+  **ANSWERED 2026-09-08 — the channel round-tripped TWICE. Two shipped
+  (their `fe99d4b`), one measured at zero and deferred by agreement; their
+  side is `../trs80basic/handoff/to-trs80-z80-core.md` (gitignored there,
+  local only) and ours is the REPLY / REPLY 2 sections of
+  `handoff/to-trs80basic.md`.** Verified from this side, not taken on
+  faith (t1-t31 exit 0, repros flipped, build invariant holds).
+  **THE DURABLE ARTIFACT IS NOT ANY OF THE THREE FIXES — it is "THE
+  ADDRESS-RESOLUTION CONTRACT" now written in `../trs80basic/src/
+  p75_mem.awk`**, six precedence rules the core MUST reproduce
+  byte-for-byte or it will execute the wrong bytes with no error. Read it
+  before writing any core memory path. STILL OUTSTANDING WITH THEM (asked
+  2026-09-08, not blocking): that contract covers `dopeek` only, and the
+  core writes as well as reads — `st_poke`'s order is undocumented, and
+  its asymmetries are where FINDING 23's class actually lives (no
+  program-image branch on write; keyboard/printer/read-only system
+  pointers fall through to `MEM[]` unread). THREE THINGS A FUTURE
   SESSION MUST NOT RELEARN THE HARD WAY: (a) they found a HALF THIS SIDE
   MISSED — `POKE 16561/16562` was silently dropped too, 91 corpus listings,
   the form needing no user cooperation, and it produced a confirmed rescue
@@ -316,6 +334,31 @@ rulings — those bullets carry their own dates.)
   Still stale, reported not edited: the archive's README.md describes
   itself as the interpreter (its own STATUS already lists deleting the
   duplicate src/ as owed).
+- WHERE TO PICK UP (state read 2026-09-08, end of session). NOTHING IS
+  BLOCKED — not on trs80basic, and nothing of theirs on us. The
+  memory-model round trip is CLOSED; it was SUBSTRATE for goal (1), not
+  goal (1), so the named active work has NOT advanced and is still the
+  next thing. TWO OPENS, both inside goal (1), both marked in the docs,
+  both answerable WITHOUT core code: (i) the 42E9H window overflow policy
+  — truncate, refuse, or slide — DESIGN.md "The address space", marked
+  UNDECIDED, live because Dancing Demon's payload is in that image;
+  (ii) whether the stub fallback should get LOUDER, marked OPEN above,
+  where the measured hazard is 8 of 11 string-packing techniques failing
+  silently. RECOMMENDED INSTRUMENT, offered to the user and not yet
+  ruled on: write the USAGE SKETCH for goal (1) into DESIGN.md — the
+  session a user actually has ("I typed in a listing with an embedded
+  routine, now what?") — because it cannot be written without deciding
+  both opens, which makes it measurement-before-building in the form
+  this project already uses. THREE SMALL TO-DOS, none urgent: give
+  `z80/disasm.py` a CLI (goal (4) is "mostly built" but UNREACHABLE from
+  a shell — the only place waiting currently costs something); a README
+  "Commands and arguments" section (the sweep/oracle/fetch_vectors
+  invocations exist only inside Z80_FINDINGS prose); and a LICENSE
+  (GPLv3 assumed, user ruling still pending from 2026-08-14). A USER
+  GUIDE was considered 2026-09-08 and DEFERRED — there is no
+  user-facing surface yet and the shape a guide must commit to is
+  exactly what the two opens above have not settled; revisit when a
+  BASIC program with an embedded routine first runs end-to-end.
 
 STANDING RULES (do not relearn these the hard way):
 - PHASE A BEFORE THE CORE (DESIGN.md "The gate") — SATISFIED 2026-08-14,

@@ -14,8 +14,8 @@ attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
-**STATUS (2026-09-07): PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK
-CLOSED, STAGE 1 NOT STARTED.** Phase A — the static disassembler/classifier over the
+**STATUS (2026-09-08): PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK
+CLOSED, MEMORY-MODEL HANDOFF CLOSED, STAGE 1 NOT STARTED.** Phase A — the static disassembler/classifier over the
 corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
 **5** unlocked listings. The one remaining hole in that measurement,
 FINDING 7's 96 loaders static extraction could not resolve, was then
@@ -51,6 +51,18 @@ reserved by MEMORY SIZE? is treated as ABSENT, so the classic
 reserve-then-load idiom cannot write it), FINDING 23 (the program image
 shadows POKEd bytes), and an uncapped `PEEK(16634)` that can return >255.
 Handed over in `handoff/to-trs80basic.md`.
+
+**RESOLVED 2026-09-08.** The handoff channel round-tripped twice: two
+shipped on the interpreter side, and FINDING 23 measured at **zero**
+across all 4,339 corpus files and deferred by agreement. That side also
+found a half this one had missed — `POKE 16561/16562` was silently
+dropped too, the programmatic form of the same idiom, 91 corpus listings,
+with a confirmed rescue in `wordsmth.bas`. **The durable artifact is
+neither the fixes nor the findings: it is "THE ADDRESS-RESOLUTION
+CONTRACT" now written in `../trs80basic/src/p75_mem.awk`** — six
+precedence rules for resolving one byte per address, which this core must
+reproduce byte-for-byte or it will execute the wrong bytes with no error.
+Both sides' halves of the exchange are in their `handoff/` directories.
 
 See Z80_FINDINGS.md (23 findings). Stage 1 (the core itself) is NOT
 started and no core code has been written. Durable artifacts: the
