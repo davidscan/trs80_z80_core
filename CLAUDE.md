@@ -40,18 +40,54 @@ Custom TRS-80, TRS-80 Graphics). Which to reach for:
   ROM Reference Manual (text layer), Farvour "Microsoft BASIC Decoded"
   chapters 2 and 4 ONLY — its chapters 7-8 are commented ROM disassembly
   and fall under the NEVER-commit rule, as do Richcraft volumes 1-2.
-- Opcode table / T-state cross-checks: the Zilog Z80 CPU Technical Manual
-  (two scans of one book), Leventhal, the Reston Z80 Users Manual, Osborne
-  "Z80 Programming for Logic Design"; the Nano Systems reference card
-  lists the undocumented IX/IY half-register instructions.
+- Opcode table / T-state cross-checks: **Sybex "Programming the Z-80" 3rd
+  ed. FIRST** — measured 2026-09-08, it carries timing language on 151 of
+  its 630 pages against Leventhal's 19, the Zilog manuals' 12 and 10, the
+  Osborne "Z80 Programming for Logic Design" 9 and the Reston Z80 Users
+  Manual 6. It was named nowhere in this file until that audit, which had
+  been sending this work to the weaker sources for a month. Then Zilog,
+  Leventhal, Reston, Osborne as corroboration; the Nano Systems reference
+  card lists the undocumented IX/IY half-register instructions.
+  The two Zilog manuals ("Z-80 CPU Technical Manual" and "Z80 and Z80A
+  Technical Manual", both 1977) are TWO SCANS OF ONE BOOK — same section
+  numbering, same figures, 83 vs 82 pages. They can never corroborate each
+  other. Their use is the opposite: when OCR mangles a hex table in one,
+  read it in the other. The Z80/Z80A scan is the better one.
 - Loader idioms the extractor classifies (string packing, DATA/POKE, array
-  packing, USR argument passing): Level II ROMs (Tab) ch. 2-3, Barden
-  "More TRS-80 Assembly-Language Programming" ch. 4-5, Fast BASIC part II
-  (the five BASIC tables, VARPTR).
-- Model I address-space side effects (3800H keyboard, 3C00H video, port
-  FFH): the 1978 TRS-80 Technical Manual; Assembly Language Made Simple
-  ch. 4 for the memory map.
-TEXT LIBRARY (built 2026-09-05/06, rebuilt 2026-09-07) —
+  packing, USR argument passing): Barden "More TRS-80 Assembly-Language
+  Programming" **chapter 5, titled "Embedded Machine Code in BASIC"**
+  (p. 102, part 5) — the single most on-target chapter in the library for
+  goal (1), and the place to start; then its ch. 4 (loading and executing),
+  Level II ROMs (Tab) ch. 2-3, Fast BASIC part II (the five BASIC tables,
+  VARPTR — VARPTR appears on 49 of its pages, USR on 35).
+- Model I address-space side effects: the 1978 TRS-80 Technical Manual has
+  the memory map and the **3800H keyboard** matrix (pp. 6 and 12) and that
+  is ALL it has — measured 2026-09-08, its 42 pages (the whole PDF; not a
+  truncated scan) contain no occurrence of 3C00, 15360, "port FF" or "FFH"
+  by any spelling. This file claimed it as the source for all three until
+  that audit. For the **3C00H video base** go to Encyclopedia Vol 04 or
+  Fast BASIC (12 pages each), TRS-80 Graphics (11) or Custom TRS-80 (10).
+  Assembly Language Made Simple ch. 4 for the memory map.
+- Books in the library with no other assignment, and what they are for:
+  Osborne "Z80 Assembly Language Subroutines" (512 pp) and the Sams
+  "Z-80 Microcomputer Handbook" (308 pp) are general Z80 routine and
+  hardware references for goals (3)-(4); Prentice Hall "TRS-80 Assembly
+  Language" (194 pp) and Radio Shack "TRS-80 Assembly Language
+  Programming" (226 pp) are TRS-80 assembly tutorials. The "Level II BASIC
+  Reference Manual" (196 pp) and the "Model 3 Operation and BASIC Language
+  Reference Manual" (274 pp) are BASIC-side and belong to trs80basic's
+  domain, not this one — the Model III manual in particular measured 0 ROM
+  entry points, 0 timing content and 0 assembly-listing pages, and its one
+  distinctive job (Model I vs III) is already done better by ROM Routines
+  Documented, which carries both models on 19 pages. Do not reach for
+  either of those two for core work.
+- SAFE, contrary to what the volume number suggests: Richcraft
+  "Disassembled Handbook" **Volume 3 is not ROM disassembly** — measured
+  2026-09-08 at 0 pages of ROM-range disassembly. It is about WRITING a
+  disassembler (a BASIC disassembler contest), which makes it the
+  library's most on-point book for goal (4). The never-commit rule above
+  names volumes 1-2 for exactly this reason and is correct as written.
+TEXT LIBRARY (built 2026-09-05/06, rebuilt 2026-09-07 and 2026-09-08) —
 `../trs80_references/trs80_z80_core/md/`: all 37 PDFs (10,063 pages)
 OCR'd to `md/_full/<book>.md` and split on page boundaries into
 `md/<book>/part-NN_pages-AAAA-BBBB.md` (336 parts, each one read), with
@@ -64,9 +100,31 @@ recognized)"). Regenerate with `md/_tools/` (build_core_library.py,
 split_core.py, audit_library.py, README.md — read that README before
 changing the splitter). 36 MB, outside the repo, NEVER committed: it
 contains OCR of ROM disassembly.
+AUDITED 2026-09-08 against the source PDFs and `_full/`, by a checker
+built independently of the generator so a bug in it could not hide
+itself. The generated tables of contents are STRUCTURALLY EXACT: page
+counts match `pdfinfo` 37/37, parts cover every page once with no gaps
+or overlaps, 8,864 page-map rows and 16,921 address-index rows all point
+at the right part/page/anchor, every address-index line is verbatim on
+the page it cites, and 37/37 books are lossless. Every defect found was
+in the AUDIT INSTRUMENT (it was skipping 6% of rows and never reading
+landmark titles, so it reported 64% useful where the honest figure is
+61%) or in a LABEL (10 landmarks named after OCR debris; 3 appendices
+named for a divider tab). All fixed and rebuilt the same day; see
+`md/_tools/README.md`, "What the audit says about it".
+**Seven books have NO detected chapter landmarks** — their `INDEX.md`
+says `**None detected.**` — so the "one chapter is one part" rule does
+not hold for them; three are large (Z80 Users Manual 338 pp,
+Encyclopedia Vol 01 288 pp, Barden's Subroutines 244 pp). Navigate
+those by the page map.
 NOTE the books cannot validate the opcode table's T-states wholesale —
 their instruction tables OCR to 0-1 parseable rows each. The one
-exception is FINDING 21.
+exception is FINDING 21. This is a limit of the OCR, not of the books,
+and it does not contradict the Sybex recommendation above: Sybex's 151
+timing pages are prose and per-instruction discussion, which survive OCR
+and support SPOT checks, while the column-aligned summary tables that
+would allow a wholesale diff do not survive in any book. Wholesale
+validation still needs a machine-readable source, not a scan.
 The user reorganises that tree themselves (BASIC-side books sit in
 `../trs80_references/trs80basic/`, parked items in "Future reference"), so
 search the whole tree before assuming a file's location.
