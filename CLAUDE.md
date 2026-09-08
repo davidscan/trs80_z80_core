@@ -29,12 +29,21 @@ sub-project of either. Neither is a "parent".
   is NOT the interpreter any more; that moved to trs80basic on 2026-08-28.
 
 REFERENCE LIBRARY (assembled 2026-09-05 — scanned books, not code; local
-only, never committed): `../trs80_references/trs80_z80_core/` holds the 21
-PDFs selected for this project after a table-of-contents scan of all 76
-documents in `../trs80_references/`; its `goal2/` subdirectory holds 16
-more for goal (2), magazine listings (the ten Wayne Green Encyclopedia
-volumes, Barden's subroutine book, the Richcraft Disassembled Handbooks,
-Custom TRS-80, TRS-80 Graphics). Which to reach for:
+only, never committed): 21 PDFs selected for this project after a
+table-of-contents scan of all 76 documents in `../trs80_references/`,
+plus 16 more in a `goal2/` subdirectory for goal (2), magazine listings
+(the ten Wayne Green Encyclopedia volumes, Barden's subroutine book, the
+Richcraft Disassembled Handbooks, Custom TRS-80, TRS-80 Graphics).
+**THE PDFs MOVED OUT 2026-09-08** at the user's direction, to an archive
+whose location this side has not been told; `../trs80_references/
+trs80_z80_core/` now holds only `md/` (36 MB, was 531 MB). The TEXT
+LIBRARY below is unaffected and is what you actually read. Ask the user
+for the archive path if you need a PDF, and set `TRS80_PDF_ROOT` to it —
+`split_core.py` and `verify_library.py` both pick it up, and only
+re-OCR (`build_core_library.py`) is blocked without it. The book-to-PDF
+paths survive in `md/_tools/pdf_manifest.json`; do not delete it (see
+that directory's README for why a rebuild without it silently destroys
+the `goal2/` provenance). Which to reach for:
 - HLE trap semantics (documented behaviour only): ROM Routines Documented
   (has the Model I vs III entry-point comparison), the Micro-80 Level II
   ROM Reference Manual (text layer), Farvour "Microsoft BASIC Decoded"
@@ -102,15 +111,17 @@ changing the splitter). 36 MB, outside the repo, NEVER committed: it
 contains OCR of ROM disassembly.
 AUDITED 2026-09-08 against the source PDFs and `_full/`, by a checker
 built independently of the generator so a bug in it could not hide
-itself. The generated tables of contents are STRUCTURALLY EXACT: page
-counts match `pdfinfo` 37/37, parts cover every page once with no gaps
-or overlaps, 8,864 page-map rows and 16,921 address-index rows all point
-at the right part/page/anchor, every address-index line is verbatim on
-the page it cites, and 37/37 books are lossless. Every defect found was
-in the AUDIT INSTRUMENT (it was skipping 6% of rows and never reading
-landmark titles, so it reported 64% useful where the honest figure is
-61%) or in a LABEL (10 landmarks named after OCR debris; 3 appendices
-named for a divider tab). All fixed and rebuilt the same day; see
+itself — kept as `md/_tools/verify_library.py`, run it after any
+rebuild, it exits non-zero on any finding. The generated tables of
+contents are STRUCTURALLY EXACT: page counts matched `pdfinfo` 37/37,
+parts cover every page once with no gaps or overlaps, 8,864 page-map
+rows and 16,921 address-index rows all point at the right
+part/page/anchor, every address-index line is verbatim on the page it
+cites, and 37/37 books are lossless. Every defect found was in the AUDIT
+INSTRUMENT (it was skipping 6% of rows and never reading landmark
+titles, so it reported 64% useful where the honest figure is 61%) or in
+a LABEL (10 landmarks named after OCR debris; 3 appendices named for a
+divider tab). All fixed and rebuilt the same day; see
 `md/_tools/README.md`, "What the audit says about it".
 **Seven books have NO detected chapter landmarks** — their `INDEX.md`
 says `**None detected.**` — so the "one chapter is one part" rule does
@@ -125,6 +136,13 @@ timing pages are prose and per-instruction discussion, which survive OCR
 and support SPOT checks, while the column-aligned summary tables that
 would allow a wholesale diff do not survive in any book. Wholesale
 validation still needs a machine-readable source, not a scan.
+AND THE SPOT CHECK MEANS THE PDF, NOT THE OCR. Every index in the text
+library ends with "find the page, then read the value off the PDF", and
+that is not boilerplate — the OCR is untrustworthy for exactly what the
+core needs: hex, timing, opcodes, listings. FINDING 21 came from reading
+a page. Since 2026-09-08 that costs a trip to the archive; take it
+anyway for anything load-bearing, and never promote an OCR'd hex value
+to a measurement because the PDF was inconvenient.
 The user reorganises that tree themselves (BASIC-side books sit in
 `../trs80_references/trs80basic/`, parked items in "Future reference"), so
 search the whole tree before assuming a file's location.
