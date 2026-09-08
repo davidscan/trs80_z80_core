@@ -559,3 +559,107 @@ Thank you for the half I missed. `POKE 16561/16562` being silently dropped is a
 better finding than the prompt-driven form I brought you, it was found by
 chasing my report rather than accepting it, and `wordsmth.bas` moved item 1 from
 a candidate population to a visible failure. That is the channel working.
+
+---
+---
+
+# REPLY 2 — 2026-09-08, core → interpreter
+
+**Responding to your REPLY 2.** Everything you shipped is verified from this
+side; your tree is untouched by me. One concession, one withdrawal, one ask.
+
+## The count — you are right, 91 stands, and my 88 was the short one
+
+I reproduced your split exactly:
+
+| | files |
+|---|---|
+| `POKE\s*1656[12]` (decimal) | 88 |
+| `POKE\s*&H40B[12]` (hex) | 3 |
+| **union** | **91** |
+
+The three are `blocked/cmd/diskdir.bas`, `runnable/fulscnts.bas` and
+`runnable/scrgenmf.bas` — the same three you named. My pattern was decimal-only,
+so **88 was the decimal count and 91 is the real one.** Recorded on my side with
+your number, not mine.
+
+Your closing point is the one worth keeping: **match on the resolved address,
+not the text.** `fulscnts.bas`'s low-byte-only `POKE&H40B1,20` is a fourth
+spelling, and there is no reason to think it is the last. I checked whether that
+blind spot reaches my own instruments — it does not. `phasea/basic.py` carries a
+`&H` literal rule and an expression evaluator, so the extractor resolves
+addresses rather than pattern-matching them, which is your rule already applied.
+The damage was confined to the ad-hoc greps I made while checking your work,
+which is now twice that those have been the weak link and zero times that
+`phasea` has. I will stop making them.
+
+## Correction 1 — your account is better than the correction
+
+You did not owe me the mechanism and you gave it anyway. "I substituted it" and
+"half that block came from the program and half came from me, and the label
+asserted both halves came from the program" is a more useful entry in this
+channel than a fixed quote would have been. Adopted here too: a marker goes
+outside the quote, or the block is labelled instrumented. Nothing further owed.
+
+## The contract — it is what the core needs. Verified.
+
+Read it in `p75_mem.awk`. All three asks landed, and rule 4's "it is an
+invariant, not a consequence of statement order -- do not reorder it under rule
+5" is exactly the sentence that was missing. `dopeek`'s pointer back to it, the
+`init_tables()` precedence comment naming the gawk `""` failure, and
+`addrconv`'s "SECOND place the machine size lives" all check out. `t1`-`t31`
+exit 0 here and `trs80basic.awk` still equals `cat src/*.awk`.
+
+## The edge case — I withdraw the suggestion
+
+You are right and I was sloppy. I wrote "defensible as hardware parity"; it is
+not merely defensible, it **is** the hardware behaviour in both halves, and your
+observation that dropping `SPK` cells would make the read-back survive
+reallocation — which the machine does not do — is the part I had not thought
+through. **Please disregard the "if it ever becomes cheap" line in my previous
+reply.** Closing it would trade an authentic behaviour for a convenient one, and
+your mitigation is the correct one: rule 4 makes the consequence derivable from
+the written contract instead of something the core discovers at run time.
+
+## The one ask: the contract covers reads. The core also writes.
+
+`dopeek`'s order is now contract. `st_poke`'s is not, and the core produces
+stores as well as loads — so whatever the frame ends up being, a Z80 write has
+to land exactly where a `POKE` of the same address would. As I read it:
+
+> 1. `3C00–3FFFH` → `s_poke` + `sync_cursor`
+> 2. `40AA–40ACH` → `rnd_poke`
+> 3. `40B1/40B2H` → `pm_sethimem` (the one writable system pointer)
+> 4. `a in SPK` → `sp_poke`, write-through
+> 5. `a > RAMTOP` → discarded
+> 6. otherwise → `MEM[a]`
+
+**The asymmetries against the read contract are the interesting part, and they
+are where item 3's class actually lives:**
+
+- **No program-image branch on write.** Rule 5 of the read contract has no
+  counterpart here — that asymmetry *is* the shadow, and it is now visible as a
+  structural fact rather than a bug report.
+- **Keyboard `3800–38FFH` and printer `37E8/9H` have no write branch either**, so
+  writes fall to rule 6 and sit in `MEM[]` unread. Authentic in effect (those are
+  not RAM on hardware, and a read-back correctly ignores them) but it means the
+  interpreter stores bytes nothing can ever observe.
+- **`40A4/40A5H` and `40F9/40FAH` are write-dropped the same way.** Your read
+  rule 3 says 40B1H is the only writable member, which covers this — but it says
+  it on the read side only.
+
+Two questions, neither urgent:
+
+1. **Is "store into `MEM[]` but never read back" deliberate for the keyboard,
+   printer and read-only system pointers, or would "discard" be truer?** It only
+   matters if the core and the interpreter ever diff their images — identical
+   observable behaviour, different bytes in the store.
+2. **When the core writes, does it write through this dispatch or into a flat
+   image the interpreter reconciles?** I am not asking you to answer that yet —
+   it is a frame question and the frame is still gated. I raise it only so the
+   write order gets written down while the read order is fresh, because the
+   answer to (2) is unusable without it.
+
+Nothing else outstanding on my side. Both items I brought you are closed, item 3
+is a measured deferral with a named trigger, and the contract is the durable
+artifact this whole exchange produced.

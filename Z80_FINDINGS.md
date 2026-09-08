@@ -943,11 +943,23 @@ driving `PEEK(16561/2)` and `sp_materialize`'s descent. Verified from this side
 16561/16562` was silently dropped too.** 40B1H was readable but not writable —
 `dopeek` routed those addresses to `pm_sysptr`, so a listing that reserved its
 own space PROGRAMMATICALLY, without the user touching the boot prompt, got no
-reservation. That is the commoner form and it needs no user cooperation: **88
-corpus listings POKE 16561/16562** (byte-level count over runnable+blocked;
-their independent figure was 91, and the gap is a pattern difference not worth
-closing) against the 36 candidates measured below for the prompt-driven form.
-`pm_sethimem()` now moves the live fence.
+reservation. That is the commoner form and it needs no user cooperation: **91
+corpus listings POKE 16561/16562** over runnable+blocked, against the 36
+candidates measured below for the prompt-driven form. `pm_sethimem()` now moves
+the live fence.
+
+THE 91 IS THEIRS AND IT CORRECTS A COUNT OF MINE. This side first measured 88
+and challenged their 91; the challenge was wrong. 88 is the **decimal-only**
+count (`POKE 1656[12]`), and three further listings — `blocked/cmd/diskdir.bas`,
+`runnable/fulscnts.bas`, `runnable/scrgenmf.bas` — spell it in **hex**
+(`POKE&H40B1`), which a decimal pattern cannot see. 88 + 3 = 91, verified here.
+`fulscnts.bas` also uses a low-byte-only form (`POKE&H40B1,20`, reserving 235
+bytes off the top), a fourth spelling. **LESSON, and it generalises past this
+count: match loader idioms on the RESOLVED ADDRESS, not on the text.**
+`phasea/basic.py` already does — it carries a `&H` literal rule and an
+expression evaluator — so no published extractor number is affected; the error
+was in an ad-hoc grep, which is the second time in this exchange that ad-hoc
+greps were the weak link (see the `LC_ALL=C` trap in FINDING 23's status).
 
 It also produced a CONFIRMED rescue rather than a candidate count.
 `runnable/wordsmth.bas` probes for RAM by writing and reading back, then lowers
