@@ -777,6 +777,14 @@ sound isolable to two instructions). It is visually self-verifying and
 famous enough to be worth the trouble. Call-and-return USR (memory in,
 run, memory out) is demonstrably NOT enough for this class of program.
 
+**SUPERSEDED IN PART BY FINDING 24 (2026-09-09).** Every number above
+reproduces exactly and is kept as measured. Two claims do not: "no ROM
+calls at all" is wrong (`CALL 01C9H`, CLS, x4), and "patches 4018H" is a
+one-line summary of a self-relocating dispatcher that walks the BASIC
+line-record chain — the structure that decides what the core and the
+interpreter must provide. FINDING 24 carries the deltas; work items are
+in `DANCING_DEMON.md`.
+
 ## FINDING 20 — the blocked/ re-scan moved four gate files without unlocking any (measured 2026-08-14, recorded 2026-09-04)
 
 The re-scan owed to the corpus archive after FINDINGS 16/17 was PAID
@@ -1188,3 +1196,239 @@ Also relevant to FINDING 22's severity: batch mode always runs with
 `HIMEM = 65535` (measured in all runs), so the protected-versus-absent discard
 there is reachable only through the interactive MEMORY SIZE? prompt. FINDING 23
 needs no prompt and no unusual program.
+
+## FINDING 24 — the north star re-measured: Dancing Demon is a self-relocating dispatcher, it DOES call the ROM, and it needs a stack (2026-09-09)
+
+Asked for a readiness assessment of this repo against a "Dancing Demon
+(no sound)" run. FINDING 19 was re-derived from its own prose rather
+than trusted, because **no committed code implements its extraction
+recipe** — that is the first finding here and the reason the rest were
+available to be found.
+
+### What reproduced exactly
+
+Re-implementing FINDING 19's recipe (walk the line records, concatenate
+the bodies of lines 2..258 including each terminating `00`, base mapped
+from 42E9H) reproduces every number it reported:
+
+| FINDING 19 | re-measured 2026-09-09 |
+|---|---|
+| 106 fake BASIC lines, 2..258 | 106 (line numbers 2..207) |
+| 10,931 bytes | 10,931 |
+| loads at 42F6H | 42F6H |
+| 8,068 insns, 0 undecodable | 8,068, 0 undecodable, 0 truncated, 0 undoc |
+| 34 video immediates in 3C00-3FFFH | 34 |
+| keyboard matrix once, `LD HL,38FFH` | 1 |
+| sound exactly twice, 43FC/4401H | 2 |
+| patches 4018H, reads (40A4H) | both present |
+
+The load address is self-confirming: the BASIC driver computes
+`N = PEEK(16549)*256 + PEEK(16548) + 13` and POKEs it to 16526/16527,
+and 42E9H + 13 = 42F6H. `z80/disasm.py` held again over 8,068
+instructions as its second outside consumer.
+
+### 1. THE PAYLOAD IS A DISPATCHER, NOT A ROUTINE — the load-bearing structure FINDING 19 did not record
+
+The entry routine, disassembled:
+
+    42F6  211840    LD HL,4018H
+    42F9  36C3      LD (HL),C3H        ; write a JP opcode into system RAM
+    42FB  2AA440    LD HL,(40A4H)      ; start of BASIC program text
+    42FE  3E19      LD A,19H           ; wanted line number, low byte = 25
+    4300  E5        PUSH HL
+    4301  DDE1      POP IX
+    4303  DDBE02    CP (IX+02H)        ; compare against this record's lineno
+    4306  2806      JR Z,430EH
+    4308  5E        LD E,(HL)          ; else follow the next-line pointer
+    4309  23        INC HL
+    430A  56        LD D,(HL)
+    430B  EB        EX DE,HL
+    430C  18F2      JR 4300H
+    430E  23 23 23 23                  ; skip next-ptr + lineno
+    4312  221940    LD (4019H),HL      ; complete the JP at 4018H
+    4315  212840    LD HL,4028H        ; and a second trampoline at 4028H
+    ...
+    431F  CD1840    CALL 4018H
+
+So the payload **walks the BASIC line-record chain at run time, matching
+on line number, and patches a JP trampoline in system RAM**. The 106
+fake lines are 106 dispatchable entry points addressed by line number:
+the line-record chain IS the routine's symbol table. Reached call
+counts: `CALL 4018H` x243, `CALL 4028H` x23 (linear sweep: 422 and 25).
+
+Three consequences for the core, none of them optional:
+
+- the tokenized program image must be mapped at 42E9H **with correct
+  next-line links**. DESIGN.md notes the `% 65536` wrap in `pm_build`
+  as a caveat about walking the chain; for this program the chain is
+  the dispatch mechanism, so a wrong link is a jump into garbage with
+  no error — the FINDING 16/17 failure shape again.
+- **4000-41FF must be writable AND executable** core RAM. This is
+  self-modifying code, but its target is the communication region, not
+  the program image.
+- 40A4H/40A5H must read 42E9H, on both the BASIC side (`PEEK(16548/9)`)
+  and the core side (`LD HL,(40A4H)`).
+
+### 2. CORRECTION to FINDING 19 — "no ROM calls at all" is wrong
+
+`CALL 01C9H` appears **4 times** (2 of them reached from the entry
+points), each in clean code immediately following a NUL-terminated
+message, all four in the identical idiom:
+
+    2E 00 | CD C9 01 | 3E 03 | 08 | 3E xx | CD 18 40
+
+Four independent books in the reference library agree on what 01C9H is:
+"Performs the CLS function" (Level II ROM Reference Manual), "CLS: Clear
+CRT video display & home cursor" (Level II ROMs, Tab), "A CALL 1C9H will
+clear the screen. (CLS)" (Assembly Language Made Simple), plus
+Encyclopedia Vol 08. It is a **documented** entry point, so it is
+HLE-trappable under the never-commit-ROM rule, and reimplementing CLS is
+trivial. But the count is one, not zero, and **01C9H is not on Stage 2's
+trap list** (DESIGN.md: 002BH, 0033H, 1BC0H, 0028H) because the sweep
+population excludes `LargeCollection/` — see item 6.
+
+FINDING 19's linear-sweep caveat is what saved it from being worse: it
+said "the proof is running it", and it was right to.
+
+### 3. A Z80 STACK INSIDE THE 64K IS REQUIRED, AND UNDESIGNED
+
+Reached code: **CALL x268, RET x51, PUSH x14, POP x14, EXX x20,
+`EX AF,AF'` x138.** `PUSH HL / POP IX` sits in the verified entry
+routine above, so this is not a mis-decode artifact.
+
+DESIGN.md states twice that BASIC's stack is "an awk structure, not
+addresses" and lives outside the 64K ("The address space", and the
+inversion argument). That is right for BASIC and insufficient for the
+core: a Z80 executing 268 calls needs a real stack at a real 16-bit
+address. Nothing in DESIGN.md records where SP is initialised, who owns
+it across the USR boundary, or where the USR return address is pushed.
+Recorded as a gap, not resolved here.
+
+### 4. THE WRITABLE PROGRAM IMAGE IS NOT NEEDED — now measured, not reasoned
+
+`handoff/to-trs80basic.md` answered trs80basic's question ("do we need
+the writable program image?") with "No. Not now, and not for Dancing
+Demon", by reading FINDING 19. That answer is **correct, and now has a
+measurement behind it.** Every real absolute write in reached code goes
+to 4019H, 401BH, 4020H, 4023H, 4029H, 402BH or 4100H — all system RAM.
+The four absolute writes that land inside the image (4C2DH, 7320H,
+7420H, 7720H) are ASCII text mis-decoded as `LD (nn),A`; their operand
+bytes are spaces and lowercase letters.
+
+Honest limit: 172 HL-indirect and 14 stack writes cannot be resolved
+statically, so this is strong evidence, not proof. The proof is still
+running it.
+
+### 5. ONE PAYLOAD, FIFTEEN FILES
+
+All 15 tokenized Dancing Demon images in the archive — 1979 Radio Shack,
+1979 80-NW, 1986 Powersoft, and the `demon.dsk`/`demon.snd`/`dancedem`
+copies — carry a **10,931-byte payload at 42F6H with 106 fake lines and
+an identical device profile** (34 video / 1 keyboard / 2 OUT / 4 CALL
+01C9H / 422 CALL 4018H). Eight are byte-identical; the other seven differ
+in data bytes only. Only the BASIC driver varies (179-193 line records).
+
+So "does it run Dancing Demon" is **one** acceptance target, and the
+choice of variant is a matter of which driver is convenient.
+
+### 6. SILENCING IS CLEAN, AND THE DELAY LOOPS ARE THE TEMPO
+
+The sound routine in full:
+
+    43F7  210102    LD HL,0201H
+    43FA  0EFF      LD C,FFH
+    43FC  ED61      OUT (C),H
+    43FE  42        LD B,D
+    43FF  10FE      DJNZ 43FFH
+    4401  ED69      OUT (C),L
+    4403  42        LD B,D
+    4404  10FE      DJNZ 4404H
+    4406  1D        DEC E
+    4407  20F3      JR NZ,43FCH
+
+Port FFH is not sound-only: **bit 3 selects 32-character video mode**
+(confirmed in the library — "BIT 3 Select video 32 character mode if
+set"). The values written here are H=02H and L=01H, so bit 3 is clear in
+both and suppressing the two `OUT`s has **no display side effect**. The
+surrounding `DJNZ` loops must still EXECUTE — they are the delay that
+sets the tempo, and skipping them would silence the demon and make it
+dance too fast.
+
+### 7. SCOPE AND SPEED
+
+| measure | value |
+|---|---|
+| reachability from the 106 entries + 42F6H | 8,916 / 10,931 bytes (81.6%), 7,018 insns |
+| distinct encodings executed | **169** — ~16% of the table's 1,033 documented |
+| distinct mnemonics | **23** |
+| pages needed | main 161, ED 4, DD/FD 4 — **no CB page** |
+| NOT observed | DAA, block ops (LDIR/CPIR), interrupts (DI/EI/IM), undocumented opcodes |
+| reached-code mean, table base cycle column | **5.67 T-states/insn** |
+| real-time bar at 1,774,080 T-states/s | **313,030 insn/s** |
+| pre-decoded closure dispatch, full flag computation (CPython 3.11) | 5,470,126 insn/s — **~17x headroom** |
+| `z80/disasm.py` decode path | 724,554 insn/s — **2.3x** the bar |
+
+Timing is comfortable, with one architectural constraint: **do not reuse
+the disassembler's decode path as the execution decoder.** 2.3x leaves
+no margin for memory callbacks, video streaming and coprocess I/O; a
+pre-decoded dispatch has 17x and does. 169 is a lower bound — dynamic
+dispatch through 4018H is unresolved and 18.4% of the payload is
+unreached.
+
+Correction to README while here: it puts the real Model I at
+"~440K instr/s". The table's own cycle column says ~164K insn/s on a
+general mix and 313K on this payload's mix. The direction of README's
+claim (Python is faster) survives; the figure does not.
+
+### 8. THE INSTRUMENT GAP — why none of this was measured before
+
+- `LargeCollection/` is **outside the sweep population** (`phasea/sweep.py`
+  reads `runnable/` + `blocked/` only, by the settled Phase A input set).
+  No committed instrument has ever measured this program.
+- The corpus file is a **tokenized** image (FF-prefixed, `8D` GOTO token).
+  `phasea/basic.py:read_source` is byte-safe latin-1 but assumes
+  DETOKENIZED text, and there is no detokenizer in this repo.
+- FINDING 19's extraction recipe exists **only as prose**. It had to be
+  reimplemented to run this audit.
+
+Reproduce the extraction (the recipe FINDING 19 described in words):
+
+    def records(b, base=0x42E9):
+        i = 1 if b[:1] == b'\xff' else 0      # leading FF marker
+        s, out = i, []
+        while i + 4 <= len(b):
+            nxt = b[i] | (b[i+1] << 8)
+            if nxt == 0: break
+            ln = b[i+2] | (b[i+3] << 8)
+            j = i + 4
+            while j < len(b) and b[j] != 0: j += 1
+            out.append((base + (i - s), ln, b[i+4:j]))
+            if j >= len(b): break
+            i = j + 1
+        return out
+    fake = [r for r in records(open(PATH,'rb').read()) if 2 <= r[1] <= 258]
+    payload = b''.join(body + b'\x00' for _, _, body in fake)   # 10,931 bytes
+    base    = fake[0][0] + 4                                    # 42F6H
+
+Committing this as a real extractor idiom is DD-1 in `DANCING_DEMON.md`.
+
+### Assessment
+
+The terrain is friendlier than expected and the obstacles moved. The CPU
+is cheap: 169 encodings, 23 mnemonics, no CB page, no DAA, no
+interrupts, 17x timing headroom, one trivial documented ROM trap, two
+instructions to silence with no side effect. What is expensive is
+everything around it — the image projection with correct links, a
+writable and executable communication region, a stack policy that does
+not exist on paper, and the streaming protocol DESIGN.md already
+identified as the real question.
+
+Neither DESIGN.md open question blocks this program: the image spans
+42E9H-7DE5H (15,100 bytes, 33,307 clear of FFFFH) so the window-overflow
+policy does not bind, and the stub-loudness question is orthogonal.
+
+Two of these numbers correct FINDING 19 (the ROM call count) and README
+(the Model I instruction rate). Both corrections were produced by
+resolving addresses through the disassembler rather than by matching
+text — the discipline CLAUDE.md's "corpus counting traps" rule demands,
+applied to a program the corpus tooling cannot currently read.
