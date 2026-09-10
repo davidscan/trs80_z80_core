@@ -32,6 +32,7 @@ Visually self-verifying; no transcript can assert it.
 | ROM calls | **01C9H (CLS) x4** — one documented entry point, not zero |
 | devices | video 3C00-3FFF (34 sites), keyboard 38FFH (1 site), port FFH (2 sites) |
 | stack | CALL x268, RET x51, PUSH/POP x14, EXX x20, `EX AF,AF'` x138 |
+| relocation | **fully position-independent** — 0 absolute CALLs into its own body, 0 internal JPs in 10,931 bytes; internal flow is `JR` x365 / `DJNZ` x22, everything longer-range goes through the trampoline |
 | real-time bar | **313,030 insn/s** (mean 5.67 T-states at 1.77 MHz) |
 | variants | all 15 images carry the same payload; 8 byte-identical. **One target, not four.** |
 
@@ -44,7 +45,7 @@ Visually self-verifying; no transcript can assert it.
   survived as prose until FINDING 24 reimplemented it. Needs a
   detokenizer-aware reader too: the corpus file is a **tokenized** image
   (FF-prefixed) and `phasea/basic.py:read_source` assumes detokenized
-  text. The runnable recipe is in FINDING 24 §8.
+  text. The runnable recipe is in FINDING 24 section 8.
   *Blocks: any repeatable measurement of the target.*
 
 - **DD-2. The execution core.** `z80/` is `table.py` + `disasm.py` and
@@ -151,6 +152,11 @@ effect on the t1-t28 bar.
   bind here: the image spans 42E9H-7DE5H, 15,100 bytes, 33,307 clear of
   FFFFH. Still open for goal (1) generally, just not on this path.
 - **0A7FH / 0A9AH traps** — see DD-5.
+- **Relocation machinery of any kind.** The payload never names an
+  address inside itself (FINDING 24 section 9), so it runs wherever the
+  image places it. Its load address is a consequence of the image
+  mapping, not a requirement to be satisfied — which is also why DD-11's
+  correct next-line links matter more than any load-address handling.
 - **ROM emulation beyond CLS**, DAA, the CB page, block instructions,
   interrupt modes, bank switching.
 
@@ -167,7 +173,7 @@ effect on the t1-t28 bar.
 
 ## Reproducing the measurements
 
-The extraction recipe is in FINDING 24 §8 (runnable, ~15 lines) until
+The extraction recipe is in FINDING 24 section 8 (runnable, ~15 lines) until
 DD-1 lands. The profile is a linear sweep plus a recursive-descent trace
 seeded from 42F6H and the 106 fake-line body addresses; `z80/disasm.py`
 decodes all 8,068 instructions with zero undecodable, and every count in

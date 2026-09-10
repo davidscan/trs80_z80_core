@@ -1412,6 +1412,50 @@ Reproduce the extraction (the recipe FINDING 19 described in words):
 
 Committing this as a real extractor idiom is DD-1 in `DANCING_DEMON.md`.
 
+### 9. THE PAYLOAD IS POSITION-INDEPENDENT — correcting DESIGN.md's relocation worked example (measured 2026-09-09)
+
+DESIGN.md ("The address space", CAN A TRANSLATION TABLE REACH PAST 64K)
+uses this program as its worked example for why relocation needs a fixed
+load address:
+
+> Dancing Demon is 10,931 bytes loading at 42F6H. `JR` and `DJNZ` reach
+> +/-127 bytes, so a routine that size CANNOT be internally connected by
+> relative jumps alone; it necessarily contains absolute JP/CALL into its
+> own body, and therefore must load where it was assembled to load.
+
+The premise is true. **The inference is false, and measurably so.**
+Measured by LINEAR SWEEP over the whole 10,931 bytes — not just the
+81.6% reached, so data bytes are included and can only inflate these
+counts:
+
+| | |
+|---|---|
+| distinct CALL targets in the entire payload | **3** — 01C9H, 4018H, 4028H |
+| absolute CALL into its own body | **0** |
+| internal JP | **0** (one JP in the sweep, not internal) |
+| internal control flow, reached code | `JR` x365, `DJNZ` x22 — relative only |
+
+So the routine is not connected by relative jumps ALONE — it is
+connected by relative jumps PLUS A DISPATCHER. Everything beyond +/-127
+bytes goes through the 4018H trampoline, whose target is computed at run
+time by walking the BASIC line-record chain (section 1). That chain is a
+**run-time relocation table**, and it is exactly why the payload can sit
+inside the program image wherever BASIC puts it and still find its own
+routines: it never names an address inside itself.
+
+**The conclusion inverts.** Far from proving that a routine this size
+must load where it was assembled, Dancing Demon is a demonstration of the
+opposite — a 10.9 KB fully position-independent payload, using the
+interpreter's own program structure as its symbol table. The period
+technique it demonstrates is not "load at a fixed address"; it is "locate
+yourself from (40A4H) and dispatch by line number".
+
+What survives of the DESIGN.md passage: relocation is only safe for
+position-independent code, and real routines mostly are not. That general
+claim stands — this program is the exception that shows what it costs to
+be the exception, not the rule's illustration. The section's actual
+subject (a 16-bit operand field cannot name address 617,129) is untouched.
+
 ### Assessment
 
 The terrain is friendlier than expected and the obstacles moved. The CPU
@@ -1427,8 +1471,11 @@ Neither DESIGN.md open question blocks this program: the image spans
 42E9H-7DE5H (15,100 bytes, 33,307 clear of FFFFH) so the window-overflow
 policy does not bind, and the stub-loudness question is orthogonal.
 
-Two of these numbers correct FINDING 19 (the ROM call count) and README
-(the Model I instruction rate). Both corrections were produced by
-resolving addresses through the disassembler rather than by matching
-text — the discipline CLAUDE.md's "corpus counting traps" rule demands,
-applied to a program the corpus tooling cannot currently read.
+THREE DOCUMENTS ARE CORRECTED HERE: FINDING 19 (the ROM call count and
+the dispatcher structure), README (the Model I instruction rate), and
+DESIGN.md (the north-star bullet's "calls no ROM", the self-modifying-code
+paragraph's "sits on the north-star path", and the relocation worked
+example, section 9 — all three applied 2026-09-09). Every correction was
+produced by resolving addresses through the disassembler rather than by
+matching text — the discipline CLAUDE.md's "corpus counting traps" rule
+demands, applied to a program the corpus tooling cannot currently read.

@@ -9,10 +9,18 @@ stub fallback (language and seam RULED 2026-08-13 — see DESIGN.md).
 READ ORDER on a fresh session (local files only — cross-repo pointers rot,
 so they live in COMPANION REPOS below and are not part of the read order):
 1. README.md (one screen: what and why)
-2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 23 numbered findings
+2. Z80_FINDINGS.md — start at "THE GATE NUMBER"; 24 numbered findings.
+   FINDING 24 (2026-09-09) is the most recent and corrects three
+   documents, FINDING 19 among them — read it before quoting anything
+   about Dancing Demon.
 3. DESIGN.md (the authoritative context: language/seam ruling, staged
    plan incl. Phase A, technical reference, testing strategy, the gate,
    decisions)
+4. DANCING_DEMON.md (the north-star acceptance case as a work-item
+   ledger, DD-1..DD-16: core, protocol, interpreter-side dependencies,
+   and an explicit do-not-build-on-spec list). Read it when the topic is
+   Stage 1 shape, the protocol, or what "does it run Dancing Demon"
+   actually requires.
 
 COMPANION REPOS — this is an INDEPENDENT project with two peers, not a
 sub-project of either. Neither is a "parent".
@@ -187,9 +195,14 @@ rulings — those bullets carry their own dates.)
   code exists. Constraints ratified 2026-09-02 and still standing:
   companion engine, never vendored; p77 shim in trs80basic; TRS80_Z80
   discovery; releases may bundle; the first protocol message carries a
-  version and a mismatch is a clean error. FINDING 19 (Dancing Demon)
-  stands as the north-star acceptance case: call-and-return USR is not
-  enough for that class of program.
+  version and a mismatch is a clean error. Dancing Demon stands as the
+  north-star acceptance case: call-and-return USR is not enough for that
+  class of program. RE-MEASURED 2026-09-09 — read FINDING 24 and
+  `DANCING_DEMON.md`, not FINDING 19 alone: the payload is a
+  self-relocating dispatcher that walks the BASIC line-record chain, it
+  DOES call the ROM (01C9H/CLS x4), it needs a Z80 stack inside the 64K
+  that no document places there, and it is fully position-independent.
+  It does NOT need a writable program image.
 - RULED 2026-09-07 in the goal-(1) discussion, three assumptions the
   user put and this side agreed with one correction:
   (a) ONE GENERAL ENGINE, not a per-program package. The core is a
@@ -334,31 +347,52 @@ rulings — those bullets carry their own dates.)
   Still stale, reported not edited: the archive's README.md describes
   itself as the interpreter (its own STATUS already lists deleting the
   duplicate src/ as owed).
-- WHERE TO PICK UP (state read 2026-09-08, end of session). NOTHING IS
+- WHERE TO PICK UP (state read 2026-09-09, end of session). NOTHING IS
   BLOCKED — not on trs80basic, and nothing of theirs on us. The
-  memory-model round trip is CLOSED; it was SUBSTRATE for goal (1), not
-  goal (1), so the named active work has NOT advanced and is still the
-  next thing. TWO OPENS, both inside goal (1), both marked in the docs,
-  both answerable WITHOUT core code: (i) the 42E9H window overflow policy
-  — truncate, refuse, or slide — DESIGN.md "The address space", marked
-  UNDECIDED, live because Dancing Demon's payload is in that image;
+  memory-model round trip is CLOSED. THE DOCS ARE IN STEP as of
+  2026-09-09: README, DESIGN.md, Z80_FINDINGS and DANCING_DEMON.md were
+  reconciled in one pass after FINDING 24, and no known stale claim
+  remains in any of them.
+  WHAT HAPPENED 2026-09-09: a readiness audit of THIS repo against the
+  north star, at the user's request. It re-derived FINDING 19 from its
+  own prose (no committed code implemented its recipe), reproduced every
+  number, and then corrected FINDING 19, README and DESIGN.md on five
+  points — see FINDING 24, sections 1-9. It wrote no core code and did
+  not advance goal (1)'s named active work; it sharpened what Stage 1
+  must actually build, which is the same discipline as Phase A.
+  THREE OPENS, all inside goal (1), all answerable WITHOUT core code:
+  (i) **the stack policy, DD-4** — NEW and now the sharpest of the three:
+  the demon issues 268 calls and DESIGN.md places the stack OUTSIDE the
+  64K, so where SP initialises, who owns it across the USR boundary and
+  where the USR return address is pushed are unwritten. It is the only
+  critical-path decision with nothing on paper anywhere.
   (ii) whether the stub fallback should get LOUDER, marked OPEN above,
   where the measured hazard is 8 of 11 string-packing techniques failing
-  silently. RECOMMENDED INSTRUMENT, offered to the user and not yet
-  ruled on: write the USAGE SKETCH for goal (1) into DESIGN.md — the
-  session a user actually has ("I typed in a listing with an embedded
-  routine, now what?") — because it cannot be written without deciding
-  both opens, which makes it measurement-before-building in the form
-  this project already uses. THREE SMALL TO-DOS, none urgent: give
-  `z80/disasm.py` a CLI (goal (4) is "mostly built" but UNREACHABLE from
-  a shell — the only place waiting currently costs something); a README
-  "Commands and arguments" section (the sweep/oracle/fetch_vectors
-  invocations exist only inside Z80_FINDINGS prose); and a LICENSE
-  (GPLv3 assumed, user ruling still pending from 2026-08-14). A USER
-  GUIDE was considered 2026-09-08 and DEFERRED — there is no
-  user-facing surface yet and the shape a guide must commit to is
-  exactly what the two opens above have not settled; revisit when a
-  BASIC program with an embedded routine first runs end-to-end.
+  silently.
+  (iii) the 42E9H window overflow policy — truncate, refuse, or slide —
+  DESIGN.md "The address space", still UNDECIDED. DEMOTED 2026-09-09: it
+  does NOT bind for the north star after all (that image spans
+  42E9H-7DE5H, 33,307 bytes clear of FFFFH), so it is a goal-(1)
+  question in general and no longer a blocker for the acceptance case.
+  RECOMMENDED INSTRUMENT, offered to the user and not yet ruled on:
+  write the USAGE SKETCH for goal (1) into DESIGN.md — the session a
+  user actually has ("I typed in a listing with an embedded routine, now
+  what?") — because it cannot be written without deciding the opens,
+  which makes it measurement-before-building in the form this project
+  already uses.
+  FOUR SMALL TO-DOS, none urgent: DD-1, an extractor for the
+  program-image idiom plus a tokenized-file reader (FINDING 24 section 8
+  carries the runnable recipe; `phasea` cannot currently read the
+  north-star file at all, and `LargeCollection/` is outside the sweep
+  population); give `z80/disasm.py` a CLI (goal (4) is "mostly built"
+  but UNREACHABLE from a shell); a README "Commands and arguments"
+  section (the sweep/oracle/fetch_vectors invocations exist only inside
+  Z80_FINDINGS prose); and a LICENSE (GPLv3 assumed, user ruling still
+  pending from 2026-08-14). A USER GUIDE was considered 2026-09-08 and
+  DEFERRED — there is no user-facing surface yet and the shape a guide
+  must commit to is exactly what the opens above have not settled;
+  revisit when a BASIC program with an embedded routine first runs
+  end-to-end.
 
 STANDING RULES (do not relearn these the hard way):
 - PHASE A BEFORE THE CORE (DESIGN.md "The gate") — SATISFIED 2026-08-14,

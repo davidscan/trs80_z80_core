@@ -85,8 +85,20 @@ decode and wall-to-wall bit arithmetic; Python has real integers with
 native bit ops where gawk has doubles plus toU/toS juggling; the
 single-step JSON test vectors are a json.load() away; and the Phase A
 disassembler/classifier shares its decode tables with the core — one
-language for the whole ML toolchain. Speed is a non-issue: the target
-is ~440K instr/s (real Model I); table-driven CPython does millions.
+language for the whole ML toolchain. Speed is a non-issue: table-driven
+CPython does millions of instructions per second against a real-Model-I
+target in the low hundreds of thousands.
+FIGURE CORRECTED 2026-09-09 (FINDING 24 section 7): this sentence used
+to put the real Model I at "~440K instr/s", which implies ~4 T-states an
+instruction — true only for the simplest register ops. The table's own
+cycle column gives a mean of 10.8 T-states over the documented set, so
+**~164K instr/s** on a general mix, and 5.67 T-states / **313K instr/s**
+on the north-star payload's actual mix. The claim's direction survives
+and its margin widens, but one caveat is now measured rather than
+assumed: a PRE-DECODED dispatch reaches ~5.5M insn/s with full flag
+computation (~17x the bar), while re-decoding per instruction through
+`z80/disasm.py` reaches only 724K insn/s (2.3x) — so the execution
+decoder must not be the disassembler's decode path.
 
 The cost is the RUNTIME SEAM: USR fires mid-expression against live
 interpreter state (mem[] bytes, video SCR, the live keyboard matrix,
@@ -388,9 +400,13 @@ T-states", and all 92 of ours satisfy it exactly (Z80_FINDINGS FINDING
 check and the other 1688 do not; the column stays "carried but largely
 unvalidated" until the core runs the pinned single-step vectors.
 
-- Model I CPU: Z80 @ 1.77 MHz (~440K instr/s effective). The
-  interpreter's
-  `speed` throttle can slow replay toward authentic feel.
+- Model I CPU: Z80 @ **1,774,080 T-states/s**. Effective instruction
+  rate depends entirely on the mix: ~164K instr/s at the table's
+  documented-set mean of 10.8 T-states, ~313K instr/s on the north-star
+  payload's measured mean of 5.67 (FINDING 24 section 7). The "~440K
+  instr/s effective" this line used to carry was corrected 2026-09-09;
+  quote T-states and the mix, never a single instruction rate. The
+  interpreter's `speed` throttle can slow replay toward authentic feel.
 - Memory map (all already meaningful in the interpreter's mem[]):
   3800H-38FFH keyboard matrix (dec 14336-14591; PEEK(14400) = the
   arrow/space row) — LIVE since 2026-08-13 (Stage 0); the core reads it
@@ -603,12 +619,23 @@ routine into the 16-bit window and run it there. That is already what
 a DATA/POKE loader does. Its limit is that relocation is only safe for
 POSITION-INDEPENDENT code, and real routines mostly are not — which is
 why the intended load address matters and why every loader idiom names
-one (`FOR I=32000`, `DEF USR=`, the 408EH vector). Worked example from
-FINDING 19: Dancing Demon is 10,931 bytes loading at 42F6H. `JR` and
-`DJNZ` reach +/-127 bytes, so a routine that size CANNOT be internally
-connected by relative jumps alone; it necessarily contains absolute
-JP/CALL into its own body, and therefore must load where it was
-assembled to load.
+one (`FOR I=32000`, `DEF USR=`, the 408EH vector).
+WORKED EXAMPLE, REPLACED 2026-09-09 (FINDING 24 section 9). This passage
+used to argue from Dancing Demon that a 10,931-byte routine "necessarily
+contains absolute JP/CALL into its own body, and therefore must load
+where it was assembled to load". The premise — `JR` and `DJNZ` reach
+only +/-127 bytes — is true; the inference is FALSE, and the measurement
+inverts it. Over the whole payload by linear sweep: **0 absolute CALLs
+into its own body, 0 internal JPs, 3 distinct CALL targets in 10,931
+bytes** (01C9H, 4018H, 4028H), with internal control flow `JR` x365 and
+`DJNZ` x22. It is not connected by relative jumps ALONE; it is connected
+by relative jumps PLUS A DISPATCHER, and the BASIC line-record chain it
+walks is a run-time relocation table. So the demon is a 10.9 KB FULLY
+POSITION-INDEPENDENT payload — the demonstration that a routine that size
+need NOT name an address inside itself. The general claim it was cited
+for still stands (relocation is only safe for position-independent code,
+and most real routines are not), but this program is the exception, not
+the illustration of the rule.
 
 SO THE 600K CASE DOES NOT ARISE FOR GOAL (1), and that is not a dodge:
 every rescued listing fits 48K by construction, because the machine it
@@ -622,9 +649,16 @@ address itself at all, by the same 16-bit argument. And note a gap that
 holds regardless of size — the program image is READ-ONLY today
 ("POKEs into the region land in MEM and are never read back — the
 WRITABLE mapping (self-modifying code) stays unbuilt", p75 header), so
-self-modifying code inside the program image is unsupported now. That
-sits on the north-star path, since the Dancing Demon payload lives in
-the image rather than in a loader.
+self-modifying code inside the program image is unsupported now.
+CORRECTION 2026-09-09 (FINDING 24 section 4): this passage used to add
+"That sits on the north-star path, since the Dancing Demon payload lives
+in the image rather than in a loader." It does NOT. The demon's payload
+lives in the image but never writes to it — every real absolute write
+goes to system RAM (4019H-402BH, 4100H), and its self-modification
+target is the 4018H/4028H trampoline. Measured, not reasoned, and it
+confirms the answer already given to trs80basic in
+`handoff/to-trs80basic.md`. The read-only image gap is real and remains
+unbuilt; it is simply not on the north-star path.
 
 WHAT ACTUALLY DESERVES THE ATTENTION is not 800K but ~15K: FINDING 23
 measures ordinary programs silently breaking POKE loaders once the
@@ -661,13 +695,22 @@ reopened from scratch.
 - Adopt the companion repos' culture: pin everything in a regression
   suite from day one; the passing suite pins mechanical behavior, not
   "the emulator works" — real-listing acceptance is the bar.
-- North-star for the coprocess (Z80_FINDINGS FINDING 19, 2026-09-02):
+- North-star for the coprocess (Z80_FINDINGS FINDING 19, 2026-09-02;
+  RE-MEASURED AND CORRECTED BY FINDING 24, 2026-09-09):
   "silent Dancing Demon dances". Its 10.9 KB payload lives inside the
-  tokenized program image, writes video DURING the USR call, polls the
-  keyboard matrix, and calls no ROM — so it needs streamed video
-  writes, live key state, and cycle pacing, and NOT ROM emulation.
-  Call-and-return USR (memory in, run, memory out) is not enough for
-  that class of program; the protocol has to decide this.
+  tokenized program image, writes video DURING the USR call, and polls
+  the keyboard matrix — so it needs streamed video writes, live key
+  state, and cycle pacing. Call-and-return USR (memory in, run, memory
+  out) is not enough for that class of program; the protocol has to
+  decide this.
+  CORRECTION 2026-09-09: this bullet used to end "and calls no ROM ...
+  and NOT ROM emulation". It calls ONE — `CALL 01C9H` (CLS) x4, a
+  documented Level II entry point, so HLE-trappable but not absent.
+  The payload is also not a routine but a SELF-RELOCATING DISPATCHER
+  that patches a JP trampoline into 4018H/4028H and finds its 106
+  subroutines by walking the BASIC line-record chain, which is what
+  makes correct next-line links and a writable, executable 4000-41FF
+  hard requirements. Work items: `DANCING_DEMON.md`.
 - Acceptance corpus: the corpus archive's rescued listings with USR
   routines.
   Space Chase (80 Micro 5/1982) is sound-only USR — runs with sound
