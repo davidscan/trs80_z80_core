@@ -122,14 +122,23 @@ PATCHES = [
      '        }\n'
      '        SK = CK; SLI = CLI; SCP = CP\n'
      '        execstmt()\n'),
+    # Re-anchored 2026-09-10: trs80basic gave the USR stub a call-frame
+    # resolver (usr_resolve), so the one-line body became a block. The
+    # marker still goes at the top of that block, before numarg.
     ('p60_eval.awk',
-     '    if (name ~ /^USR[0-9]?$/) { x = numarg(a1, na); if (E) return "N0"; return "N" x }\n',
+     '    if (name ~ /^USR[0-9]?$/) {\n'
+     '        x = numarg(a1, na); if (E) return "N0"\n'
+     '        usr_resolve(name, x)\n'
+     '        return "N" x\n'
+     '    }\n',
      '    if (name ~ /^USR[0-9]?$/) {\n'
      '        if ("TRS80_POKELOG" in ENVIRON) {\n'
      '            print "USR", name > (ENVIRON["TRS80_POKELOG"])\n'
      '            fflush(ENVIRON["TRS80_POKELOG"])\n'
      '        }\n'
-     '        x = numarg(a1, na); if (E) return "N0"; return "N" x\n'
+     '        x = numarg(a1, na); if (E) return "N0"\n'
+     '        usr_resolve(name, x)\n'
+     '        return "N" x\n'
      '    }\n'),
 ]
 
