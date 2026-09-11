@@ -130,10 +130,17 @@ effect on the t1-t28 bar.
   and `LD HL,(40A4H)` in the payload. Both halves must agree.
 - **DD-14. LOAD of a tokenized program image.** The corpus files are
   tokenized, not detokenized text.
-- **DD-15. The USR call frame must carry the slot digit.** Known latent
-  issue (DESIGN.md decision 3): the spaced-call fix dispatches `USR n(`
-  as name `USR`, discarding the digit. Harmless under the stub, not
-  under a core.
+- **DD-15. The USR call frame must carry the slot digit. — DONE on the
+  interpreter side 2026-09-10.** The spaced-call fix used to dispatch
+  `USR n(` as name `USR`, discarding the digit. trs80basic now folds the
+  digit into the name and its `usr_resolve()` fills a frame per call:
+  USR_SLOT, USR_ENTRY (DEF USRn wins; slot 0 falls back to the 408EH POKE
+  vector; slots 1-9 and an unwritten vector resolve UNDEFINED = entry -1,
+  which this core reads as ?FC), and USR_ARG. DEF USRn addresses are stored
+  in USRDEF[0..9]. `TRS80_USR_TRACE=1` dumps the frame; `programs/tests/usr.sh`
+  asserts it. The frame is resolved but not yet consumed -- the p77 shim that
+  hands it to this core is still unbuilt. (trs80basic session, user's
+  permission, 2026-09-10; handoff REPLY 5.)
 - **DD-16. The core must reproduce THE ADDRESS-RESOLUTION CONTRACT**
   (`../trs80basic/src/p75_mem.awk`) byte-for-byte, including the
   post-fix order: `a in SPK` outranks the program image, HIMEM no longer

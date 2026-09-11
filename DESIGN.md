@@ -813,13 +813,13 @@ STILL OPEN (decide when work starts):
    instruction) lets the two items share it. Low stakes.
 3. Coprocess protocol details (framing, delta-vs-full memory sync,
    instruction budget size): design with the plumbing, not before.
-   ONE CONSTRAINT already known (interpreter-side review, 2026-08-14):
-   the call frame must carry the USR SLOT NUMBER, and the interpreter's
-   spaced-call
-   fix (8c38dca6) currently DISCARDS the slot digit of `USR n(` before
-   dispatch — that dispatch point must pass it through when the
-   plumbing is built. Recorded in trs80basic/STATUS.local.md's ML
-   entry too.
+   ONE CONSTRAINT already known (interpreter-side review, 2026-08-14;
+   RESOLVED 2026-09-10): the call frame must carry the USR SLOT NUMBER, and
+   the interpreter's spaced-call fix used to DISCARD the slot digit of
+   `USR n(` before dispatch. trs80basic now folds the digit into the name
+   and resolves a full frame per call (slot, entry address, argument) in
+   usr_resolve(); the frame is not yet consumed, because the p77 shim is
+   still unbuilt. Recorded in trs80basic/STATUS.local.md's ML entry too.
 4. INTEGRATION SHAPE — RATIFIED 2026-09-02/04 (user): companion
    engine, NEVER vendored. A p77 protocol shim in trs80basic, the engine
    discovered via `TRS80_Z80`, releases may bundle the engine (the

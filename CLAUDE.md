@@ -333,12 +333,13 @@ rulings — those bullets carry their own dates.)
   listings than the core is. Both shipped 2026-08-14 (8c38dca6, in
   awk_BASIC_interpreter's history — pre-split; that code now lives in
   trs80basic and was confirmed present there 2026-09-04).
-- KNOWN LATENT ISSUE, recorded not fixed (DESIGN.md decision 3): the
-  interpreter's spaced-call fix dispatches `USR n(` as name `USR`,
-  DISCARDING the slot digit, while `USRn(` keeps it. Harmless under the
-  stub (which ignores the slot), but the coprocess call frame must carry
-  the slot, so that dispatch point has to pass it through when the
-  plumbing is built.
+- LATENT ISSUE, FIXED on the interpreter side 2026-09-10 (DESIGN.md
+  decision 3, DD-15): the spaced-call fix used to dispatch `USR n(` as name
+  `USR`, DISCARDING the slot digit. trs80basic now folds the digit into the
+  name and resolves a full USR frame per call (slot, entry address from
+  USRDEF[0..9] or the 408EH vector, argument) in usr_resolve(); undefined
+  slots resolve to entry -1 (?FC). The frame is not yet consumed -- the p77
+  shim is unbuilt. `TRS80_USR_TRACE=1` in trs80basic dumps it.
 - COMPANION-SIDE STATE (2026-09-04): trs80basic/STATUS.local.md's
   "Machine-language call support" entry was rewritten the same day as a
   PEER coordination entry (integration shape, seam rules, state on this
