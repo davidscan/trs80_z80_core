@@ -1059,6 +1059,21 @@ This also gives the machine-size question a home: a core that presents itself as
 
 ### Addendum: the string-space allocator does not reclaim (same reading)
 
+**STATUS 2026-09-10 — FIXED BY trs80basic, AND THE "HARDWARE PARITY" LINE
+BELOW WAS WRONG.** Their seam audit (`trs80basic/AUDIT_SEAM_2026-09-10.local.md`,
+finding 1) measured the consequence this addendum under-called: `VARPTR(A$)`
+answered a NEW address on every call (`65533 65520 65507`), so the two-call
+period idiom `PEEK(VARPTR(A$)+1)+256*PEEK(VARPTR(A$)+2)` composed a dead
+address (one-call 65278, two-call 64764) and any VARPTR loop raised `?OM`; 162
+corpus listings call VARPTR on the same string twice, 85 in the one-line form.
+On hardware VARPTR allocates nothing — it returns the descriptor's fixed
+variable-table slot — so "matches the real machine's lack of string
+reclamation" was not a parity argument. Fixed in `p75 sp_materialize`: the
+descriptor is permanent for the run and only the data bytes re-home, only on
+growth. Fixture: `trs80basic/programs/tests/varptr.bas`. The text below is
+the original reading, kept as written. (Edited here by the trs80basic session
+with the user's explicit permission, 2026-09-10.)
+
 `sp_materialize()` is a BUMP allocator. `SSP` only ever descends; `sp_free()`
 deletes a variable's mapping cells (`SPK`/`SPT`/`SPV`) but does not raise `SSP`,
 and `sp_reset()` restores it to `HIMEM` wholesale on CLEAR/RUN/NEW. So a program
