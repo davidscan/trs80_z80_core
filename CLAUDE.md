@@ -212,8 +212,11 @@ rulings — those bullets carry their own dates.)
       shape and it is what lets the same engine serve goals (2)-(4).
   (b) THE CORE IS OPTIONAL and the interpreter degrades without it —
       correct, but "no-op" is the wrong word and the difference matters.
-      The shipped stub EVALUATES AND RETURNS THE ARGUMENT (USRn(x) -> x)
-      with a one-time notice; POKEd machine-code bytes still land in
+      The shipped stub EVALUATES AND RETURNS THE ARGUMENT (USRn(x) -> x).
+      CORRECTED 2026-09-11: it had NO notice at all until that day; it now
+      prints ONE stderr line per run tallying the calls not executed by
+      entry address, and TRS80_USR=strict raises ?FC (interpreter commit
+      a46b5da).  POKEd machine-code bytes still land in
       mem[], so only EXECUTION is stubbed and the memory image stays
       consistent for a later core. The measured hazard: 8 of the 11
       trs-80.com string-packing techniques fail SILENTLY today — a

@@ -113,6 +113,14 @@ HL back to the evaluator). The agreed shape:
   terminating RET, returns HL, the memory write-set, and a cycle count.
   awk applies writes through its existing device mapping, so video writes
   render exactly like POKEs.
+  BUILT ON THE INTERPRETER SIDE 2026-09-11 (branch p77): the exact wire
+  is PROTOCOL.md in this tree.  What this bullet did not yet say and the
+  protocol does: the frame is a sparse image resolved through the
+  address-resolution contract, delta after the first; video is streamed
+  DURING the call (`V`), not returned at RET; the keyboard is a live
+  callback (`K`); `T` ticks carry BREAK and keep the read guard quiet;
+  `sp=` seats the Z80 stack at the interpreter's SSP; the return says
+  whether 0A9AH was called.
   CORRECTION 2026-09-11 (trs80basic seam audit finding 4, user's
   permission): "the sparse mem[] contents" was wrong and would ship an
   EMPTY payload. trs80basic's `mem[]` holds none of the packed-string
@@ -498,7 +506,13 @@ STANDING RULES:
    text is unbounded interpreter-side but the image mapped at 42E9H is
    inside a 16-bit space. What happens to a program too large to map —
    truncate the window and say so, refuse and report, or map a
-   sliding window — is UNDECIDED. It is a live question for goal (1)
+   sliding window — was UNDECIDED until 2026-09-11, when the user RULED
+   TRUNCATE AT A WHOLE LINE: the image stops before the first line whose
+   record plus terminator would cross RAMTOP, the 00 00 terminator is
+   written there, 40F9H reports the cut, and one stderr note is printed
+   the first time the truncated image is consulted (interpreter commit
+   9036f81).  DD-11's "correct next-line links" therefore holds at every
+   program size.  It was a live question for goal (1)
    because FINDING 19's Dancing Demon payload lives inside the program
    image itself, at 42F6H.
 

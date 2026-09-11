@@ -66,7 +66,14 @@ Visually self-verifying; no transcript can assert it.
   full flag computation measures 5,470,126 insn/s (~17x). Architectural
   constraint, settled by measurement before the code exists.
 
-- **DD-4. A stack policy.** DESIGN.md places BASIC's stack outside the
+- **DD-4. A stack policy. — RULED 2026-09-11 (user, via the interpreter
+  session): SP = the interpreter's SSP at call time (carried as `sp=` in
+  every CALL), the core owns SP for the call and pushes into its own RAM
+  beneath it (those bytes return in the write-set), and the USR return
+  address is a SENTINEL the core pushes in 0000-2FFFH; PC entering ROM
+  space is one mechanism for "frame ends" and for the HLE traps.  See
+  PROTOCOL.md "A call".  The record below is kept as the reasoning.**
+  DESIGN.md places BASIC's stack outside the
   64K, which is right for BASIC and insufficient here: 268 calls need a
   real stack at a real 16-bit address. Undecided — where SP initialises,
   who owns it across the USR boundary, where the USR return address is
@@ -96,7 +103,13 @@ Visually self-verifying; no transcript can assert it.
 
 ## B. This repo — the protocol (unbuilt; the real work)
 
-- **DD-7. Streamed video, not memory-at-RET.** The animation writes
+- **DD-7. Streamed video, not memory-at-RET. — PROTOCOL DONE 2026-09-11:
+  `V` lines during the call, drawn as they arrive; the frame in is the
+  interpreter's sparse contract-resolved image with delta frames after
+  the first; `K` is the only callback; `T` ticks carry BREAK.  See
+  PROTOCOL.md; the interpreter's shim is built (its branch p77) and
+  `programs/tests/z80_stub.py` there is the reference implementation of
+  THIS side.  What remains of DD-7 is the core's half.** The animation writes
   3C00-3FFF *during* the USR call. FINDING 19's central point and still
   the one that decides the protocol's shape: call-and-return USR
   (memory in, run, memory out) cannot serve this class of program.
@@ -116,7 +129,9 @@ Visually self-verifying; no transcript can assert it.
   entries (FINDING 21). Pacing this program leans on the column for real
   for the first time.
 
-- **DD-10. Sustained execution.** Long-running USR with the interpreter
+- **DD-10. Sustained execution. — the protocol half exists (T ticks,
+  READ_TIMEOUT guard, pid kill, NEED resend, version handshake, all in
+  PROTOCOL.md and exercised by the interpreter's z80.sh).** Long-running USR with the interpreter
   responsive, plus whatever the version handshake and clean-mismatch
   error require (ratified 2026-09-02).
 
@@ -133,7 +148,11 @@ effect on the t1-t28 bar.
   links.** The chain is the dispatch mechanism, not decoration — a wrong
   link is a jump into garbage with no error. DESIGN.md already flags the
   `% 65536` wrap in `pm_build`; this program makes it load-bearing.
-- **DD-12. 4000-41FF writable AND executable.** The payload writes C3H
+- **DD-12. 4000-41FF writable AND executable. — CORRECTED 2026-09-11: the
+  write contract shipped 2026-09-09 (efc1c02) and the store primitive is
+  now `poke_byte` (a42c41a); the write-set is applied through it, so a
+  store to 4018H lands in the interpreter's MEM[] and comes back in the
+  next frame.  Nothing outstanding.** The payload writes C3H
   to 4018H and a target to 4019H, then calls it. Whether writes there
   reach the core's RAM or fall into a projection is exactly the
   `st_poke` asymmetry already raised with trs80basic and still
@@ -158,6 +177,13 @@ effect on the t1-t28 bar.
   (`../trs80basic/src/p75_mem.awk`) byte-for-byte, including the
   post-fix order: `a in SPK` outranks the program image, HIMEM no longer
   bounds the shadow, and unwritten memory reads **255**, not 0.
+
+- **DD-17. Conform to PROTOCOL.md (mirrored here from trs80basic).** The
+  core's acceptance bar before any listing: `TRS80_Z80="python3
+  /path/to/core" sh programs/tests/z80.sh` in trs80basic passes, with the
+  stub's canned entries (7000H-700AH, listed in the stub) implemented as
+  real machine code in the frame.  The shim does not adapt to the core.
+  Announce `pid=` in the `Z80` hello line and exit on EOF.
 
 ## D. Not needed — do not build on spec
 
