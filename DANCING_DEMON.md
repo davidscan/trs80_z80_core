@@ -68,9 +68,17 @@ Visually self-verifying; no transcript can assert it.
 
 - **DD-4. A stack policy.** DESIGN.md places BASIC's stack outside the
   64K, which is right for BASIC and insufficient here: 268 calls need a
-  real stack at a real 16-bit address. Undecided and unrecorded — where
-  SP initialises, who owns it across the USR boundary, where the USR
-  return address is pushed. *Decide before writing the core, not during.*
+  real stack at a real 16-bit address. Undecided — where SP initialises,
+  who owns it across the USR boundary, where the USR return address is
+  pushed. *Decide before writing the core, not during.*
+  INTERPRETER-SIDE PROPOSAL (trs80basic seam audit finding 5, 2026-09-11,
+  NOT a ruling): seat SP at `SSP`, the bottom of allocated string space,
+  mirroring hardware where the stack sits just below string space, and
+  push into ordinary `mem[]` beneath it. Two hazards on the record: `SSP`
+  now moves only on genuine string growth (the 2026-09-10 VARPTR fix made
+  it steady, though still not fixed for the run), and a stack that grows
+  into an SPK region writes through into a packed string — authentic,
+  silent. Recorded so the decision starts from a concrete option.
 
 - **DD-5. One HLE trap: 01C9H (CLS).** Documented in four library books,
   so legal under the never-commit-ROM rule, and trivial to reimplement.
@@ -92,6 +100,11 @@ Visually self-verifying; no transcript can assert it.
   3C00-3FFF *during* the USR call. FINDING 19's central point and still
   the one that decides the protocol's shape: call-and-return USR
   (memory in, run, memory out) cannot serve this class of program.
+  RELATED (finding 4, 2026-09-11): whatever the frame carries as "memory,"
+  it is NOT trs80basic's raw `mem[]` — the payload at 42F6H, the packed
+  strings and the system pointers are `dopeek` projections, so the frame's
+  memory image must be resolved through the address-resolution contract,
+  not read out of `mem[]`. See DESIGN.md's corrected CALL FRAME bullet.
 
 - **DD-8. Live key state into coprocess reads of 3800-38FFH.** One site,
   `LD HL,38FFH`, the all-rows poll. The interpreter's keyboard layer

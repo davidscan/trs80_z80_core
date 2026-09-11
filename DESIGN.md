@@ -109,10 +109,20 @@ HL back to the evaluator). The agreed shape:
   sub-millisecond per call, so per-frame USR calls in games stay
   viable. (Python startup is ~30ms; spawn-per-call is disqualified.)
 - CALL FRAME OUT, WRITE-SET BACK: awk sends entry address, the HL
-  argument, and the sparse mem[] contents (or deltas — dopoke can log);
-  Python executes to the terminating RET, returns HL, the memory
-  write-set, and a cycle count. awk applies writes through its existing
-  device mapping, so video writes render exactly like POKEs.
+  argument, and the memory the routine can SEE; Python executes to the
+  terminating RET, returns HL, the memory write-set, and a cycle count.
+  awk applies writes through its existing device mapping, so video writes
+  render exactly like POKEs.
+  CORRECTION 2026-09-11 (trs80basic seam audit finding 4, user's
+  permission): "the sparse mem[] contents" was wrong and would ship an
+  EMPTY payload. trs80basic's `mem[]` holds none of the packed-string
+  bytes, the read-only program image, the six system pointers, the RND
+  seed, the screen or the keyboard — those are PROJECTIONS resolved by
+  THE ADDRESS-RESOLUTION CONTRACT's six rules in `dopeek`. The frame's
+  memory must be sourced through that resolution (materialise a flat
+  image, or read per address into `dopeek` with a cache) — not the raw
+  `mem[]` array. Which mechanism is the deferred protocol design; the
+  point here is only that `mem[]` is not the machine's memory.
 - DEVICE READS AS PROTOCOL CALLBACKS: reads of 3800H-38FFH (and any
   other live device) round-trip to awk, which answers from the live
   keyboard matrix — this is what makes wait-for-keypress routines work
