@@ -828,6 +828,46 @@ RULED 2026-08-13:
    anticipated consumers, NOT built until asked (see "Architecture:
    the reusable seams").
 
+RULED 2026-09-11 (user, on this side's recommendation; the interpreter
+side asked in its REPLY 7 that the core pick the address and write it
+here):
+6. THE USR RETURN SENTINEL IS **2FFDH**. Before jumping to `entry` the
+   core pushes 2FFDH; the program counter arriving there ends the call
+   and produces the `RET` line (PROTOCOL.md "A call"). It lives in ROM
+   space so that ONE fetch-time check -- PC entering 0000H-2FFFH, which
+   holds no bytes on either side -- covers every case, dispatched by
+   address: 2FFDH ends the frame; 01C9H (CLS), 0A7FH (argument to HL)
+   and 0A9AH (HL to result, `result=1`) are the served HLE traps; any
+   other address in the range is `ERR rom` naming it, including a PC
+   that wrapped from FFFFH to 0000H. The trap does the RET the ROM
+   routine would have done, so the idiom `CALL 0A7FH ... JP 0A9AH` ends
+   the frame naturally: the trap pops the sentinel.
+   WHY THIS ADDRESS. The one hazard is a collision with a documented
+   Level II entry point: a routine that CALLed the colliding service
+   would return to BASIC mid-execution with no error -- the silent
+   failure class this project names as the one that matters. The
+   library places 2FFDH in the five-byte tail 2FFBH-2FFFH that two
+   independent books describe as the end of the Level II ROM with
+   nothing there (Tab "Level II ROMs", memory-map entry after the
+   2E53H-2FFAH edit routine; "ROM Routines Documented", version-
+   difference table), and the highest entry point in ROM Routines
+   Documented's index is about 2CBDH. No corpus listing (LC_ALL=C sweep
+   for 12285-12287, &H2FFD-F, 2FFDH-2FFFH) and nothing in trs80basic's
+   source names it. CITATION STATUS: both books were read in the OCR
+   text; the PDF pages have not been read (the archive path is needed),
+   so this is the one ruling here still owed a page check -- it would
+   only ever move the sentinel within the same tail.
+   WHAT SEES THE VALUE. The shim never does (it reads only `RET`/`ERR`),
+   and the reference stub uses no sentinel. BASIC can: the two pushed
+   bytes at SP-2 (FDH) and SP-1 (2FH) return in the write-set like any
+   store, so a routine that inspects its own return address, or a
+   listing that PEEKs the stack afterwards, sees 2FFDH where hardware
+   showed a ROM address. Rare; the classifier can measure it if asked.
+   GENERALISES. The two future hooks the interpreter side noted in its
+   REPLY 9 -- executing the 400CH BREAK vector, calling a custom device
+   driver named at 4026H -- are each another frame with the same push,
+   so the address does not change for them.
+
 STILL OPEN (decide when work starts):
 1. LICENSE: trs80basic is GPLv3 (c) 2026 David Forbis; mirroring it
    here is the default assumption. No LICENSE file yet — user ruling

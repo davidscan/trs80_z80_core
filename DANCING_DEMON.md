@@ -72,7 +72,10 @@ Visually self-verifying; no transcript can assert it.
   beneath it (those bytes return in the write-set), and the USR return
   address is a SENTINEL the core pushes in 0000-2FFFH; PC entering ROM
   space is one mechanism for "frame ends" and for the HLE traps.  See
-  PROTOCOL.md "A call".  The record below is kept as the reasoning.**
+  PROTOCOL.md "A call".  THE SENTINEL IS **2FFDH**, ruled the same day
+  (DESIGN.md decision 6: the documented empty tail of the ROM, above
+  every documented entry point).  The record below is kept as the
+  reasoning.**
   DESIGN.md places BASIC's stack outside the
   64K, which is right for BASIC and insufficient here: 268 calls need a
   real stack at a real 16-bit address. Undecided — where SP initialises,
@@ -208,8 +211,9 @@ effect on the t1-t28 bar.
 
 ## Open questions this file does not settle
 
-1. **Where does the Z80 stack live** (DD-4) — the only design decision
-   on the critical path with nothing written about it anywhere.
+1. ~~**Where does the Z80 stack live** (DD-4)~~ — SETTLED 2026-09-11: SP
+   at SSP, the core owns it for the call, the return sentinel is 2FFDH
+   (DD-4, DESIGN.md decision 6). Kept so the numbering below holds.
 2. **How much video traffic per second** the protocol must carry. The
    34 static write sites say nothing about dynamic volume; measuring it
    needs a running core, so this is the first item that cannot be
