@@ -4,8 +4,9 @@ The single acceptance target for the coprocess (DESIGN.md "Testing
 strategy", Z80_FINDINGS FINDING 19): **"silent Dancing Demon dances."**
 This file is the work-item ledger for that run — what must be true, who
 owns it, and what is already measured. It is not a plan of record and
-schedules nothing; Stage 1 is still not started and CLAUDE.md's
-"measure before building" rule still governs.
+schedules nothing; Stage 1 was BUILT 2026-09-12 (it read "still not
+started" until then) and CLAUDE.md's "measure before building" rule
+still governs what comes next.
 
 EVIDENCE BASE: FINDING 19 (2026-09-02, the profile) and **FINDING 24
 (2026-09-09, the re-measurement)**, which reproduced FINDING 19 exactly
@@ -36,7 +37,15 @@ Visually self-verifying; no transcript can assert it.
 | real-time bar | **313,030 insn/s** (mean 5.67 T-states at 1.77 MHz) |
 | variants | all 15 images carry the same payload; 8 byte-identical. **One target, not four.** |
 
-## A. This repo — the core (all unbuilt; Stage 1)
+## A. This repo — the core (Stage 1: BUILT 2026-09-12 except DD-1)
+
+STATUS 2026-09-12, item by item (the entries below keep their pre-build
+text as the record): DD-1 OPEN. DD-2 BUILT — `z80/cpu.py`, all
+1,604,000 pinned vectors pass. DD-3 BUILT — pre-decoded closure pages,
+measured 2.1-2.7M insn/s. DD-4 RULED and BUILT — SP = SSP, sentinel
+2FFDH pushed. DD-5 BUILT — 01C9H served, and 0A7FH/0A9AH with it (the
+idiom's two services, not needed by the demon). DD-6 BUILT — every OUT
+discarded, `IN A,(FFH)` reads 127.
 
 - **DD-1. An extractor for the program-image idiom.** No committed code
   reads this payload. `phasea/sweep.py` covers `runnable/` + `blocked/`
@@ -113,7 +122,15 @@ Visually self-verifying; no transcript can assert it.
   with the interpreter's mode. `OUT` is discarded on that side and the
   bit-3 width switch is built nowhere; for the demon nothing changes.
 
-## B. This repo — the protocol (specified in PROTOCOL.md; the interpreter's half built; the core's half unbuilt)
+## B. This repo — the protocol (specified in PROTOCOL.md; both halves built as of 2026-09-12)
+
+STATUS 2026-09-12: the core's half of DD-7 through DD-10 is BUILT in
+`z80/coprocess.py` — video stores stream as `V` lines at every tick and
+before `RET` (DD-7); a read of 3800H-38FFH is the `K` callback (DD-8);
+when HELLO carries an mhz the call is paced to real time at each tick
+(DD-9; the cycle column it leans on is now vector-validated); `T` ticks
+every 8870 T-states carry BREAK and keep the interpreter alive (DD-10).
+The entries below keep their pre-build text as the record.
 
 - **DD-7. Streamed video, not memory-at-RET. — PROTOCOL DONE 2026-09-11:
   `V` lines during the call, drawn as they arrive; the frame in is the
@@ -201,6 +218,11 @@ stub in `TRS80_Z80`).
   (`../trs80basic/src/p75_mem.awk`) byte-for-byte, including the
   post-fix order: `a in SPK` outranks the program image, HIMEM no longer
   bounds the shadow, and unwritten memory reads **255**, not 0.
+  AS BUILT 2026-09-12: the core reproduces NOTHING of the contract, by
+  PROTOCOL.md's ruling — the frame carries bytes already resolved
+  through `dopeek`, the core keeps a flat 64K initialised to 255 and
+  applies runs over it, and any address no frame named reads 255. The
+  contract lives on one side only.
 
 - **DD-17. Conform to PROTOCOL.md (mirrored here from trs80basic; the
   shim, stub and suite are on their main since 2026-09-11).** The
@@ -209,6 +231,12 @@ stub in `TRS80_Z80`).
   stub's canned entries (7000H-700AH, listed in the stub) implemented as
   real machine code in the frame.  The shim does not adapt to the core.
   Announce `pid=` in the `Z80` hello line and exit on EOF.
+  **CONFORMANT 2026-09-12:** `cd ../trs80basic && TRS80_Z80="python3
+  ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh` prints
+  `Z80 FIXTURE OK`, and t32 there is byte-identical to the stub's run.
+  The fixture lays the routines out from 7100H and maps each canned
+  entry to its routine (the entries are one byte apart); 7004H and
+  7008H stay harness hooks as in the stub.
 
 ## D. Not needed — do not build on spec
 

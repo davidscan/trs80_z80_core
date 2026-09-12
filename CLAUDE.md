@@ -26,6 +26,11 @@ so they live in COMPANION REPOS below and are not part of the read order):
    never edit it here; changes come from that side). Read it before
    writing any protocol or frame code: it is the core's acceptance bar
    (DD-17).
+6. The two docstrings that ARE the core, since 2026-09-12: `z80/cpu.py`
+   (the execution core — what is modelled and why, how decode consumes
+   the table) and `z80/coprocess.py` (the machine around it — frames,
+   sentinel, the three HLE traps, streaming, ticks, the fixture's
+   entry-address mapping, the one known port-FFH divergence).
 
 COMPANION REPOS — this is an INDEPENDENT project with two peers, not a
 sub-project of either. Neither is a "parent".
@@ -202,12 +207,24 @@ rulings — those bullets carry their own dates.)
   down GOAL (1), integrating machine code into BASIC programming, which
   the user calls the highest bang-for-the-buck piece. Detailed protocol
   handshaking is still NOT the topic yet.
-- STAGE 1 IS NOT STARTED ON THIS SIDE. No opcode-execution code exists
-  here and no protocol code exists here; `z80/` is still the table and
-  the disassembler. THE INTERPRETER'S HALF IS DONE (2026-09-11): the
+- STAGE 1 IS BUILT ON THIS SIDE (2026-09-12; the user gave the go
+  ruling that day). `z80/cpu.py` is the execution core — decode is a
+  consumer of `z80/table.py`, closures pre-built into seven 256-slot
+  pages — and it passes ALL 1,604,000 pinned single-step vectors
+  (`tests/test_cpu_vectors.py`, `Z80_VECTORS=all`), which also validates
+  the cycle column by execution; measured 2.1-2.7M insn/s against the
+  313K bar. `z80/coprocess.py` + `core.py` are PROTOCOL.md's core half:
+  trs80basic's `sh programs/tests/z80.sh` passes with
+  `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture"` (DD-17) and
+  their t32 transcript is byte-identical to the stub's; 126 tests green
+  (`python3 -m unittest discover -s tests`). Commits e5dd614, 3eb73d6.
+  [SUPERSEDED that day, kept for the record: "STAGE 1 IS NOT STARTED ON
+  THIS SIDE. No opcode-execution code exists here and no protocol code
+  exists here; `z80/` is still the table and the disassembler."]
+  THE INTERPRETER'S HALF WAS DONE FIRST (2026-09-11): the
   protocol is written (PROTOCOL.md, mirrored here), the shim is on their
-  main, and the go ruling for the core build is the user's and is still
-  PENDING — see WHERE TO PICK UP. Constraints ratified 2026-09-02 and
+  main, and the go ruling for the core build was the user's — GIVEN
+  2026-09-12, see WHERE TO PICK UP. Constraints ratified 2026-09-02 and
   still standing, now all embodied in PROTOCOL.md: companion engine,
   never vendored; p77 shim in trs80basic; TRS80_Z80 discovery; releases
   may bundle; the first protocol message carries a version and a
@@ -448,16 +465,34 @@ rulings — those bullets carry their own dates.)
   LISTING AND A RUNNING USR ROUTINE, and its acceptance bar is written:
   DD-17, `TRS80_Z80="python3 /path/to/core" sh programs/tests/z80.sh`
   passing in trs80basic with the stub's canned entries implemented as
-  real machine code. The docs here were audited in one pass on
-  2026-09-11 after the sentinel ruling. THE AGENDA, in order:
-  1. THE USER'S STAGE 1 GO RULING — still PENDING. The standing rule
-     says no core code before goal (1)'s shape is settled; the protocol,
-     the stack, the frame and the overflow policy are now all settled,
-     and the USAGE SKETCH (the session a user actually has: "I typed in
-     a listing with an embedded routine, now what?") was offered
-     2026-09-09 as the instrument and never ruled on. Present the state,
-     stop, and let the user say whether the sketch comes first or the
-     build does (THE GATE RULING IS A REVIEWED CHECKPOINT, below).
+  real machine code — MET 2026-09-12. The docs here were audited in one
+  pass on 2026-09-11 after the sentinel ruling, and again 2026-09-12
+  after the build. THE AGENDA, in order:
+  0. THE DANCING DEMON END-TO-END RUN is blocked ONLY on trs80basic's R1
+     tokenized loader (their item, DD-14): no supported path there loads
+     the 10,931-byte payload intact today (detok rewrites 14 bytes
+     inside it). The core is ready for it. Once R1 lands, the two open
+     questions this side could never measure before a running core —
+     video traffic volume (open question 2) and how faithful the pacing
+     must be to read as dancing (question 3) — can be measured.
+     TWO THINGS TO KNOW BEFORE THAT RUN: (a) the ONE KNOWN DIVERGENCE —
+     port FFH reads 127 here regardless of display mode, because the
+     interpreter's 32/64-character mode is not in the frame; BASIC's
+     INP(255) says 63 in 32-character mode. The demon's two OUTs are
+     discarded (DD-6) and it never reads the port. (b) `--fixture` is
+     NOT contiguous code at 7000H-700AH: the stub's entry addresses are
+     one byte apart, so the fixture lays the routines out from 7100H
+     and maps each canned entry to its routine; 7004H (never answers)
+     and 7008H (forgets) remain harness hooks exactly as in the stub.
+  1. THE USER'S STAGE 1 GO RULING — GIVEN 2026-09-12 ("Go ahead with
+     #1"), and the core was built the same day (WHERE THINGS STAND).
+     [Kept for the record: the standing rule
+     said no core code before goal (1)'s shape was settled; the protocol,
+     the stack, the frame and the overflow policy were all settled by
+     2026-09-11, and the USAGE SKETCH (the session a user actually has:
+     "I typed in a listing with an embedded routine, now what?") was
+     offered 2026-09-09 as the instrument and never ruled on — the user
+     ruled build first.]
   2. ITEMS THEIR REPLY 4 (2026-09-10) FOUND ON THIS SIDE, all
      reproduced there; (d) and (e) were FIXED 2026-09-11 (7f42678), (a)-(c)
      are still open: (a) `phasea/extract.py` finds READ/POKE
@@ -502,6 +537,9 @@ rulings — those bullets carry their own dates.)
 
 STANDING RULES (do not relearn these the hard way):
 - PHASE A BEFORE THE CORE (DESIGN.md "The gate") — SATISFIED 2026-08-14,
+  AND THE GATE IS PASSED: the core was built 2026-09-12 on the user's
+  go ruling, after every measurement the rule asked for was in.
+  The rule's discipline stands for the next build.
   kept because the discipline recurs: the first artifact was the static
   disassembler/classifier over the corpus archive's DATA/POKE loader
   bytes, and no opcode-execution code was written until its numbers

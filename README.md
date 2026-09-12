@@ -14,10 +14,20 @@ attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
-**STATUS (2026-09-11): PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK
-CLOSED, MEMORY-MODEL HANDOFF CLOSED, NORTH STAR RE-MEASURED, PROTOCOL
-RATIFIED AND BUILT ON THE INTERPRETER SIDE, STAGE 1 (THE CORE) NOT
-STARTED.** Phase A — the static disassembler/classifier over the
+**STATUS (2026-09-12): STAGE 1 IS BUILT.** The user gave the go ruling
+on 2026-09-12 and the core landed the same day in two commits: `e5dd614`
+(`z80/cpu.py`, the execution core, passing **all 1,604,000** pinned
+single-step vectors, measured at 2.1-2.7M insn/s against the 313K bar)
+and `3eb73d6` (`z80/coprocess.py` + `core.py`, PROTOCOL.md's core half;
+trs80basic's `sh programs/tests/z80.sh` passes end to end with
+`TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture"`, and its t32
+transcript is byte-identical to the stub's). 126 tests green. See "Run"
+below. The Dancing Demon end-to-end run now waits only on trs80basic's
+R1 tokenized loader (their item).
+[The line this replaced, kept for the record: "STATUS (2026-09-11):
+PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK CLOSED, MEMORY-MODEL
+HANDOFF CLOSED, NORTH STAR RE-MEASURED, PROTOCOL RATIFIED AND BUILT ON
+THE INTERPRETER SIDE, STAGE 1 (THE CORE) NOT STARTED."] Phase A — the static disassembler/classifier over the
 corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
 **5** unlocked listings. The one remaining hole in that measurement,
 FINDING 7's 96 loaders static extraction could not resolve, was then
@@ -98,17 +108,36 @@ acceptance bar before any listing is DD-17: pass `z80.sh` with
 `TRS80_Z80` pointing at it.
 
 See Z80_FINDINGS.md (24 findings) and DANCING_DEMON.md (the north-star
-work-item ledger). Stage 1 (the core itself) is NOT started and no core
-code has been written. Durable artifacts: the
+work-item ledger). Stage 1 (the core itself) is BUILT as of 2026-09-12
+(it read "NOT started" until that day). Durable artifacts: the
 validated 1780-entry opcode table (z80/table.py), disassembler,
 extractor/classifier, sweep, the oracle, the pinned single-step vector
-suite (tools/fetch_vectors.py), 104 tests. The debt to the interpreter —
+suite (tools/fetch_vectors.py), the execution core (z80/cpu.py), the
+coprocess (z80/coprocess.py, core.py), 126 tests. The debt to the interpreter —
 the one-line `DEF USR 0=` parse fix — was PAID there 2026-08-14.
 
 Read DESIGN.md for everything: goal, staged plan, technical reference
 (addresses, ROM entry points, ports), the coprocess seam, testing
 strategy, legal constraints, and decisions. PROTOCOL.md is the wire
 contract the core must conform to. CLAUDE.md is the session bootstrap.
+
+## Run
+
+    TRS80_Z80="python3 /path/to/trs80_z80_core/core.py" ../trs80basic/basic prog.bas
+
+`core.py` is what `TRS80_Z80` names; it speaks PROTOCOL.md version 1 on
+stdin/stdout and `USR` routines in `prog.bas` then execute. `--fixture`
+adds the machine-code routines behind the reference stub's canned entry
+addresses (laid out from 7100H and mapped by entry; 7004H and 7008H stay
+harness hooks), which is what trs80basic's conformance suite needs:
+
+    cd ../trs80basic && TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh
+
+Tests here:
+
+    python3 -m unittest discover -s tests          # 126 tests; vectors sampled 40/file
+    python3 tools/fetch_vectors.py --all           # once: the 1.37 GB pinned suite
+    Z80_VECTORS=all python3 -m unittest tests.test_cpu_vectors   # all 1,604,000 cases, ~20 s
 
 ## Why this exists (one paragraph)
 

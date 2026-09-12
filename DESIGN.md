@@ -337,6 +337,10 @@ and re-filed the rest under deeper blockers; grep can no longer answer
 "what would a working Z80 unlock" — only disassembly can.
 
 STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
+BUILT 2026-09-12 (commits e5dd614 and 3eb73d6): `z80/cpu.py` passes all
+1,604,000 pinned single-step vectors and `z80/coprocess.py` + `core.py`
+pass trs80basic's z80.sh conformance suite (DD-17). The bullets below
+are the plan as written before the build and stay as the record.
 - Core: full documented instruction set (the "~700 opcodes" of the
   2026-08-07 estimate; the built table expands to 1780 encodings —
   1032 documented, 748 undocumented as of 2026-09-11 — incl. CB/DD/ED/FD
@@ -768,6 +772,12 @@ reopened from scratch.
   vector suites are third-party data — gitignore them with a fetch
   script, never commit them (the no-third-party-material practice
   inherited from awk_BASIC_interpreter).
+  THEY RUN NOW (2026-09-12): `tests/test_cpu_vectors.py` executes the
+  fetched suite through `Z80.step()` — every register, flag, MEMPTR, R,
+  RAM cell, port access and the T-state count — sampled by default and
+  in full with `Z80_VECTORS=all` (1,604,000 cases, zero failures at the
+  pinned SHA). The cycle column FINDING 1 carried as unvalidated is
+  validated by execution, entry for entry.
 - Adopt the companion repos' culture: pin everything in a regression
   suite from day one; the passing suite pins mechanical behavior, not
   "the emulator works" — real-listing acceptance is the bar.
@@ -964,8 +974,11 @@ STILL OPEN (decide when work starts):
    BUILT 2026-09-11, interpreter side only: the shim, the reference stub
    `programs/tests/z80_stub.py` and the conformance script `z80.sh` are
    on trs80basic main; `TRS80_Z80` discovery works today with the stub.
-   NOTHING IS BUILT ON THIS SIDE: no core, no protocol code; the Stage 1
-   go ruling is still the user's to give.
+   THIS SIDE BUILT 2026-09-12, on the user's go ruling: `z80/cpu.py`
+   (the core), `z80/coprocess.py` and `core.py` (the protocol's core
+   half), conformant to z80.sh. [Superseded that day: "NOTHING IS BUILT
+   ON THIS SIDE: no core, no protocol code; the Stage 1 go ruling is
+   still the user's to give."]
 
 ## Standing practices inherited from the companion repos
 
