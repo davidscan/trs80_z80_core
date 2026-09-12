@@ -122,24 +122,20 @@ PATCHES = [
      '        }\n'
      '        SK = CK; SLI = CLI; SCP = CP\n'
      '        execstmt()\n'),
-    # Re-anchored 2026-09-10: trs80basic gave the USR stub a call-frame
-    # resolver (usr_resolve), so the one-line body became a block. The
-    # marker still goes at the top of that block, before numarg.
+    # Re-anchored 2026-09-10 (usr_resolve made the one-line body a block)
+    # and again 2026-09-11 (the p77 shim added a z80_usr() call to it).
+    # The body has changed twice in two days, so the anchor is now the
+    # block's OPENING LINE only -- unique in p60 (the tokenizer's twin at
+    # the top of the file tests `s`, not `name`) -- and the marker goes
+    # immediately inside the brace, before numarg, as before. The body
+    # can change again without moving this patch point.
     ('p60_eval.awk',
-     '    if (name ~ /^USR[0-9]?$/) {\n'
-     '        x = numarg(a1, na); if (E) return "N0"\n'
-     '        usr_resolve(name, x)\n'
-     '        return "N" x\n'
-     '    }\n',
+     '    if (name ~ /^USR[0-9]?$/) {\n',
      '    if (name ~ /^USR[0-9]?$/) {\n'
      '        if ("TRS80_POKELOG" in ENVIRON) {\n'
      '            print "USR", name > (ENVIRON["TRS80_POKELOG"])\n'
      '            fflush(ENVIRON["TRS80_POKELOG"])\n'
-     '        }\n'
-     '        x = numarg(a1, na); if (E) return "N0"\n'
-     '        usr_resolve(name, x)\n'
-     '        return "N" x\n'
-     '    }\n'),
+     '        }\n'),
 ]
 
 
