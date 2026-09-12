@@ -170,13 +170,21 @@ class TestCalls(unittest.TestCase):
         self.assertEqual(sc.ret()['result'], '0')
 
 
+    def test_cls_restores_64_column(self):
+        # OUT (FFH),8 -> 32-column (MODE 1); CALL 01C9H -> CLS restores 64 (MODE 0)
+        m, sc = machine(bytes.fromhex('3E08' 'D3FF' 'CDC901' 'C9'))
+        m.run(0x7000, 0, 0xF000)
+        modes = [l for l in sc.out if l.startswith('MODE')]
+        self.assertEqual(modes, ['MODE 1', 'MODE 0'], sc.out)
+
+
 class TestFixtureLayout(unittest.TestCase):
 
     def test_routines_do_not_overlap_and_map_every_entry(self):
         fx = Fixture()
         self.assertEqual(sorted(fx.entry), sorted([0x7000, 0x7001, 0x7002, 0x7003,
                                                    0x7005, 0x7006, 0x7007, 0x7009,
-                                                   0x700A, 0x700B, 0x700C, 0x7777]))
+                                                   0x700A, 0x700B, 0x700C, 0x700D, 0x7777]))
         addrs = sorted(fx.image)
         self.assertEqual(addrs, list(range(addrs[0], addrs[0] + len(addrs))))
 

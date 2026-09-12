@@ -76,6 +76,8 @@ FIXTURE = {
     0x700B: bytes.fromhex('3E08' 'D3FF' 'C9'),
     # 700C: OUT (FFH),00H -- bit 3 clear, 64-column mode
     0x700C: bytes.fromhex('3E00' 'D3FF' 'C9'),
+    # 700D: OUT (FFH),08H (32-col) then CALL 01C9H (CLS, which restores 64-col)
+    0x700D: bytes.fromhex('3E08' 'D3FF' 'CDC901' 'C9'),
     # anything else the stub answers with a plain RET
     0x7777: bytes.fromhex('C9'),
 }
@@ -215,6 +217,14 @@ class Machine:
             self.write(0x4020, 0x00)
             self.write(0x4021, 0x3C)
             cpu.a = CLS_A
+            # CLS returns the display to 64-column mode, as the ROM does and
+            # as BASIC's own CLS does (s_cls in the interpreter's p20).  A
+            # routine that printed 32-column text then cleared -- the Dancing
+            # Demon's intro -- must draw its figure at full width afterward.
+            if self.wide != 0:
+                self.flush_video()
+                self.send('MODE 0')
+                self.wide = 0
         elif pc == 0x0A7F:
             cpu.hl = int(self.arg) & 0xFFFF
         else:
