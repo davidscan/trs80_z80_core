@@ -176,7 +176,7 @@ class TestFixtureLayout(unittest.TestCase):
         fx = Fixture()
         self.assertEqual(sorted(fx.entry), sorted([0x7000, 0x7001, 0x7002, 0x7003,
                                                    0x7005, 0x7006, 0x7007, 0x7009,
-                                                   0x700A, 0x7777]))
+                                                   0x700A, 0x700B, 0x700C, 0x7777]))
         addrs = sorted(fx.image)
         self.assertEqual(addrs, list(range(addrs[0], addrs[0] + len(addrs))))
 

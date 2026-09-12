@@ -72,6 +72,10 @@ FIXTURE = {
     0x7009: bytes.fromhex('D1' '213412' 'E5' 'E1' 'EB' 'E9'),
     # 700A: a video byte and an ordinary byte in one call
     0x700A: bytes.fromhex('3E41' '32283C' '3E01' '323075' 'C9'),
+    # 700B: OUT (FFH),08H -- bit 3 set, 32-column mode
+    0x700B: bytes.fromhex('3E08' 'D3FF' 'C9'),
+    # 700C: OUT (FFH),00H -- bit 3 clear, 64-column mode
+    0x700C: bytes.fromhex('3E00' 'D3FF' 'C9'),
     # anything else the stub answers with a plain RET
     0x7777: bytes.fromhex('C9'),
 }
@@ -111,6 +115,7 @@ class Machine:
         self.cpu = Z80(self.read, self.write, self.port_in, self.port_out)
         self.cycles = 0
         self.since_tick = 0
+        self.wide = None
         self.wall0 = 0.0
 
     # ---- the bus ------------------------------------------------------
@@ -137,7 +142,20 @@ class Machine:
         return 127 if (port & 0xFF) == 0xFF else 255
 
     def port_out(self, port, v):
-        pass
+        # OUT (FFH) bit 3 is the 32/64-column video latch (the same one
+        # CHR$(23) sets from BASIC).  Tell the interpreter when it flips, so
+        # a routine that clears 32-column mode for a full-width figure -- the
+        # Dancing Demon after its intro text -- is drawn at the right width.
+        # self.wide starts None each call, so the first OUT (FFH) always
+        # states the mode explicitly (the core cannot know the interpreter's
+        # entry width).  Pending video is flushed first so the switch lands
+        # between the right frames.
+        if (port & 0xFF) == 0xFF:
+            nw = (v >> 3) & 1
+            if nw != self.wide:
+                self.flush_video()
+                self.send('MODE %d' % nw)
+                self.wide = nw
 
     # ---- frames -------------------------------------------------------
     def reset_ram(self):
@@ -216,6 +234,7 @@ class Machine:
         self.video = {}
         self.cycles = 0
         self.since_tick = 0
+        self.wide = None
         self.wall0 = time.monotonic()
         cpu.sp = sp
         cpu.sp = (cpu.sp - 2) & 0xFFFF
