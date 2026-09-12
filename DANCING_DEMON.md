@@ -235,7 +235,9 @@ stub in `TRS80_Z80`).
 - **DD-16. The core must reproduce THE ADDRESS-RESOLUTION CONTRACT**
   (`../trs80basic/src/p75_mem.awk`) byte-for-byte, including the
   post-fix order: `a in SPK` outranks the program image, HIMEM no longer
-  bounds the shadow, and unwritten memory reads **255**, not 0.
+  bounds the shadow, unwritten memory reads **255**, not 0, and (since
+  2026-09-12) a WRITTEN image address reads back the written byte, not the
+  crunched original -- the image is writable RAM.
   AS BUILT 2026-09-12: the core reproduces NOTHING of the contract, by
   PROTOCOL.md's ruling — the frame carries bytes already resolved
   through `dopeek`, the core keeps a flat 64K initialised to 255 and
@@ -258,13 +260,24 @@ stub in `TRS80_Z80`).
 
 ## D. Not needed — do not build on spec
 
-- **A writable program image.** Measured, not merely reasoned: every
-  real absolute write goes to system RAM (4019H-402BH, 4100H); the four
-  apparent in-image writes are ASCII text mis-decoded as `LD (nn),A`.
-  This confirms the answer already given to trs80basic in
-  `handoff/to-trs80basic.md`. *Limit: 172 HL-indirect and 14 stack
-  writes are statically unresolvable, so this is strong evidence, not
-  proof.*
+- **A writable program image. — NEEDED AFTER ALL, and BUILT on the
+  interpreter side 2026-09-12.** The static "not needed" call below was
+  wrong, and it named its own blind spot: the 172 HL-indirect writes it
+  could not resolve.  The demon's SCORE and DANCE editors (menu 1 and 2)
+  keep their buffer INSIDE the loaded image at 6B9BH and append to it one
+  HL-indirect store per keypress.  With the image read-only, every USR
+  frame re-delivered the original crunched byte and clobbered the letter
+  the routine had stored, so the editor overwrote instead of appending.
+  trs80basic made the image writable (dopeek returns MEM[a] when an image
+  address was written, else the crunched byte; RUN/LIST still work from
+  the source text) -- see its `77d02f9` and the updated address-resolution
+  contract.  The core needs no change: it keeps flat RAM and just reads
+  back its own write-set. *The original static reasoning, kept as the
+  record of the miss:* every real absolute write goes to system RAM
+  (4019H-402BH, 4100H); the four apparent in-image writes are ASCII text
+  mis-decoded as `LD (nn),A`; but 172 HL-indirect and 14 stack writes were
+  statically unresolvable -- strong evidence, not proof, and the editor
+  fell in the unresolved set.
 - **The 42E9H window-overflow policy** — RULED 2026-09-11 on the
   interpreter side: truncate at a whole line (see DD-11). It never bound
   here anyway: the image spans 42E9H-7DE5H, 15,100 bytes, 33,307 clear of
