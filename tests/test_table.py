@@ -542,12 +542,16 @@ class TestUndocumentedAgainstTheReferenceCard(unittest.TestCase):
         self.assertTrue(dis1('DDCB0136').op.undoc)      # SLL (IX+1)
 
     def test_documented_undocumented_split(self):
-        """Pinned so the split cannot drift silently.  1033/747 as of
-        2026-09-07 (was recorded as 1043/737 while SLL was misflagged)."""
+        """Pinned so the split cannot drift silently.  1032/748 as of
+        2026-09-11, when the IM undocumented set was found inverted (three
+        documented IM encodings flagged undocumented, two undocumented
+        duplicates flagged documented -- net one more undocumented).
+        Before that 1033/747 (2026-09-07, SLL corrected), and 1043/737
+        while SLL was misflagged."""
         undoc = [op for op in TABLE.values() if op.undoc]
         self.assertEqual(len(TABLE), 1780)
-        self.assertEqual(len(undoc), 747)
-        self.assertEqual(len(TABLE) - len(undoc), 1033)
+        self.assertEqual(len(undoc), 748)
+        self.assertEqual(len(TABLE) - len(undoc), 1032)
 
     def test_unassigned_ed_opcodes_behave_as_a_nop(self):
         """The card lists the unassigned ED page as NOP.  The table names

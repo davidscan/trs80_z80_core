@@ -203,7 +203,7 @@ ALU_FLAGS = {
 X0Z7 = [
     ('RLCA', '--0-0*'), ('RRCA', '--0-0*'),
     ('RLA',  '--0-0*'), ('RRA',  '--0-0*'),
-    ('DAA',  '**-P-*'), ('CPL',  '--1-1-'),
+    ('DAA',  '***P-*'), ('CPL',  '--1-1-'),
     ('SCF',  '--0-01'), ('CCF',  '--?-0*'),
 ]
 
@@ -564,8 +564,14 @@ def _build_ed():
                 add(op, 'RETI' if y == 1 else 'RETN', [], 2, [14],
                     kind='ret', access=[('r', 'sp')], undoc=(y not in (0, 1)))
             elif z == 6:
+                # Documented: ED46 IM 0, ED56 IM 1, ED5E IM 2 (y = 0, 2, 3).
+                # ED4E/ED66/ED6E/ED76/ED7E are the undocumented duplicates.
+                # The set was INVERTED until 2026-09-11 (trs80basic seam
+                # audit, REPLY 4 item 4): ED46/ED5E were flagged undocumented
+                # and ED4E/ED6E/ED76 documented, so the inverse index
+                # resolved `IM 0` to ED 4E.
                 add(op, 'IM', [FIXED(IM_T[y])], 2, [8], kind='ctl',
-                    undoc=(y in (0, 3, 4, 7)))
+                    undoc=(y not in (0, 2, 3)))
             else:  # z == 7
                 if y == 0:
                     add(op, 'LD', [REG('I'), REG('A')], 2, [9], kind='ld')
