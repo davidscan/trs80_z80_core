@@ -17,18 +17,29 @@ so they live in COMPANION REPOS below and are not part of the read order):
    plan incl. Phase A, technical reference, testing strategy, the gate,
    decisions)
 4. DANCING_DEMON.md (the north-star acceptance case as a work-item
-   ledger, DD-1..DD-16: core, protocol, interpreter-side dependencies,
+   ledger, DD-1..DD-17: core, protocol, interpreter-side dependencies,
    and an explicit do-not-build-on-spec list). Read it when the topic is
    Stage 1 shape, the protocol, or what "does it run Dancing Demon"
    actually requires.
+5. PROTOCOL.md (the USR coprocess contract, version 1, MIRRORED from
+   trs80basic 2026-09-11 — the two copies must stay byte-identical, so
+   never edit it here; changes come from that side). Read it before
+   writing any protocol or frame code: it is the core's acceptance bar
+   (DD-17).
 
 COMPANION REPOS — this is an INDEPENDENT project with two peers, not a
 sub-project of either. Neither is a "parent".
 - `../trs80basic` — the TRS-80 LEVEL II BASIC interpreter this core attaches
   to. Integration shape ratified 2026-09-04: COMPANION ENGINE, NEVER
   VENDORED — a p77 shim in trs80basic, `TRS80_Z80` discovery, releases may
-  bundle. NOT BUILT YET: as of 2026-09-04 there is no p77 shim and no
-  `TRS80_Z80` reference in its `src/`. Its working notes are
+  bundle. BUILT AND MERGED 2026-09-11 (their `cc57dfc`, fast-forwarded
+  into main the same day by the user): `src/p77_z80.awk` is the shim,
+  `programs/tests/z80_stub.py` is the REFERENCE IMPLEMENTATION OF THIS
+  SIDE (canned behaviour per entry address 7000H-700AH), and
+  `sh programs/tests/z80.sh` is the conformance suite; `t32` runs the
+  protocol in a transcript and needs `TRS80_Z80="python3
+  programs/tests/z80_stub.py"`. Their bar is t1-t33 as of that day. The
+  shim does not adapt to the core. Its working notes are
   `STATUS.local.md` there (gitignored — exists only in a local checkout),
   which holds the coordination entries "Machine-language call support" and
   "Program-memory mapping". TWO MORE THINGS THERE as of 2026-09-08:
@@ -191,17 +202,22 @@ rulings — those bullets carry their own dates.)
   down GOAL (1), integrating machine code into BASIC programming, which
   the user calls the highest bang-for-the-buck piece. Detailed protocol
   handshaking is still NOT the topic yet.
-- STAGE 1 IS NOT STARTED. No opcode-execution code and no protocol
-  code exists. Constraints ratified 2026-09-02 and still standing:
-  companion engine, never vendored; p77 shim in trs80basic; TRS80_Z80
-  discovery; releases may bundle; the first protocol message carries a
-  version and a mismatch is a clean error. Dancing Demon stands as the
+- STAGE 1 IS NOT STARTED ON THIS SIDE. No opcode-execution code exists
+  here and no protocol code exists here; `z80/` is still the table and
+  the disassembler. THE INTERPRETER'S HALF IS DONE (2026-09-11): the
+  protocol is written (PROTOCOL.md, mirrored here), the shim is on their
+  main, and the go ruling for the core build is the user's and is still
+  PENDING — see WHERE TO PICK UP. Constraints ratified 2026-09-02 and
+  still standing, now all embodied in PROTOCOL.md: companion engine,
+  never vendored; p77 shim in trs80basic; TRS80_Z80 discovery; releases
+  may bundle; the first protocol message carries a version and a
+  mismatch is a clean error. Dancing Demon stands as the
   north-star acceptance case: call-and-return USR is not enough for that
   class of program. RE-MEASURED 2026-09-09 — read FINDING 24 and
   `DANCING_DEMON.md`, not FINDING 19 alone: the payload is a
   self-relocating dispatcher that walks the BASIC line-record chain, it
   DOES call the ROM (01C9H/CLS x4), it needs a Z80 stack inside the 64K
-  that no document places there, and it is fully position-independent.
+  (placed 2026-09-11 — DD-4 below), and it is fully position-independent.
   It does NOT need a writable program image.
 - RULED 2026-09-07 in the goal-(1) discussion, three assumptions the
   user put and this side agreed with one correction:
@@ -220,8 +236,10 @@ rulings — those bullets carry their own dates.)
       mem[], so only EXECUTION is stubbed and the memory image stays
       consistent for a later core. The measured hazard: 8 of the 11
       trs-80.com string-packing techniques fail SILENTLY today — a
-      side-effect routine produces no effect, no error, exit 0. Whether
-      the fallback should get louder is an OPEN question, not settled.
+      side-effect routine produced no effect, no error, exit 0 — which
+      is what the per-run tally now answers. Whether the fallback should
+      get louder STILL is not ruled, but it is no longer silent, and
+      PROTOCOL.md "Fallback" fixes the current behaviour as contract.
   (c) 64K IS A HARD CEILING and no interpreter generosity changes it —
       the Z80 address bus is 16 bits, so 65,536 bytes, of which a fully
       expanded Model I gives 48K of RAM (4000H-FFFFH) and we can offer
@@ -233,11 +251,15 @@ rulings — those bullets carry their own dates.)
       consequences: ROM is absent (0000-2FFF holds no bytes, by the
       never-commit-ROM rule), so code that READS the ROM cannot be
       served, only code that CALLS documented entry points; and a BASIC
-      program can outgrow the 42E9H window that shows it, which is
-      UNDECIDED and matters because Dancing Demon's payload lives in
-      that image. Bank switching is the only honest extension if 64K
-      ever binds; widening the bus is rejected. Full treatment in
-      DESIGN.md "The address space".
+      program can outgrow the 42E9H window that shows it — RULED
+      2026-09-11 on the interpreter side (their `9036f81`): the image
+      TRUNCATES at a whole line before RAMTOP, writes the 00 00
+      terminator there, 40F9H reports that end, one stderr note per
+      build; the last visible next-line link is never garbage, which is
+      what a chain walker of the Dancing Demon kind needs. Bank
+      switching is the only honest extension if 64K ever binds; widening
+      the bus is rejected. Full treatment in DESIGN.md "The address
+      space".
 - THREE INTERPRETER-SIDE MEMORY-MODEL ISSUES FOUND 2026-09-07 while
   working goal (1), all MEASURED with runnable reproductions, all
   REPORTED not fixed (we do not edit trs80basic), all handed over in
@@ -252,12 +274,16 @@ rulings — those bullets carry their own dates.)
   ADDRESS-RESOLUTION CONTRACT" now written in `../trs80basic/src/
   p75_mem.awk`**, six precedence rules the core MUST reproduce
   byte-for-byte or it will execute the wrong bytes with no error. Read it
-  before writing any core memory path. STILL OUTSTANDING WITH THEM (asked
-  2026-09-08, not blocking): that contract covers `dopeek` only, and the
-  core writes as well as reads — `st_poke`'s order is undocumented, and
-  its asymmetries are where FINDING 23's class actually lives (no
-  program-image branch on write; keyboard/printer/read-only system
-  pointers fall through to `MEM[]` unread). THREE THINGS A FUTURE
+  before writing any core memory path. THE WRITE HALF, asked 2026-09-08,
+  is CLOSED: the write contract shipped 2026-09-09 (their `efc1c02`) and
+  the store primitive is `poke_byte` (their `a42c41a`, `src/p80_stmt.awk`;
+  `st_poke` is now only the POKE parser in front of it). The core never
+  reproduces either side: PROTOCOL.md rules that the frame IN is built by
+  `fr_build` reading every defined address through `dopeek` (so every
+  byte is what PEEK would return, unlisted addresses read 255) and the
+  write-set OUT is applied through `poke_byte` (so a Z80 store lands
+  where a POKE would). The four asymmetric write ranges are OUT OF SCOPE
+  for any image diff between the sides, by agreement. THREE THINGS A FUTURE
   SESSION MUST NOT RELEARN THE HARD WAY: (a) they found a HALF THIS SIDE
   MISSED — `POKE 16561/16562` was silently dropped too, 91 corpus listings,
   the form needing no user cooperation, and it produced a confirmed rescue
@@ -299,8 +325,11 @@ rulings — those bullets carry their own dates.)
 - FINDING 21 (2026-09-07) — the opcode table checked against an OUTSIDE
   source for the first time, the Nano Systems reference card. SLL was
   misflagged as documented, which matters because `undoc` drives the
-  inverse (assembler) index; corrected split is 1780 = **1033
-  documented + 747 undocumented** (previously reported 1043 + 737).
+  inverse (assembler) index; corrected split was 1780 = 1033
+  documented + 747 undocumented (previously reported 1043 + 737), and
+  is **1032 + 748** since 2026-09-11, when the IM documented set was
+  found inverted too (commit 7f42678; the table's decode is the core's,
+  so every `undoc` flag is load-bearing).
   The card's stated timing rule (index-half = H/L form + 4 T-states)
   holds 92/92 — the first and so far ONLY external validation of any
   part of the cycle column.
@@ -316,8 +345,14 @@ rulings — those bullets carry their own dates.)
 - Built and green: the 1780-entry opcode table + disassembler, the
   extractor/classifier/sweep, the dynamic oracle (phasea/oracle.py),
   and the pinned single-step vector suite (tools/fetch_vectors.py,
-  1604 files fetched into the gitignored tests/vectors/). 104 tests:
-  `python3 -m unittest discover -s tests`.
+  1604 files fetched into the gitignored tests/vectors/). 104 tests,
+  green 2026-09-11: `python3 -m unittest discover -s tests`. NOTE the
+  oracle's p60 patch point BROKE TWICE in two days (usr_resolve on
+  2026-09-10, the z80_usr() call on 2026-09-11) because it matched the
+  USR block's whole body; since `6c30f58` it anchors on the block's
+  opening line only. A failed anchor sys.exits the build and takes the
+  suite down with NO summary — a run that prints dots and then a
+  "patch point ... matched 0 times" line is a red suite, not a warning.
 - WHERE THE CODE LOOKS (repointed 2026-09-04): phasea/oracle.py builds
   its scratch interpreter from ../trs80basic/src and tests/test_oracle.py
   diffs against ../trs80basic/trs80basic.awk; the sweep, the oracle and
@@ -341,8 +376,10 @@ rulings — those bullets carry their own dates.)
   `USR`, DISCARDING the slot digit. trs80basic now folds the digit into the
   name and resolves a full USR frame per call (slot, entry address from
   USRDEF[0..9] or the 408EH vector, argument) in usr_resolve(); undefined
-  slots resolve to entry -1 (?FC). The frame is not yet consumed -- the p77
-  shim is unbuilt. `TRS80_USR_TRACE=1` in trs80basic dumps it.
+  slots resolve to entry -1 (?FC). CONSUMED since 2026-09-11: the p77 shim
+  hands the frame to the core as the `CALL` header (PROTOCOL.md).
+  `TRS80_USR_TRACE=1` in trs80basic dumps the frame, `=2` dumps the whole
+  memory image it would send.
 - COMPANION-SIDE STATE (2026-09-04): trs80basic/STATUS.local.md's
   "Machine-language call support" entry was rewritten the same day as a
   PEER coordination entry (integration shape, seam rules, state on this
@@ -351,52 +388,117 @@ rulings — those bullets carry their own dates.)
   Still stale, reported not edited: the archive's README.md describes
   itself as the interpreter (its own STATUS already lists deleting the
   duplicate src/ as owed).
-- WHERE TO PICK UP (state read 2026-09-09, end of session). NOTHING IS
-  BLOCKED — not on trs80basic, and nothing of theirs on us. The
-  memory-model round trip is CLOSED. THE DOCS ARE IN STEP as of
-  2026-09-09: README, DESIGN.md, Z80_FINDINGS and DANCING_DEMON.md were
-  reconciled in one pass after FINDING 24, and no known stale claim
-  remains in any of them.
-  WHAT HAPPENED 2026-09-09: a readiness audit of THIS repo against the
-  north star, at the user's request. It re-derived FINDING 19 from its
-  own prose (no committed code implemented its recipe), reproduced every
-  number, and then corrected FINDING 19, README and DESIGN.md on five
-  points — see FINDING 24, sections 1-9. It wrote no core code and did
-  not advance goal (1)'s named active work; it sharpened what Stage 1
-  must actually build, which is the same discipline as Phase A.
-  THREE OPENS, all inside goal (1), all answerable WITHOUT core code:
-  (i) **the stack policy, DD-4** — NEW and now the sharpest of the three:
-  the demon issues 268 calls and DESIGN.md places the stack OUTSIDE the
-  64K, so where SP initialises, who owns it across the USR boundary and
-  where the USR return address is pushed are unwritten. It is the only
-  critical-path decision with nothing on paper anywhere.
-  (ii) whether the stub fallback should get LOUDER, marked OPEN above,
-  where the measured hazard is 8 of 11 string-packing techniques failing
-  silently.
-  (iii) the 42E9H window overflow policy — truncate, refuse, or slide —
-  DESIGN.md "The address space", still UNDECIDED. DEMOTED 2026-09-09: it
-  does NOT bind for the north star after all (that image spans
-  42E9H-7DE5H, 33,307 bytes clear of FFFFH), so it is a goal-(1)
-  question in general and no longer a blocker for the acceptance case.
-  RECOMMENDED INSTRUMENT, offered to the user and not yet ruled on:
-  write the USAGE SKETCH for goal (1) into DESIGN.md — the session a
-  user actually has ("I typed in a listing with an embedded routine, now
-  what?") — because it cannot be written without deciding the opens,
-  which makes it measurement-before-building in the form this project
-  already uses.
-  FOUR SMALL TO-DOS, none urgent: DD-1, an extractor for the
-  program-image idiom plus a tokenized-file reader (FINDING 24 section 8
-  carries the runnable recipe; `phasea` cannot currently read the
-  north-star file at all, and `LargeCollection/` is outside the sweep
-  population); give `z80/disasm.py` a CLI (goal (4) is "mostly built"
-  but UNREACHABLE from a shell); a README "Commands and arguments"
-  section (the sweep/oracle/fetch_vectors invocations exist only inside
-  Z80_FINDINGS prose); and a LICENSE (GPLv3 assumed, user ruling still
-  pending from 2026-08-14). A USER GUIDE was considered 2026-09-08 and
-  DEFERRED — there is no user-facing surface yet and the shape a guide
-  must commit to is exactly what the opens above have not settled;
-  revisit when a BASIC program with an embedded routine first runs
-  end-to-end.
+- WHAT HAPPENED 2026-09-09 (kept as history): a readiness audit of THIS
+  repo against the north star, at the user's request. It re-derived
+  FINDING 19 from its own prose, reproduced every number, and corrected
+  FINDING 19, README and DESIGN.md on five points — FINDING 24, sections
+  1-9. It wrote no core code; it sharpened what Stage 1 must build. It
+  left three opens, all inside goal (1); every one was answered on
+  2026-09-11, recorded below so they are not reopened.
+- WHAT HAPPENED 2026-09-10/11 — THE INTERPRETER SIDE BUILT ITS HALF AND
+  THE THREE OPENS CLOSED. Fourteen commits went out on trs80basic in one
+  day (their STATUS.local.md lists them; main == origin/main == f4012de
+  at the end of it) and two commits in THIS tree were written by that
+  session with the user's permission (3614cf1, 410b9a5) — read their
+  messages, they are the record. State, verified from this side:
+  (i) DD-4 THE STACK IS RULED (user, 2026-09-11): SP = the interpreter's
+  SSP at call time, carried as `sp=` in every CALL; the core owns SP for
+  the call and pushes into its own RAM beneath it (those bytes come back
+  in the write-set, so BASIC can PEEK the stack afterwards); the USR
+  RETURN ADDRESS IS A SENTINEL, **2FFDH**, ruled the same day on this
+  side's recommendation — DESIGN.md decision 6 (fbac111). PC entering
+  0000H-2FFFH is the one fetch-time check: 2FFDH ends the frame,
+  01C9H/0A7FH/0A9AH are the served HLE traps, anything else is `ERR rom`.
+  The "stack grows into SPK" hazard first recorded on DD-4 was
+  WITHDRAWN by its author: SSP is the BOTTOM of string space, a downward
+  stack moves away from it.
+  (ii) THE STUB IS NOT SILENT (their `a46b5da`): one stderr tally line
+  per run, `TRS80_USR=strict` raises ?FC; see (b) above.
+  (iii) THE 42E9H OVERFLOW IS RULED: truncate at a whole line; see (c)
+  above. DESIGN.md's UNDECIDED is closed.
+  ALSO THAT DAY: the frame's memory is NOT raw `mem[]` (their seam-audit
+  finding 4 — `mem[]` holds none of the packed strings, the program
+  image or the pointers, those are `dopeek` projections), so the frame
+  is a CONTRACT-RESOLVED SPARSE IMAGE built by `fr_build`, full on the
+  first call and DELTA after (screen, 14 constant/pointer bytes plus the
+  20-byte system-variable window, every SPK cell, the image when
+  rebuilt, every MEM[] address written since) — a callback per memory
+  read was MEASURED OUT (12 us per gawk `|&` round trip caps a core at
+  ~80,000 reads/s, a quarter of the demon's 313,030 insn/s bar) and the
+  keyboard read of 3800H-38FFH is the ONLY callback. Video is STREAMED
+  out during the call as `V` lines (DD-7's protocol half), `T` ticks
+  carry BREAK and keep the timeout guard quiet (DD-10's protocol half),
+  and the write-set comes back after `RET`, last write wins per address.
+  VARPTR was made IDEMPOTENT 2026-09-10 (it used to re-allocate on every
+  call, marching SSP down to ?OM; 162 corpus files call it twice on one
+  string). And REPLY 9 shipped four things the core will eventually
+  model but nothing asks for yet: `INP(p)` (port FFH reads 127/63 by
+  screen mode, all others 255; OUT is still discarded, so an OUT (FFH)
+  with bit 3 set that switches width would be seen in the core first),
+  the SYSTEM-VARIABLE WINDOW (cursor, printer, clock, current line,
+  AUTO, TRON cells live, +20 bytes in every frame), the 400CH BREAK
+  vector honoured by value, and the device vectors 401E/401FH and
+  4026/4027H seeded with the ROM driver addresses (32 corpus files
+  install a custom driver at 4026H; the interpreter keeps the default
+  route because it cannot run it — a future core hook, not asked for).
+- WHERE TO PICK UP (state read 2026-09-11, end of session). NOTHING IS
+  BLOCKED on trs80basic and nothing of theirs on us; their one remaining
+  Dancing Demon item is R1, the tokenized-payload loader (DD-14),
+  independent of the core. THE CORE IS NOW THE ONLY PIECE BETWEEN A
+  LISTING AND A RUNNING USR ROUTINE, and its acceptance bar is written:
+  DD-17, `TRS80_Z80="python3 /path/to/core" sh programs/tests/z80.sh`
+  passing in trs80basic with the stub's canned entries implemented as
+  real machine code. The docs here were audited in one pass on
+  2026-09-11 after the sentinel ruling. THE AGENDA, in order:
+  1. THE USER'S STAGE 1 GO RULING — still PENDING. The standing rule
+     says no core code before goal (1)'s shape is settled; the protocol,
+     the stack, the frame and the overflow policy are now all settled,
+     and the USAGE SKETCH (the session a user actually has: "I typed in
+     a listing with an embedded routine, now what?") was offered
+     2026-09-09 as the instrument and never ruled on. Present the state,
+     stop, and let the user say whether the sketch comes first or the
+     build does (THE GATE RULING IS A REVIEWED CHECKPOINT, below).
+  2. ITEMS THEIR REPLY 4 (2026-09-10) FOUND ON THIS SIDE, all
+     reproduced there; (d) and (e) were FIXED 2026-09-11 (7f42678), (a)-(c)
+     are still open: (a) `phasea/extract.py` finds READ/POKE
+     only after a FOR on the SAME LINE, so a loader split across lines
+     is filed `no-ml-in-listing` with no flag — a silent undercount in a
+     published number; (b) no `STRING$`/`CHR$` recognition, so
+     string-packed routines are absent from every static count; (c)
+     `RESTORE` with no argument reads as "adjacent", a preceding-line
+     `RESTORE` is ignored, and the POKE value expression is unpacked and
+     never used (`POKE I,255-A` extracts raw DATA at confidence high);
+     (d) FIXED: `z80/table.py` had the `IM` undocumented flags INVERTED
+     (ED46/ED5E marked undocumented, ED4E/ED6E/ED76 documented) so the
+     inverse index resolved `IM 0` to ED 4E, and `DAA`'s flag string
+     marked H unaffected; both corrected, the pinned split is 1032/748;
+     (e) FIXED/REFUTED: `fetch_vectors.py`'s "176 vectors" corrected to
+     the measured 185; the `tests/__init__.py` claim was measured false
+     here — `python3 -m unittest discover -s tests` runs 104 without it,
+     because the start directory is the top level.
+  3. THE PDF PAGE CHECK OWED ON THE SENTINEL: decision 6 cites the OCR
+     text of two books for "2FFBH-2FFFH holds nothing"; the standing
+     rule says read the page. Needs the archive path (`TRS80_PDF_ROOT`).
+     It could only move the sentinel within the same five-byte tail.
+  4. FOUR SMALL TO-DOS, none urgent, unchanged since 2026-09-09: DD-1,
+     an extractor for the program-image idiom plus a tokenized-file
+     reader (FINDING 24 section 8 carries the runnable recipe; `phasea`
+     cannot currently read the north-star file at all, and
+     `LargeCollection/` is outside the sweep population); give
+     `z80/disasm.py` a CLI (goal (4) is "mostly built" but UNREACHABLE
+     from a shell); a README "Commands and arguments" section (the
+     sweep/oracle/fetch_vectors invocations exist only inside
+     Z80_FINDINGS prose); and a LICENSE (GPLv3 assumed, user ruling
+     still pending from 2026-08-14). A USER GUIDE was considered
+     2026-09-08 and DEFERRED — there is no user-facing surface yet;
+     revisit when a BASIC program with an embedded routine first runs
+     end-to-end.
+  NOT ON THE AGENDA, recorded so they are not re-asked: the write
+  contract (closed), the stack (ruled), the overflow policy (ruled), the
+  "should the stub get louder" question (answered by the tally; the
+  further question is dormant, not open), and the protocol's shape
+  (ratified and built — the core conforms to PROTOCOL.md, it does not
+  negotiate it).
 
 STANDING RULES (do not relearn these the hard way):
 - PHASE A BEFORE THE CORE (DESIGN.md "The gate") — SATISFIED 2026-08-14,
@@ -407,8 +509,10 @@ STANDING RULES (do not relearn these the hard way):
   itself was in-gate (measurement, not emulator) — confirmed with the
   user 2026-08-13. The same rule applies to the next build: measure
   before building. The big-picture talk that used to be the next
-  reviewed stop was CLOSED 2026-09-07; the next stop is settling goal
-  (1)'s shape, and no core or protocol code before that.
+  reviewed stop was CLOSED 2026-09-07; goal (1)'s shape was settled
+  piece by piece through 2026-09-11 (protocol, frame, stack, overflow);
+  the next reviewed stop is the user's Stage 1 go ruling (WHERE TO PICK
+  UP, item 1), and no core code before it.
 - ANCHORS BEFORE TRUST (Phase A discipline, ruled 2026-08-13; wording
   corrected 2026-08-14): validate before believing, in this order.
   (1) The opcode table must pass a validation set against known-good
@@ -482,9 +586,13 @@ STANDING RULES (do not relearn these the hard way):
   still route through the extractor; see DESIGN.md.)
 - trs80basic's regression bar is part of THIS project's bar, even
   though we no longer edit that repo (see the DO-NOT-EDIT rule above).
-  Anything we ASK for there must leave t1-t28 exiting 0 (t7's RND line
-  varies run to run) and batch exit codes unchanged, and the coprocess
-  fallback path (no python3) must behave exactly like the shipped stub.
+  Anything we ASK for there must leave t1-t33 exiting 0 (t7's RND line
+  varies run to run; t13 wants their ollama stub; t32 needs
+  `TRS80_Z80="python3 programs/tests/z80_stub.py"`) and batch exit codes
+  unchanged, and the coprocess fallback path (no `TRS80_Z80`, or no
+  python3) must behave exactly like the shipped stub — which is now
+  CONTRACT, PROTOCOL.md "Fallback". The count was t1-t28 when this rule
+  was written and t1-t31 on 2026-09-08; it grows on their side.
   So a change proposed in handoff/to-trs80basic.md states its expected
   effect on that bar; and when we measure the interpreter to produce a
   finding, baseline first so "unchanged" is a diff and not a belief.

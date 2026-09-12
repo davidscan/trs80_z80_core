@@ -89,6 +89,10 @@ Visually self-verifying; no transcript can assert it.
   it steady, though still not fixed for the run), and a stack that grows
   into an SPK region writes through into a packed string — authentic,
   silent. Recorded so the decision starts from a concrete option.
+  STRUCK 2026-09-11 (their REPLY 7): the SPK hazard was overstated — SSP
+  is the BOTTOM of the packed-string region, so a downward stack moves
+  away from it; the only real hazard is a stale SSP, and a frame built at
+  call time cannot be stale.
 
 - **DD-5. One HLE trap: 01C9H (CLS).** Documented in four library books,
   so legal under the never-commit-ROM rule, and trivial to reimplement.
@@ -103,14 +107,20 @@ Visually self-verifying; no transcript can assert it.
   Port FFH bit 3 selects 32-character video mode, but both writes carry
   02H/01H with bit 3 clear, so suppression has no display side effect.
   The surrounding `DJNZ` loops are the tempo and must still execute.
+  INTERPRETER STATE 2026-09-11 (their REPLY 9): `INP(p)` exists there —
+  port FFH reads 127 in 64-character mode and 63 in 32-character mode,
+  every other port 255 — so a core executing `IN A,(FFH)` should agree
+  with the interpreter's mode. `OUT` is discarded on that side and the
+  bit-3 width switch is built nowhere; for the demon nothing changes.
 
-## B. This repo — the protocol (unbuilt; the real work)
+## B. This repo — the protocol (specified in PROTOCOL.md; the interpreter's half built; the core's half unbuilt)
 
 - **DD-7. Streamed video, not memory-at-RET. — PROTOCOL DONE 2026-09-11:
   `V` lines during the call, drawn as they arrive; the frame in is the
   interpreter's sparse contract-resolved image with delta frames after
   the first; `K` is the only callback; `T` ticks carry BREAK.  See
-  PROTOCOL.md; the interpreter's shim is built (its branch p77) and
+  PROTOCOL.md; the interpreter's shim is built (`src/p77_z80.awk`, their
+  `cc57dfc`, MERGED to their main the same day) and
   `programs/tests/z80_stub.py` there is the reference implementation of
   THIS side.  What remains of DD-7 is the core's half.** The animation writes
   3C00-3FFF *during* the USR call. FINDING 19's central point and still
@@ -142,15 +152,20 @@ Visually self-verifying; no transcript can assert it.
 
 Owned by trs80basic (CLAUDE.md: do not edit that repo at all). **NOT
 AUDITED in the 2026-09-09 pass** — the audit was scoped to this project
-at the user's direction, so every item below is a stated requirement,
-not a verified status. Anything owed there goes through
+at the user's direction; the statuses marked DONE/CORRECTED below were
+reported by that side in its handoff replies (2026-09-10/11) and read
+from its tree, not measured here. Anything owed there goes through
 `handoff/to-trs80basic.md` with a runnable reproduction and its expected
-effect on the t1-t28 bar.
+effect on their bar, t1-t33 as of 2026-09-11 (t32 needs the reference
+stub in `TRS80_Z80`).
 
 - **DD-11. The tokenized image mapped at 42E9H with correct next-line
   links.** The chain is the dispatch mechanism, not decoration — a wrong
-  link is a jump into garbage with no error. DESIGN.md already flags the
-  `% 65536` wrap in `pm_build`; this program makes it load-bearing.
+  link is a jump into garbage with no error. DESIGN.md used to flag the
+  `% 65536` wrap in `pm_build`; RULED AND FIXED on the interpreter side
+  2026-09-11 (their `9036f81`): the image truncates at a whole line before
+  RAMTOP, writes the 00 00 terminator, 40F9H reports that end. Correct
+  links now hold for every program size; nothing outstanding.
 - **DD-12. 4000-41FF writable AND executable. — CORRECTED 2026-09-11: the
   write contract shipped 2026-09-09 (efc1c02) and the store primitive is
   now `poke_byte` (a42c41a); the write-set is applied through it, so a
@@ -164,7 +179,13 @@ effect on the t1-t28 bar.
 - **DD-13. 40A4H/40A5H reads 42E9H** — via `PEEK(16548/16549)` in BASIC
   and `LD HL,(40A4H)` in the payload. Both halves must agree.
 - **DD-14. LOAD of a tokenized program image.** The corpus files are
-  tokenized, not detokenized text.
+  tokenized, not detokenized text. Their item R1, UNBUILT as of 2026-09-11
+  and the one Dancing Demon item still owed on that side (their STATUS,
+  "WHERE TO PICK UP" 2). Their REPLY 3 measured why it matters to the
+  core: `CLOAD` of the tokenized file fails, and the sanctioned detok
+  path rewrites 14 newline bytes, all inside the payload — 0DH is `DEC C`
+  — so today no supported path loads the payload intact. Check the bytes
+  before the core.
 - **DD-15. The USR call frame must carry the slot digit. — DONE on the
   interpreter side 2026-09-10.** The spaced-call fix used to dispatch
   `USR n(` as name `USR`, discarding the digit. trs80basic now folds the
@@ -173,15 +194,16 @@ effect on the t1-t28 bar.
   vector; slots 1-9 and an unwritten vector resolve UNDEFINED = entry -1,
   which this core reads as ?FC), and USR_ARG. DEF USRn addresses are stored
   in USRDEF[0..9]. `TRS80_USR_TRACE=1` dumps the frame; `programs/tests/usr.sh`
-  asserts it. The frame is resolved but not yet consumed -- the p77 shim that
-  hands it to this core is still unbuilt. (trs80basic session, user's
-  permission, 2026-09-10; handoff REPLY 5.)
+  asserts it. (trs80basic session, user's permission, 2026-09-10; handoff
+  REPLY 5.) CONSUMED since 2026-09-11: the p77 shim's `z80_usr()` hands the
+  frame to the core (`CALL slot= entry= arg=`, PROTOCOL.md).
 - **DD-16. The core must reproduce THE ADDRESS-RESOLUTION CONTRACT**
   (`../trs80basic/src/p75_mem.awk`) byte-for-byte, including the
   post-fix order: `a in SPK` outranks the program image, HIMEM no longer
   bounds the shadow, and unwritten memory reads **255**, not 0.
 
-- **DD-17. Conform to PROTOCOL.md (mirrored here from trs80basic).** The
+- **DD-17. Conform to PROTOCOL.md (mirrored here from trs80basic; the
+  shim, stub and suite are on their main since 2026-09-11).** The
   core's acceptance bar before any listing: `TRS80_Z80="python3
   /path/to/core" sh programs/tests/z80.sh` in trs80basic passes, with the
   stub's canned entries (7000H-700AH, listed in the stub) implemented as
@@ -197,9 +219,10 @@ effect on the t1-t28 bar.
   `handoff/to-trs80basic.md`. *Limit: 172 HL-indirect and 14 stack
   writes are statically unresolvable, so this is strong evidence, not
   proof.*
-- **The 42E9H window-overflow policy** (DESIGN.md, UNDECIDED). Does not
-  bind here: the image spans 42E9H-7DE5H, 15,100 bytes, 33,307 clear of
-  FFFFH. Still open for goal (1) generally, just not on this path.
+- **The 42E9H window-overflow policy** — RULED 2026-09-11 on the
+  interpreter side: truncate at a whole line (see DD-11). It never bound
+  here anyway: the image spans 42E9H-7DE5H, 15,100 bytes, 33,307 clear of
+  FFFFH.
 - **0A7FH / 0A9AH traps** — see DD-5.
 - **Relocation machinery of any kind.** The payload never names an
   address inside itself (FINDING 24 section 9), so it runs wherever the

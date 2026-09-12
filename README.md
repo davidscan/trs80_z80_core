@@ -14,8 +14,9 @@ attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
-**STATUS (2026-09-09): PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK
-CLOSED, MEMORY-MODEL HANDOFF CLOSED, NORTH STAR RE-MEASURED, STAGE 1 NOT
+**STATUS (2026-09-11): PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK
+CLOSED, MEMORY-MODEL HANDOFF CLOSED, NORTH STAR RE-MEASURED, PROTOCOL
+RATIFIED AND BUILT ON THE INTERPRETER SIDE, STAGE 1 (THE CORE) NOT
 STARTED.** Phase A — the static disassembler/classifier over the
 corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
 **5** unlocked listings. The one remaining hole in that measurement,
@@ -76,8 +77,25 @@ requirements. It **does** call the ROM (`CALL 01C9H`, CLS, x4). It needs a
 Z80 stack inside the 64K that no document places there. It does **not**
 need a writable program image (measured, confirming what was already told
 to trs80basic). And it is **fully position-independent**: 0 absolute CALLs
-into its own body and 0 internal JPs in 10,931 bytes. The work items are
+into its own body and 0 internal JPs in 10,931 bytes. (The stack question
+was ruled two days later — DD-4, above.) The work items are
 in **DANCING_DEMON.md**; three documents were corrected.
+
+**PROTOCOL RATIFIED AND BUILT — ON THE INTERPRETER SIDE — 2026-09-11.**
+`PROTOCOL.md` (mirrored byte-for-byte from trs80basic; the two copies must
+stay identical) is the USR coprocess contract, version 1: one persistent
+gawk coprocess per session, a contract-resolved sparse memory image in
+(deltas after the first frame), video streamed out *during* the call, the
+keyboard as the only callback, `T` ticks carrying BREAK, a write-set back
+applied through the interpreter's `poke_byte`. trs80basic's half is done
+and merged to its `main`: the p77 shim (`src/p77_z80.awk`), a reference
+stub for THIS side (`programs/tests/z80_stub.py`) and a conformance suite
+(`programs/tests/z80.sh`). The stack policy is ruled (DD-4: SP = the
+interpreter's SSP, the core owns it for the call, the USR return address
+is the sentinel **2FFDH** — DESIGN.md decision 6), and the 42E9H
+window-overflow question is ruled (truncate at a whole line). The core's
+acceptance bar before any listing is DD-17: pass `z80.sh` with
+`TRS80_Z80` pointing at it.
 
 See Z80_FINDINGS.md (24 findings) and DANCING_DEMON.md (the north-star
 work-item ledger). Stage 1 (the core itself) is NOT started and no core
@@ -89,8 +107,8 @@ the one-line `DEF USR 0=` parse fix — was PAID there 2026-08-14.
 
 Read DESIGN.md for everything: goal, staged plan, technical reference
 (addresses, ROM entry points, ports), the coprocess seam, testing
-strategy, legal constraints, and decisions. CLAUDE.md is the session
-bootstrap.
+strategy, legal constraints, and decisions. PROTOCOL.md is the wire
+contract the core must conform to. CLAUDE.md is the session bootstrap.
 
 ## Why this exists (one paragraph)
 
@@ -98,7 +116,9 @@ TRS-80 magazine listings constantly embed short Z80 routines via
 `DATA`/`POKE` loaders called through `USR` — sound effects, fast screen
 operations, keyboard scans, sorts. The interpreter runs the BASIC but
 must stub the `USR` call (since 2026-08-13 the stub evaluates and
-returns its argument). The loader pattern already deposits the
+returns its argument; since 2026-09-11 it also prints one stderr line per
+run tallying the calls it did not execute, and `TRS80_USR=strict` raises
+?FC instead). The loader pattern already deposits the
 machine-language bytes into the interpreter's `mem[]`, video memory
 already maps to the simulated screen, the keyboard matrix is live at
 the memory level, and a table-driven Python core executes Z80
@@ -108,4 +128,5 @@ the rate the north-star payload needs (FINDING 24) — so executing those
 bytes is a bounded, testable, surprisingly practical build. The expensive
 part is not the CPU; it is the high-level emulation of ROM services that
 real routines call (see DESIGN.md), and the protocol that streams video
-and key state while a routine is still running (DANCING_DEMON.md).
+and key state while a routine is still running (PROTOCOL.md, with the
+work items in DANCING_DEMON.md).

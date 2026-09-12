@@ -35,6 +35,18 @@ blocked/ re-scan changed the bookkeeping of the six gate files without
 unlocking any (FINDING 20, recorded 2026-09-04). Stage 1 is still not
 started; no core code has been written.
 
+STATUS 2026-09-11: still no core code HERE, but the other half now exists.
+The USR coprocess protocol is ratified (`PROTOCOL.md`, mirrored from
+trs80basic and identical there), its interpreter half is BUILT AND MERGED
+into trs80basic main (`cc57dfc`: the p77 shim, the reference stub
+`programs/tests/z80_stub.py`, the conformance script `programs/tests/z80.sh`),
+the stack policy is ruled (SP = SSP, return sentinel 2FFDH — DESIGN.md
+decision 6, DANCING_DEMON DD-4) and the 42E9H window overflow is ruled
+(truncate at a whole line, `9036f81`). The core's acceptance bar before any
+listing is DD-17: `z80.sh` passing with `TRS80_Z80` pointing at the core.
+Dated STATUS notes below mark each finding this settles; the measurements
+are unchanged.
+
 Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
 (runnable 3283 + blocked 1062 = **4345 listings**). Reproduce with
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover
@@ -785,6 +797,15 @@ line-record chain — the structure that decides what the core and the
 interpreter must provide. FINDING 24 carries the deltas; work items are
 in `DANCING_DEMON.md`.
 
+**STATUS 2026-09-11 — the three protocol capabilities (a)-(c) above are
+DECIDED, not pending.** `PROTOCOL.md` (interpreter half built, `cc57dfc`):
+(a) video is STREAMED as `V` lines during the call, drawn as they arrive;
+(b) the keyboard is the ONLY callback — a read of 3800H+sel goes out as
+`K <sel>` and the live matrix byte comes back; (c) pacing to real time is
+the core's job, against the `mhz` the interpreter announces in `HELLO`.
+The sound `OUT`s are DD-6. This finding's central claim — call-and-return
+USR is not enough — is what the ratified shape is built on.
+
 ## FINDING 20 — the blocked/ re-scan moved four gate files without unlocking any (measured 2026-08-14, recorded 2026-09-04)
 
 The re-scan owed to the corpus archive after FINDINGS 16/17 was PAID
@@ -924,6 +945,20 @@ counts were the only casualty.
 All four checks are now pinned in
 `tests/test_table.py::TestUndocumentedAgainstTheReferenceCard`,
 including the split itself, so it cannot drift silently. 104 tests.
+
+**STATUS 2026-09-11 — the split moved again, to 1032 + 748.** trs80basic's
+seam audit (their REPLY 4, item 4) reported and this side reproduced a
+second misflag of the same kind: the `IM` documented set was INVERTED —
+ED46 (`IM 0`) and ED5E (`IM 2`) carried `undoc=True` while ED4E, ED6E
+and ED76, undocumented duplicates, carried `undoc=False` — so the
+inverse index resolved `IM 0` to ED 4E. Net one more undocumented entry
+after the fix (three flipped to documented, two the other way, and ED66
+and ED7E were already right). `DAA`'s flag string also marked H
+unaffected; it is affected. Both fixed in commit 7f42678, the pin
+updated, 104 tests. The lesson below stands twice over: the card
+validated the index-half rule and SLL, and this one was found by a
+reader on the OTHER side of the seam — nothing on this side had a
+reason to look at `IM`.
 
 **The lesson, and it is the standing one:** the table's own test suite
 could not have found this, because the suite was authored from the same
@@ -1091,6 +1126,13 @@ program that repeatedly re-packs a routine. On real hardware this is what
 
 ### Note for the protocol, when it comes
 
+**STATUS 2026-09-11 — SETTLED THE WAY THIS NOTE ASKED.** The frame is not
+"the sparse mem[]": `fr_build` (trs80basic `6c6413f`) resolves every defined
+address through `dopeek`, so the address-resolution contract holds by
+construction and the protected region arrives as the bytes a PEEK would
+return; addresses in no frame read 255. `PROTOCOL.md` "The frame". The
+paragraph below is the original request, kept as written.
+
 The coprocess memory image must carry the protected region. If the call frame
 ships "the sparse mem[]" and mem[] never received the discarded POKEs, the core
 executes an empty region and returns silently — which is the FINDING 16/17
@@ -1134,6 +1176,22 @@ post-fix resolution order, which the core must reproduce byte-for-byte, is set
 out in `handoff/to-trs80basic.md` §2 of the 2026-09-08 reply; note in particular
 that `a in SPK` outranks the program image, which is what makes string packing
 immune, and that unwritten memory reads **255**, not 0.
+
+**STATUS 2026-09-11 — the unbounded case is CLOSED by ruling, and the write
+side has a contract.** The 42E9H window overflow, UNDECIDED in DESIGN.md when
+this was written, is ruled TRUNCATE AT A WHOLE LINE (trs80basic `9036f81`):
+`pm_build` no longer wraps the next pointer modulo 65536 and writes above the
+address space; the image stops before the first line whose record would cross
+RAMTOP, terminates there with `00 00`, 40F9H reports that end, and one stderr
+note is printed the first time the truncated image is consulted. So the
+13000-line row below (PMEND 887944) is now history — PMEND cannot exceed
+RAMTOP — though its observable, "every PEEK in the 16-bit space reads the
+image", is unchanged for a program that large, because the truncated image
+still reaches RAMTOP. The write side: the write contract shipped `efc1c02`
+and the single store primitive is `poke_byte` (`a42c41a`); a store into the
+image range is "stored but invisible", exactly the asymmetry measured here,
+and the USR write-set is applied through the same primitive
+(`PROTOCOL.md` "The return"). The mapping stays deliberately unbuilt.
 
 ### Position in the listing is irrelevant. Total program SIZE is the variable.
 
@@ -1284,6 +1342,14 @@ Three consequences for the core, none of them optional:
 - 40A4H/40A5H must read 42E9H, on both the BASIC side (`PEEK(16548/9)`)
   and the core side (`LD HL,(40A4H)`).
 
+STATUS 2026-09-11 — all three are now provided for on the interpreter side,
+none needing core work beyond applying the frame: the next-line links hold
+for every program size because the image is truncated at a whole line below
+RAMTOP (`9036f81`, DD-11); a store to 4018H/4019H lands in the interpreter's
+`MEM[]` through `poke_byte` and comes back in the next frame (DD-12 closed);
+and 40A4/40A5H are among the 14 constant/pointer bytes every frame carries
+(`PROTOCOL.md` "The frame", DD-13).
+
 ### 2. CORRECTION to FINDING 19 — "no ROM calls at all" is wrong
 
 `CALL 01C9H` appears **4 times** (2 of them reached from the entry
@@ -1318,6 +1384,16 @@ core: a Z80 executing 268 calls needs a real stack at a real 16-bit
 address. Nothing in DESIGN.md records where SP is initialised, who owns
 it across the USR boundary, or where the USR return address is pushed.
 Recorded as a gap, not resolved here.
+
+**STATUS 2026-09-11 — RULED (DD-4, DESIGN.md decision 6).** SP initialises
+to the interpreter's `SSP` at call time, carried as `sp=` in every `CALL`
+(HIMEM when nothing is packed — where Level II keeps its stack); the core
+owns SP for the call and pushes into its own RAM beneath it, and those bytes
+return in the write-set so a listing can PEEK the stack afterwards; the USR
+return address is the SENTINEL 2FFDH, pushed before the jump to `entry`, in
+the documented empty tail of ROM space — PC arriving there ends the call, and
+PC entering 0000H-2FFFH anywhere else is either a served HLE trap (01C9H,
+0A7FH, 0A9AH) or `ERR rom`. The 268 calls have a home.
 
 ### 4. THE WRITABLE PROGRAM IMAGE IS NOT NEEDED — now measured, not reasoned
 
@@ -1485,6 +1561,16 @@ identified as the real question.
 Neither DESIGN.md open question blocks this program: the image spans
 42E9H-7DE5H (15,100 bytes, 33,307 clear of FFFFH) so the window-overflow
 policy does not bind, and the stub-loudness question is orthogonal.
+
+STATUS 2026-09-11 — of the four "expensive" items named above, three are now
+on paper or built and one is the core's to write: the image projection with
+correct links is built (`9036f81`); 4000-41FFH writes go through `poke_byte`
+(DD-12); the stack policy is ruled (section 3 STATUS); and the streaming
+protocol is `PROTOCOL.md`, with the interpreter's half merged (`cc57dfc`)
+and the core's half being Stage 1 itself (DD-7, DD-10). Both DESIGN.md open
+questions are also closed: overflow = truncate at a whole line, and the stub
+now prints a per-run stderr tally of unexecuted calls with `TRS80_USR=strict`
+raising ?FC (`a46b5da`). What remains is DD-1..DD-10, all in this repo.
 
 THREE DOCUMENTS ARE CORRECTED HERE: FINDING 19 (the ROM call count and
 the dispatcher structure), README (the Model I instruction rate), and

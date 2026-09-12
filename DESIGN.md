@@ -113,8 +113,9 @@ HL back to the evaluator). The agreed shape:
   terminating RET, returns HL, the memory write-set, and a cycle count.
   awk applies writes through its existing device mapping, so video writes
   render exactly like POKEs.
-  BUILT ON THE INTERPRETER SIDE 2026-09-11 (branch p77): the exact wire
-  is PROTOCOL.md in this tree.  What this bullet did not yet say and the
+  BUILT ON THE INTERPRETER SIDE 2026-09-11 (commit cc57dfc, MERGED to
+  trs80basic main the same day; `src/p77_z80.awk`): the exact wire is
+  PROTOCOL.md in this tree, mirrored and identical.  What this bullet did not yet say and the
   protocol does: the frame is a sparse image resolved through the
   address-resolution contract, delta after the first; video is streamed
   DURING the call (`V`), not returned at RET; the keyboard is a live
@@ -129,17 +130,42 @@ HL back to the evaluator). The agreed shape:
   THE ADDRESS-RESOLUTION CONTRACT's six rules in `dopeek`. The frame's
   memory must be sourced through that resolution (materialise a flat
   image, or read per address into `dopeek` with a cache) — not the raw
-  `mem[]` array. Which mechanism is the deferred protocol design; the
-  point here is only that `mem[]` is not the machine's memory.
+  `mem[]` array. The point here is only that `mem[]` is not the
+  machine's memory.
+  MECHANISM DECIDED 2026-09-11 (same day, interpreter commit 6c6413f):
+  `fr_build` in p75 MATERIALISES a sparse image — every defined address
+  read through `dopeek`, sent as ascending runs, full on the first frame
+  and delta after (screen, the constant/pointer bytes, the system-
+  variable window, every SPK cell, the image when rebuilt, and whatever
+  was written since); everything not sent reads 255. The write-set
+  comes back through `poke_byte` (a42c41a), so a Z80 store lands where a
+  POKE would. PROTOCOL.md "The frame" is the authority.
 - DEVICE READS AS PROTOCOL CALLBACKS: reads of 3800H-38FFH (and any
   other live device) round-trip to awk, which answers from the live
   keyboard matrix — this is what makes wait-for-keypress routines work
   instead of spinning on a stale snapshot, and it gives awk a hook to
   honor Ctrl-C (BREAK) during a runaway routine. An instruction budget
   backstops routines that never RET.
+  NARROWED BY THE PROTOCOL (2026-09-11): the keyboard is the ONLY
+  callback (`K`); video reads are served from the core's own RAM
+  because the core is the only writer during a call, and its video
+  writes stream out as `V` lines. BREAK and the never-RET case are
+  carried by `T` ticks (the interpreter answers `OK` or `BREAK`) plus
+  the interpreter's `TRS80_Z80_TIMEOUT` read guard, not by an
+  instruction budget. Measured reason (their REPLY 7): one coprocess
+  round trip is ~12 us, so a callback per memory read would cap the
+  core at ~80K reads/s, a quarter of the north-star bar.
 - GRACEFUL DEGRADATION: no python3 on the machine -> USR falls back to
   the interpreter's stub (evaluate and return the argument) with a one-time
-  notice. trs80basic.awk stays a complete single-file gawk program, the
+  notice.
+  AS SHIPPED (2026-09-11, a46b5da and p77): the stub is used whenever
+  `TRS80_Z80` is unset, the command cannot start or does not answer
+  HELLO, the `Z80` line carries another `proto`, or a call timed out
+  earlier in the session; each prints one `USR CORE:` notice the first
+  time. The stub itself is NOT silent: one stderr line per run tallies
+  the calls not executed by entry address, stdout stays byte-identical,
+  and `TRS80_USR=strict` raises ?FC instead. Until that day it had no
+  notice at all, not a one-time one. trs80basic.awk stays a complete single-file gawk program, the
   Windows zero-install zip stays honest, and the core is an OPTIONAL
   enhancement — the exact pattern the OLLAMA channel established with
   curl.
@@ -147,7 +173,8 @@ HL back to the evaluator). The agreed shape:
 Consequence for ship location: the old plan (core as src/p95_z80.awk in
 trs80basic) is DEAD. The core lives here; trs80basic gains only the
 small coprocess plumbing (protocol client + fallback), which is
-legitimately awk.
+legitimately awk — and has, since 2026-09-11: `src/p77_z80.awk`, on
+their main.
 
 ## Architecture: the reusable seams (RULED 2026-08-13)
 
@@ -312,16 +339,21 @@ and re-filed the rest under deeper blockers; grep can no longer answer
 STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
 - Core: full documented instruction set (the "~700 opcodes" of the
   2026-08-07 estimate; the built table expands to 1780 encodings —
-  1033 documented, 747 undocumented — incl. CB/DD/ED/FD prefixes),
+  1032 documented, 748 undocumented as of 2026-09-11 — incl. CB/DD/ED/FD
+  prefixes),
   registers, flags (mind half-carry and DAA — the classic
   correctness traps), 64K address space synced with the interpreter's
   mem[] via the coprocess protocol (default 255 = absent-RAM reads,
-  already authentic).
+  already authentic). AS RATIFIED 2026-09-11: not `mem[]` but the
+  contract-resolved sparse image PROTOCOL.md specifies; the core keeps
+  a flat 64K initialised to 255 and applies frames over it.
 - USR interface: entry address from the USR vector at 408EH/408FH
   (dec 16526/16527, the classic POKE pair) or trs80basic's DEF USR
   stub table (shipped 2026-08-13 — the stub already parses and
   evaluates the address; the coprocess route gives it a consumer).
-- Two ROM traps only: 0A7FH and 0A9AH. Named by the USR idiom these
+- Two ROM traps only: 0A7FH and 0A9AH — PLUS 01C9H (CLS) since
+  2026-09-09, the one ROM call the north-star payload makes (DD-5;
+  PROTOCOL.md names all three). Named by the USR idiom the first two
   are "fetch the argument into HL" and "return HL as the result", but
   CORRECTED 2026-09-06 against the reference library — a trap must
   implement the ROM's REAL semantics, not the idiom:
@@ -337,7 +369,11 @@ STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
   convention happens to compose, so getting them right also gets any
   OTHER caller of CINT right — and getting them wrong is invisible
   until a listing passes an out-of-range or non-integer argument.
-- Exit: RET with the entry-call's return address = done.
+- Exit: RET with the entry-call's return address = done. RULED
+  2026-09-11: that return address is the SENTINEL 2FFDH the core pushes
+  before jumping to `entry` (decision 6 below); SP starts at the
+  interpreter's SSP (`sp=` in the frame) and the core owns it for the
+  call (DANCING_DEMON.md DD-4).
 - This alone runs pure-computation routines (sorts, memory fills),
   fast-video routines (writes to 3C00H-3FFFH land in the interpreter's
   SCR and RENDER — the mapping already exists), AND — new since Stage 0
@@ -438,6 +474,13 @@ unvalidated" until the core runs the pinned single-step vectors.
   wave through an external amp), bit 3 = 32-column video mode (pairs
   with the interpreter's CHR$(23) roadmap item). OUT elsewhere: no-op or
   error, decide from corpus evidence (Phase A).
+  INTERPRETER-SIDE STATE 2026-09-11 (their REPLY 9, e7839ac): `INP(255)`
+  reads 127 in 64-character mode and 63 in 32-character mode (bit 6 =
+  mode, bit 7 = cassette input, never set); every other port reads 255;
+  the interpreter DISCARDS `OUT`. A core executing `IN A,(FFH)` should
+  agree with the interpreter's mode, and an `OUT (FFH)` with bit 3 set
+  is a width switch the core would be the first place to see — noted
+  there as a gap, not built. The north-star's two OUTs carry bit 3 clear.
 - USR call convention (Level II): X=USR(n) jumps to the vector address;
   the routine may CALL 0A7FH to get n in HL, computes, optionally loads
   HL and JPs/CALLs 0A9AH to return a value; plain RET returns without
@@ -486,9 +529,12 @@ driving it. Assembly gets more usable room than the real machine ever
 offered, without the address space growing by one byte.
 
 WHAT IS PROJECTED INTO THE 64K (everything else is the core's own RAM):
-keyboard 3800-38FF and video 3C00-3FFF as live device callbacks;
-37E8-37E9 printer status; the READ-ONLY tokenized program image at
-42E9H; string bytes reachable through VARPTR, write-through. Numeric
+keyboard 3800-38FF as the one live callback; video 3C00-3FFF carried
+in every frame and streamed back as it is written; 37E8-37E9 printer
+status; the system-variable window (cursor, printer, clock, current
+line, AUTO, TRON cells — live since 2026-09-11, their 17639c2); the
+READ-ONLY tokenized program image at 42E9H; string bytes reachable
+through VARPTR, write-through. Numeric
 and array VARPTR do NOT materialise as contiguous memory (see the
 VARPTR paragraph above) — that is a known hole, not a plan.
 
@@ -558,10 +604,13 @@ answering MEMORY SIZE lower really does free the region above, and
 `PEEK(16561/16562)` reports the ceiling so listings can compute a load
 address from it. MEMORY SIZE is therefore NOT vestigial here: it is
 the live mechanism that keeps packed strings clear of poked code.
-A DEFECT SITS IN THE OTHER HALF (FINDING 22): the interpreter treats
+A DEFECT SAT IN THE OTHER HALF (FINDING 22): the interpreter treated
 everything above HIMEM as ABSENT rather than PROTECTED, so POKEs into
-the reserved region are discarded. Harmless until a core executes
-them. Interpreter-owned, reported not built.
+the reserved region were discarded. Interpreter-owned, reported not
+built here — and FIXED there 2026-09-08 (fe99d4b): RAMTOP (physical
+top) is split from HIMEM (the MEMORY SIZE? answer), the region between
+is protected RAM, and the frame header carries both (`himem=`,
+`ramtop=`). FINDING 22's addendum records it.
 
 THE "EVERYTHING EARLY" PATTERN — the model that does work, and the
 period convention behind it (user recollection, MEASURED 2026-09-07).
@@ -615,10 +664,13 @@ case already uses.
 THREE CAVEATS, so the pattern is not oversold:
 - The program image is READ-ONLY, so this executes an embedded payload
   but does not let it modify itself (p75, writable mapping unbuilt).
-- The 16-bit next-line links wrap past FFFFH (`% 65536` in pm_build), so
-  code that walks the line-record chain — which is how a payload in the
-  image is located — is only safe while it stays under 64K. Another
-  reason "early" is load-bearing rather than tidy.
+- The 16-bit next-line links USED TO wrap past FFFFH (`% 65536` in
+  pm_build), so code walking the line-record chain — which is how a
+  payload in the image is located — was only safe under 64K. RULED
+  and fixed 2026-09-11 (9036f81, "The address space" consequence 2):
+  the image now truncates at a whole line, so the chain is always
+  well-formed. "Early" remains load-bearing for the truncated tail: a
+  payload past the cut is simply not in the image.
 - Pack-then-SAVE captures nothing here, because the bytes are a copy
   rather than the program line. On hardware that workflow worked, and
   it was a real period technique; anyone writing NEW packed programs
@@ -726,7 +778,9 @@ reopened from scratch.
   the keyboard matrix — so it needs streamed video writes, live key
   state, and cycle pacing. Call-and-return USR (memory in, run, memory
   out) is not enough for that class of program; the protocol has to
-  decide this.
+  decide this — and DID, 2026-09-11: PROTOCOL.md streams video (`V`)
+  during the call, serves the keyboard live (`K`) and ticks (`T`) for
+  BREAK and pacing. What remains is the core's half (DD-7..DD-10).
   CORRECTION 2026-09-09: this bullet used to end "and calls no ROM ...
   and NOT ROM emulation". It calls ONE — `CALL 01C9H` (CLS) x4, a
   documented Level II entry point, so HLE-trappable but not absent.
@@ -752,6 +806,14 @@ reopened from scratch.
   unchanged; a new t29+ transcript for coprocess USR (with the
   fallback path tested by pointing the interpreter at a missing
   python3).
+  AS OF 2026-09-11 the bar there is t1-t33 exit 0: t32 is the coprocess
+  USR transcript (needs `TRS80_Z80="python3 programs/tests/z80_stub.py"`),
+  t33 the system-variable window, and `sh programs/tests/z80.sh` covers
+  every protocol path including the cannot-start and version-mismatch
+  fallbacks. Without `TRS80_Z80` the build is byte-identical on
+  t1-t31. THE CORE'S OWN ACCEPTANCE BAR (DD-17): z80.sh passes with
+  `TRS80_Z80` pointing at the core and the stub's canned entries
+  implemented as real machine code.
 
 ## The gate — CLOSED 2026-08-14, kept as the measurement record
 
@@ -882,18 +944,28 @@ STILL OPEN (decide when work starts):
    the interpreter's spaced-call fix used to DISCARD the slot digit of
    `USR n(` before dispatch. trs80basic now folds the digit into the name
    and resolves a full frame per call (slot, entry address, argument) in
-   usr_resolve(); the frame is not yet consumed, because the p77 shim is
-   still unbuilt. Recorded in trs80basic/STATUS.local.md's ML entry too.
+   usr_resolve(). Recorded in trs80basic/STATUS.local.md's ML entry too.
+   CLOSED 2026-09-11: the details are ruled and written — PROTOCOL.md
+   version 1 (framing, full/delta frames with `NEED full`, `T` ticks in
+   place of an instruction budget, the version handshake in HELLO/Z80,
+   `ERR` codes). The frame IS consumed now: the p77 shim (cc57dfc) hands
+   `slot=`/`entry=`/`arg=`/`sp=` to whatever `TRS80_Z80` names. Kept as
+   a decision only in the sense that PROTOCOL.md is the authority and
+   the two copies must stay identical.
 4. INTEGRATION SHAPE — RATIFIED 2026-09-02/04 (user): companion
    engine, NEVER vendored. A p77 protocol shim in trs80basic, the engine
    discovered via `TRS80_Z80`, releases may bundle the engine (the
    Windows-zip/gawk precedent). The first protocol message carries a
-   version; a mismatch is a clean error. Protocol design itself is
-   still DEFERRED as of 2026-09-07: the big-picture talk that had held
-   it was CLOSED that day, but the user's direction is to settle goal
-   (1)'s shape first — "we don't need to talk about detailed
-   handshaking yet". No handshake/protocol code before that. Nothing of
-   this is built.
+   version; a mismatch is a clean error. Protocol design itself was
+   DEFERRED as of 2026-09-07 (the big-picture talk that had held it was
+   CLOSED that day, but the user's direction was to settle goal (1)'s
+   shape first — "we don't need to talk about detailed handshaking
+   yet").
+   BUILT 2026-09-11, interpreter side only: the shim, the reference stub
+   `programs/tests/z80_stub.py` and the conformance script `z80.sh` are
+   on trs80basic main; `TRS80_Z80` discovery works today with the stub.
+   NOTHING IS BUILT ON THIS SIDE: no core, no protocol code; the Stage 1
+   go ruling is still the user's to give.
 
 ## Standing practices inherited from the companion repos
 
