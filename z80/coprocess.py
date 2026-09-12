@@ -1,0 +1,368 @@
+"""The USR coprocess -- the core's half of PROTOCOL.md, version 1.
+
+`trs80basic` runs this as a `|&` coprocess named by `TRS80_Z80` and
+drives it one USR call at a time: a frame of memory in, a write-set back,
+video streamed and the keyboard served live during the call.  This
+module is the machine around the pure CPU in `z80.cpu`: 64K of RAM that
+reads 255 wherever no frame defined a byte, the address-dispatched
+handling of program-counter entry into ROM space (the sentinel 2FFDH
+ends the call, three documented entry points are served as HLE traps,
+anything else is `ERR rom`), ticks for BREAK and pacing, and the
+line-oriented transport.
+
+    python3 core.py                # what TRS80_Z80 names
+    python3 core.py --fixture      # plus the z80.sh conformance routines
+
+ROM SPACE HOLDS NO BYTES, by the never-commit-ROM rule (CLAUDE.md).  A
+routine may CALL the documented services below, and nothing else in
+0000H-2FFFH: the trap reimplements the documented effect and performs
+the RET the ROM routine would have.
+
+    01C9H  CLS: the screen is filled with spaces and the cursor homed
+           (4020H/4021H <- 3C00H).  A is used, as the ROM's is.
+    0A7FH  the USR argument as a 16-bit integer in HL (the number the
+           frame carried in `arg=`, truncated toward zero exactly as the
+           reference stub truncates it).
+    0A9AH  HL becomes the value of the USR expression (`result=1`) and
+           the call ends -- the ROM routine returns to BASIC, not to the
+           caller, so this is an exit however it is reached.
+
+Port FFH reads 127 (the 64-character mode value the interpreter's INP
+returns) and every other port 255; every OUT is discarded (DD-6: the
+two sound OUTs of the north-star listing carry bit 3 clear, so nothing
+is lost).  The interpreter's display mode is not part of the frame, so
+a routine reading port FFH in 32-character mode sees 127 here where
+BASIC's INP(255) would say 63 -- recorded as the one known divergence.
+"""
+
+import os
+import sys
+import time
+
+from .cpu import Z80
+
+PROTO = '1'
+NAME = 'trs80_z80_core'
+SENTINEL = 0x2FFD
+ROM_TOP = 0x3000
+VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
+KBD_LO, KBD_HI = 0x3800, 0x3900
+TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz
+CLS_A = 0x1C                   # the clear-screen control character
+
+# the machine code z80.sh expects to find behind the stub's canned entries
+# (PROTOCOL.md "Conformance").  Real code; only the addresses are the
+# fixture's business, see `Fixture`.
+FIXTURE = {
+    # 7000: paint "HI" at the top-left of the screen
+    0x7000: bytes.fromhex('21003C' '3648' '23' '3649' 'C9'),
+    # 7001: read the whole keyboard matrix, echo it at 3C40H, HL = byte
+    0x7001: bytes.fromhex('3AFF38' '32403C' '6F' '2600' 'C39A0A'),
+    # 7002: store "ABC" at the argument address
+    0x7002: bytes.fromhex('CD7F0A' '3641' '23' '3642' '23' '3643' 'C9'),
+    # 7003: HL = 2 * argument, returned as the result
+    0x7003: bytes.fromhex('CD7F0A' '29' 'C39A0A'),
+    # 7005: HL = the byte at the argument address
+    0x7005: bytes.fromhex('CD7F0A' '6E' '2600' 'C39A0A'),
+    # 7006: CALL 0000H -- ROM space, no ROM here
+    0x7006: bytes.fromhex('CD0000'),
+    # 7007: a sustained routine: 65536 turns of a 26 T-state loop
+    0x7007: bytes.fromhex('010000' '0B' '78' 'B1' '20FB' 'C9'),
+    # 7009: leave 1234H at SP-2/SP-1 and end at the sentinel
+    0x7009: bytes.fromhex('D1' '213412' 'E5' 'E1' 'EB' 'E9'),
+    # 700A: a video byte and an ordinary byte in one call
+    0x700A: bytes.fromhex('3E41' '32283C' '3E01' '323075' 'C9'),
+    # anything else the stub answers with a plain RET
+    0x7777: bytes.fromhex('C9'),
+}
+FIXTURE_HANG = 0x7004          # never answers: the timeout path
+FIXTURE_FORGET = 0x7008        # loses its state: the NEED full path
+FIXTURE_BASE = 0x7100          # where the routines are laid out
+
+
+class Break(Exception):
+    """The interpreter answered a tick with BREAK."""
+
+
+class CoreError(Exception):
+    def __init__(self, code, text):
+        Exception.__init__(self, text)
+        self.code = code
+        self.text = text
+
+
+class EndCall(Exception):
+    """PC reached the sentinel, or 0A9AH."""
+
+
+class Machine:
+    """RAM, devices and the run loop; transport-free so tests can drive it."""
+
+    def __init__(self, send, recv, mhz=0.0):
+        self.send = send
+        self.recv = recv
+        self.mhz = mhz
+        self.ram = bytearray(b'\xff' * 65536)
+        self.gen = 0
+        self.dirty = {}            # addr -> last value written, non-video
+        self.video = {}            # addr -> last value written, video
+        self.arg = 0
+        self.result = 0
+        self.cpu = Z80(self.read, self.write, self.port_in, self.port_out)
+        self.cycles = 0
+        self.since_tick = 0
+        self.wall0 = 0.0
+
+    # ---- the bus ------------------------------------------------------
+    def read(self, a):
+        if KBD_LO <= a < KBD_HI:
+            self.send('K %d' % (a & 0xFF))
+            line = self.recv()
+            if line.startswith('K '):
+                try:
+                    return int(line[2:]) & 0xFF
+                except ValueError:
+                    pass
+            raise CoreError('bad', 'expected K <value>, got %r' % line)
+        return self.ram[a]
+
+    def write(self, a, v):
+        self.ram[a] = v
+        if VIDEO_LO <= a < VIDEO_HI:
+            self.video[a] = v
+        else:
+            self.dirty[a] = v
+
+    def port_in(self, port):
+        return 127 if (port & 0xFF) == 0xFF else 255
+
+    def port_out(self, port, v):
+        pass
+
+    # ---- frames -------------------------------------------------------
+    def reset_ram(self):
+        self.ram = bytearray(b'\xff' * 65536)
+        self.cpu = Z80(self.read, self.write, self.port_in, self.port_out)
+
+    def apply_run(self, run):
+        addr, bs = run.split(':', 1)
+        a = int(addr)
+        ram = self.ram
+        for i, b in enumerate(bs.split(',')):
+            ram[(a + i) & 0xFFFF] = int(b)
+
+    # ---- streaming ----------------------------------------------------
+    @staticmethod
+    def runs(d):
+        """Coalesce {addr: value} into ascending 'addr:b,b,b' runs."""
+        out = []
+        cur = None
+        for a in sorted(d):
+            if cur is not None and a == cur[0] + len(cur[1]):
+                cur[1].append(d[a])
+            else:
+                cur = [a, [d[a]]]
+                out.append(cur)
+        return ['%d:%s' % (a, ','.join(str(b) for b in bs)) for a, bs in out]
+
+    def flush_video(self):
+        if self.video:
+            for r in self.runs(self.video):
+                self.send('V ' + r)
+            self.video = {}
+
+    def tick(self):
+        self.flush_video()
+        self.send('T %d' % self.since_tick)
+        self.since_tick = 0
+        reply = self.recv()
+        if reply == 'BREAK':
+            raise Break()
+        if self.mhz > 0:
+            ahead = self.cycles / (self.mhz * 1e6) - (time.monotonic() - self.wall0)
+            if ahead > 0.0005:
+                time.sleep(ahead)
+
+    # ---- ROM space: sentinel, traps, error ---------------------------------
+    def rom_entry(self, pc):
+        cpu = self.cpu
+        if pc == SENTINEL:
+            raise EndCall()
+        if pc == 0x0A9A:
+            self.result = 1
+            raise EndCall()
+        if pc == 0x01C9:
+            for a in range(VIDEO_LO, VIDEO_HI):
+                self.write(a, 0x20)
+            self.write(0x4020, 0x00)
+            self.write(0x4021, 0x3C)
+            cpu.a = CLS_A
+        elif pc == 0x0A7F:
+            cpu.hl = int(self.arg) & 0xFFFF
+        else:
+            raise CoreError('rom', 'called %04XH, no ROM here' % pc)
+        # the RET the ROM routine would have done
+        sp = cpu.sp
+        cpu.pc = cpu.wz = self.ram[sp] | (self.ram[(sp + 1) & 0xFFFF] << 8)
+        cpu.sp = (sp + 2) & 0xFFFF
+
+    # ---- one call ------------------------------------------------------------
+    def run(self, entry, arg, sp):
+        cpu = self.cpu
+        cpu.reset()
+        self.arg = arg
+        self.result = 0
+        self.dirty = {}
+        self.video = {}
+        self.cycles = 0
+        self.since_tick = 0
+        self.wall0 = time.monotonic()
+        cpu.sp = sp
+        cpu.sp = (cpu.sp - 2) & 0xFFFF
+        self.write((cpu.sp + 1) & 0xFFFF, SENTINEL >> 8)
+        self.write(cpu.sp, SENTINEL & 0xFF)
+        cpu.pc = entry
+        brk = 0
+        step = cpu.step
+        try:
+            while True:
+                if cpu.pc < ROM_TOP:
+                    self.rom_entry(cpu.pc)
+                    continue
+                n = step()
+                self.cycles += n
+                self.since_tick += n
+                if cpu.halted:
+                    raise CoreError('halt', 'HALT at %04XH' % ((cpu.pc - 1) & 0xFFFF))
+                if self.since_tick >= TICK_TSTATES:
+                    self.tick()
+        except EndCall:
+            pass
+        except Break:
+            brk = 1
+        self.flush_video()
+        writes = self.runs(self.dirty)
+        self.send('RET hl=%d result=%d cycles=%d break=%d writes=%d'
+                  % (cpu.hl, self.result, self.cycles, brk, len(writes)))
+        for w in writes:
+            self.send('W ' + w)
+
+
+class Fixture:
+    """The z80.sh conformance routines, as machine code the frame never
+    carried.  The stub's entry addresses are consecutive bytes, so a
+    routine cannot start at each of them: the fixture lays the routines
+    out from 7100H and maps each canned entry address to its routine.
+    Two of the stub's behaviours are not machine code at all -- 7004H
+    never answers (the timeout path) and 7008H forgets its state (the
+    NEED path) -- and stay harness hooks here as they are in the stub."""
+
+    def __init__(self):
+        self.entry = {}
+        self.image = {}
+        a = FIXTURE_BASE
+        for e in sorted(FIXTURE):
+            self.entry[e] = a
+            for b in FIXTURE[e]:
+                self.image[a] = b
+                a += 1
+
+    def load(self, m):
+        for a, b in self.image.items():
+            m.ram[a] = b
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    fixture = Fixture() if '--fixture' in argv else None
+    out = sys.stdout
+
+    def send(s):
+        out.write(s + '\n')
+        out.flush()
+
+    def recv():
+        line = sys.stdin.readline()
+        if not line:
+            sys.exit(0)
+        return line.rstrip('\r\n')
+
+    def fields(line):
+        return dict(kv.split('=', 1) for kv in line.split()[1:] if '=' in kv)
+
+    hello = recv()
+    if not hello.startswith('HELLO '):
+        send('ERR bad expected HELLO')
+        return 0
+    h = fields(hello)
+    proto = PROTO
+    if fixture:
+        # z80.sh's version-mismatch path uses the stub's knob; honour it
+        # here so the same script drives the same path against a core.
+        proto = os.environ.get('Z80_STUB_PROTO', PROTO)
+    if proto != PROTO or h.get('proto') != PROTO:
+        send('Z80 proto=%s name=%s pid=%d' % (proto, NAME, os.getpid()))
+        return 0
+    try:
+        mhz = float(h.get('mhz', '0'))
+    except ValueError:
+        mhz = 0.0
+    m = Machine(send, recv, mhz)
+    send('Z80 proto=%s name=%s pid=%d' % (proto, NAME, os.getpid()))
+
+    while True:
+        line = recv()
+        if line == 'BYE':
+            return 0
+        if not line.startswith('CALL '):
+            send('ERR bad expected CALL, got %r' % line[:40])
+            continue
+        h = fields(line)
+        runs = []
+        while True:
+            l2 = recv()
+            if l2 == 'GO':
+                break
+            if l2.startswith('M '):
+                runs.append(l2[2:])
+        try:
+            gen = int(h['gen'])
+            full = h['full'] == '1'
+            entry = int(h['entry'])
+            arg = int(float(h['arg']))
+            sp = int(h['sp'])
+        except (KeyError, ValueError) as e:
+            send('ERR bad CALL header: %s' % e)
+            continue
+        if not full and gen != m.gen + 1:
+            send('NEED full')
+            continue
+        if full:
+            m.reset_ram()
+        m.gen = gen
+        try:
+            for r in runs:
+                m.apply_run(r)
+        except ValueError as e:
+            send('ERR bad M line: %s' % e)
+            continue
+        if fixture:
+            if entry == FIXTURE_HANG:
+                time.sleep(30)
+                continue
+            if entry == FIXTURE_FORGET:
+                m.gen = 0
+                m.reset_ram()
+                send('RET hl=0 result=0 cycles=0 break=0 writes=0')
+                continue
+            fixture.load(m)
+            entry = fixture.entry.get(entry, entry)
+        try:
+            m.run(entry, arg, sp)
+        except CoreError as e:
+            m.flush_video()
+            send('ERR %s %s' % (e.code, e.text))
+
+
+if __name__ == '__main__':
+    sys.exit(main())
