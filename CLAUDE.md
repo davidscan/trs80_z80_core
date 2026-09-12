@@ -468,14 +468,31 @@ rulings — those bullets carry their own dates.)
   real machine code — MET 2026-09-12. The docs here were audited in one
   pass on 2026-09-11 after the sentinel ruling, and again 2026-09-12
   after the build. THE AGENDA, in order:
-  0. THE DANCING DEMON END-TO-END RUN is blocked ONLY on trs80basic's R1
-     tokenized loader (their item, DD-14): no supported path there loads
-     the 10,931-byte payload intact today (detok rewrites 14 bytes
-     inside it). The core is ready for it. Once R1 lands, the two open
-     questions this side could never measure before a running core —
-     video traffic volume (open question 2) and how faithful the pacing
-     must be to read as dancing (question 3) — can be measured.
-     TWO THINGS TO KNOW BEFORE THAT RUN: (a) the ONE KNOWN DIVERGENCE —
+  0. THE DANCING DEMON DANCES — DONE 2026-09-12, the same day trs80basic
+     built its R1 tokenized loader (per-line byte escrow; their next
+     commit after this note). The demon image CLOADs byte-identical —
+     14,506 bytes relinked at 42E9H. BATCH CANNOT PLAY THE SHOW (their
+     INKEY$ appends a CR to each stdin line; the payload's matrix poll
+     sees ENTER held and stops at once), so it was driven through a
+     pseudo-terminal (Python pty.fork: '\r', CLOAD, RUN, '6', '20\r',
+     '1\r', wait, ' ') with `TRS80_Z80="sh tools/corelog.sh /tmp/x"`.
+     Six USR calls at entry 42F6H, no ERR: the intro's curtain (routine
+     39: 2.7 s, 262 V runs, 5 K polls) and bow (29: 6.1 s, 55 runs / 800
+     bytes), the stage setup (27: 0.09 s, 2,773 bytes — its CLS), PRESET
+     SHOW #1 (routine 37: 28.6 s emulated, 5,440 V runs / 82,148 video
+     bytes = 2.9 KB/s, 5,706 ticks, 72 K polls, ended by the space bar),
+     then two bows. Open question 2 (video volume) is answered: under
+     3 KB/s at full tilt. `python3 tools/render_frames.py /tmp/x.out 4
+     400 1200 2000 2800 3600 4400` replays the streamed video: the horned
+     figure in successive poses, moving across the stage. WHAT IS LEFT is
+     the user's own eye: whether it reads as dancing at period tempo
+     (question 3) — trs80basic HAND_TEST 14, `TRS80_MHZ=1.77` with the
+     core attached, at a real terminal.
+     [What this item said until the run, kept for the record: blocked
+     ONLY on trs80basic's R1 tokenized loader (their item, DD-14): no
+     supported path there loaded the 10,931-byte payload intact (detok
+     rewrites 14 bytes inside it).]
+     TWO THINGS TO KNOW ABOUT THAT RUN: (a) the ONE KNOWN DIVERGENCE —
      port FFH reads 127 here regardless of display mode, because the
      interpreter's 32/64-character mode is not in the frame; BASIC's
      INP(255) says 63 in 32-character mode. The demon's two OUTs are

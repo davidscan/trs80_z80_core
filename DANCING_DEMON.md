@@ -21,6 +21,15 @@ simulated screen at approximately period tempo, responding to keys,
 with the two sound `OUT`s suppressed and no other behavioural change.
 Visually self-verifying; no transcript can assert it.
 
+STATE 2026-09-12: DONE, short of the tempo judgement. The image loads
+intact (trs80basic R1, DD-14); driven through a pseudo-terminal with
+the core attached, preset show #1 plays 28.6 s of emulated time with no
+error, streams 82 KB of video, polls the keyboard 72 times and stops on
+the space bar (CLAUDE.md "WHERE TO PICK UP" item 0 has the run), and
+frames replayed from the protocol log (tools/render_frames.py) show
+the figure dancing. Whether it dances AT TEMPO to the eye is the user's
+interactive check (trs80basic HAND_TEST 14, `TRS80_MHZ=1.77`).
+
 ## What the target actually is (measured, FINDING 24)
 
 | | |
@@ -195,14 +204,23 @@ stub in `TRS80_Z80`).
   `dopeek` only).
 - **DD-13. 40A4H/40A5H reads 42E9H** — via `PEEK(16548/16549)` in BASIC
   and `LD HL,(40A4H)` in the payload. Both halves must agree.
-- **DD-14. LOAD of a tokenized program image.** The corpus files are
+- **DD-14. LOAD of a tokenized program image. — DONE on the interpreter
+  side 2026-09-12 (their R1).** `CLOAD` of an FF-headed image now keeps
+  every line's original body bytes in a per-line escrow and images those
+  bytes verbatim, relinked at 42E9H; the demon file loads byte-identical
+  (14,506 bytes) and `PEEK` sees the payload's CR bytes intact. Their
+  three user-visible decisions: LIST shows the detokenized text (keyword
+  spacing included); the loader is one-way (CSAVE/SAVE write text);
+  the escrow is dropped by a typed replacement, DELETE, NEW, a MERGE
+  over the line, and NAME (renumber drops every line's). [As written
+  until then: the corpus files are
   tokenized, not detokenized text. Their item R1, UNBUILT as of 2026-09-11
   and the one Dancing Demon item still owed on that side (their STATUS,
   "WHERE TO PICK UP" 2). Their REPLY 3 measured why it matters to the
   core: `CLOAD` of the tokenized file fails, and the sanctioned detok
   path rewrites 14 newline bytes, all inside the payload — 0DH is `DEC C`
   — so today no supported path loads the payload intact. Check the bytes
-  before the core.
+  before the core.]
 - **DD-15. The USR call frame must carry the slot digit. — DONE on the
   interpreter side 2026-09-10.** The spaced-call fix used to dispatch
   `USR n(` as name `USR`, discarding the digit. trs80basic now folds the
@@ -265,12 +283,21 @@ stub in `TRS80_Z80`).
 1. ~~**Where does the Z80 stack live** (DD-4)~~ — SETTLED 2026-09-11: SP
    at SSP, the core owns it for the call, the return sentinel is 2FFDH
    (DD-4, DESIGN.md decision 6). Kept so the numbering below holds.
-2. **How much video traffic per second** the protocol must carry. The
+2. ~~**How much video traffic per second** the protocol must carry~~ —
+   MEASURED 2026-09-12 from the protocol log of the pty-driven run: the
+   28.6 s preset show #1 streamed 5,440 `V` runs / 82,148 video bytes
+   (2.9 KB/s, 190 runs/s); the intro's curtain 262 runs / 4,068 bytes
+   over 2.7 s (1.5 KB/s); the stage setup 2,773 bytes in 0.09 s (a
+   31 KB/s burst — its CLS, one 1,024-byte run). Negligible for a text
+   pipe; the per-tick batching in `Machine.flush_video` is more than
+   enough. [As written: the
    34 static write sites say nothing about dynamic volume; measuring it
-   needs a running core, so this is the first item that cannot be
-   settled by measurement before building.
+   needs a running core, so this was the first item that could not be
+   settled by measurement before building.]
 3. **How faithful the pacing must be** to read as "dancing" (DD-9) —
-   a perceptual bar, not a numeric one.
+   a perceptual bar, not a numeric one. Still open, and the user's:
+   the pty run was unpaced (mhz=0); the interactive check is
+   `TRS80_MHZ=1.77` (trs80basic HAND_TEST 14).
 
 ## Reproducing the measurements
 

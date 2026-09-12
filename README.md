@@ -22,8 +22,14 @@ and `3eb73d6` (`z80/coprocess.py` + `core.py`, PROTOCOL.md's core half;
 trs80basic's `sh programs/tests/z80.sh` passes end to end with
 `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture"`, and its t32
 transcript is byte-identical to the stub's). 126 tests green. See "Run"
-below. The Dancing Demon end-to-end run now waits only on trs80basic's
-R1 tokenized loader (their item).
+below. **THE DANCING DEMON DANCES** (2026-09-12, the same day, once
+trs80basic built its R1 tokenized loader): the image CLOADs
+byte-identical, preset show #1 plays 28.6 s of emulated time through the
+core with no error (driven through a pseudo-terminal; batch cannot play
+it), and frames replayed from the streamed video with
+`tools/render_frames.py` show the figure dancing — the numbers are in
+CLAUDE.md "WHERE TO PICK UP" item 0. What is left is the user's eyes:
+that it dances at period tempo.
 [The line this replaced, kept for the record: "STATUS (2026-09-11):
 PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK CLOSED, MEMORY-MODEL
 HANDOFF CLOSED, NORTH STAR RE-MEASURED, PROTOCOL RATIFIED AND BUILT ON
