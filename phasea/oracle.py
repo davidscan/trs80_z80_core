@@ -74,8 +74,8 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 2026-08-28; the corpus stayed in ../awk_BASIC_interpreter, which keeps a
 # duplicate of src/ that is scheduled for deletion there. Build from the
 # live interpreter, read listings from the archive.
-INTERP_REPO = '../trs80basic'
-CORPUS = '../awk_BASIC_interpreter'
+INTERP_REPO = os.path.join(os.path.dirname(HERE), 'trs80basic')
+CORPUS = os.path.join(os.path.dirname(HERE), 'awk_BASIC_interpreter')
 SRC = os.path.join(INTERP_REPO, 'src')
 PROGRAMS = os.path.join(CORPUS, 'programs')
 OUT = os.path.join(HERE, 'out', 'oracle')

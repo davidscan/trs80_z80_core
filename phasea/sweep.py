@@ -28,9 +28,9 @@ from phasea.classify import classify, ROM_NAMES                # noqa: E402
 
 # The corpus archive. The interpreter is NOT here any more (it moved to
 # ../trs80basic 2026-08-28); the sweep reads listings only.
-CORPUS = '../awk_BASIC_interpreter'
-PROGRAMS = os.path.join(CORPUS, 'programs')
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CORPUS = os.path.join(os.path.dirname(HERE), 'awk_BASIC_interpreter')
+PROGRAMS = os.path.join(CORPUS, 'programs')
 
 
 def gate_check():

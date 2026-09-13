@@ -32,7 +32,8 @@ from phasea.extract import extract_file                      # noqa: E402
 from phasea.classify import classify                         # noqa: E402
 from z80.disasm import disassemble                           # noqa: E402
 
-OCR = '../awk_BASIC_interpreter/OCRsamples'
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OCR = os.path.join(os.path.dirname(HERE), 'awk_BASIC_interpreter', 'OCRsamples')
 SPACECHASE = os.path.join(OCR, 'spacechase.transcribed.bas')
 ENDGAME = os.path.join(OCR, 'endgame.transcribed.cleaned.bas')
 ENDGAME_RAW = os.path.join(OCR, 'endgame.transcribed.bas')
