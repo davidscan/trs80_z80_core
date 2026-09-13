@@ -217,7 +217,7 @@ rulings — those bullets carry their own dates.)
   trs80basic's `sh programs/tests/z80.sh` passes with
   `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture"` (DD-17) and
   their t32 transcript is byte-identical to the stub's; 126 tests green
-  (`python3 -m unittest discover -s tests`). Commits 463097c, 045fd3b.
+  (`python3 -m unittest discover -s tests`). Commits 20f7a9e, 3164eb2.
   [SUPERSEDED that day, kept for the record: "STAGE 1 IS NOT STARTED ON
   THIS SIDE. No opcode-execution code exists here and no protocol code
   exists here; `z80/` is still the table and the disassembler."]
@@ -345,7 +345,7 @@ rulings — those bullets carry their own dates.)
   inverse (assembler) index; corrected split was 1780 = 1033
   documented + 747 undocumented (previously reported 1043 + 737), and
   is **1032 + 748** since 2026-09-11, when the IM documented set was
-  found inverted too (commit 6409065; the table's decode is the core's,
+  found inverted too (commit 1d26a50; the table's decode is the core's,
   so every `undoc` flag is load-bearing).
   The card's stated timing rule (index-half = H/L form + 4 T-states)
   holds 92/92 — the first and so far ONLY external validation of any
@@ -366,7 +366,7 @@ rulings — those bullets carry their own dates.)
   green 2026-09-11: `python3 -m unittest discover -s tests`. NOTE the
   oracle's p60 patch point BROKE TWICE in two days (usr_resolve on
   2026-09-10, the z80_usr() call on 2026-09-11) because it matched the
-  USR block's whole body; since `ca970eb` it anchors on the block's
+  USR block's whole body; since `afb41ac` it anchors on the block's
   opening line only. A failed anchor sys.exits the build and takes the
   suite down with NO summary — a run that prints dots and then a
   "patch point ... matched 0 times" line is a red suite, not a warning.
@@ -416,14 +416,14 @@ rulings — those bullets carry their own dates.)
   THE THREE OPENS CLOSED. Fourteen commits went out on trs80basic in one
   day (their STATUS.local.md lists them; main == origin/main == 21d371b
   at the end of it) and two commits in THIS tree were written by that
-  session with the user's permission (9549a3c, 6d1df67) — read their
+  session with the user's permission (4fb216a, 043b2ea) — read their
   messages, they are the record. State, verified from this side:
   (i) DD-4 THE STACK IS RULED (user, 2026-09-11): SP = the interpreter's
   SSP at call time, carried as `sp=` in every CALL; the core owns SP for
   the call and pushes into its own RAM beneath it (those bytes come back
   in the write-set, so BASIC can PEEK the stack afterwards); the USR
   RETURN ADDRESS IS A SENTINEL, **2FFDH**, ruled the same day on this
-  side's recommendation — DESIGN.md decision 6 (6dc2b32). PC entering
+  side's recommendation — DESIGN.md decision 6 (63c960d). PC entering
   0000H-2FFFH is the one fetch-time check: 2FFDH ends the frame,
   01C9H/0A7FH/0A9AH are the served HLE traps, anything else is `ERR rom`.
   The "stack grows into SPK" hazard first recorded on DD-4 was
@@ -511,7 +511,7 @@ rulings — those bullets carry their own dates.)
      offered 2026-09-09 as the instrument and never ruled on — the user
      ruled build first.]
   2. ITEMS THEIR REPLY 4 (2026-09-10) FOUND ON THIS SIDE, all
-     reproduced there; (d) and (e) were FIXED 2026-09-11 (6409065), (a)-(c)
+     reproduced there; (d) and (e) were FIXED 2026-09-11 (1d26a50), (a)-(c)
      are still open: (a) `phasea/extract.py` finds READ/POKE
      only after a FOR on the SAME LINE, so a loader split across lines
      is filed `no-ml-in-listing` with no flag — a silent undercount in a

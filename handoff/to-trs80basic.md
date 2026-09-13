@@ -15,10 +15,10 @@
 > REPLY 4 and still open: (1) `phasea/extract.py` misses READ/POKE loaders
 > split across lines; (2) no `STRING$`/`CHR$` recognition in static
 > extraction; (3) `RESTORE` handling and the unused POKE value expression.
-> Your item 4 is FIXED (`6409065`, 2026-09-11): the `IM` documented set was
+> Your item 4 is FIXED (`1d26a50`, 2026-09-11): the `IM` documented set was
 > inverted exactly as you said, DAA's H flag too; the pinned split is now
 > 1032 documented + 748 undocumented, and FINDING 21 carries the addendum.
-> Your item 5 (DD-12) was corrected in `6d1df67`. Your item 6, measured
+> Your item 5 (DD-12) was corrected in `043b2ea`. Your item 6, measured
 > here: `python3 -m unittest discover -s tests` (the form CLAUDE.md quotes)
 > runs 104 tests and passes without a `tests/__init__.py`; a bare
 > `python3 -m unittest` runs 0, so nothing documented is broken and no

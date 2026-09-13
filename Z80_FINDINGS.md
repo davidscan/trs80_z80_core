@@ -954,7 +954,7 @@ and ED76, undocumented duplicates, carried `undoc=False` — so the
 inverse index resolved `IM 0` to ED 4E. Net one more undocumented entry
 after the fix (three flipped to documented, two the other way, and ED66
 and ED7E were already right). `DAA`'s flag string also marked H
-unaffected; it is affected. Both fixed in commit 6409065, the pin
+unaffected; it is affected. Both fixed in commit 1d26a50, the pin
 updated, 104 tests. The lesson below stands twice over: the card
 validated the index-half rule and SLL, and this one was found by a
 reader on the OTHER side of the seam — nothing on this side had a

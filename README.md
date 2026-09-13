@@ -15,10 +15,10 @@ stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
 **STATUS (2026-09-12): STAGE 1 IS BUILT.** The user gave the go ruling
-on 2026-09-12 and the core landed the same day in two commits: `463097c`
+on 2026-09-12 and the core landed the same day in two commits: `20f7a9e`
 (`z80/cpu.py`, the execution core, passing **all 1,604,000** pinned
 single-step vectors, measured at 2.1-2.7M insn/s against the 313K bar)
-and `045fd3b` (`z80/coprocess.py` + `core.py`, PROTOCOL.md's core half;
+and `3164eb2` (`z80/coprocess.py` + `core.py`, PROTOCOL.md's core half;
 trs80basic's `sh programs/tests/z80.sh` passes end to end with
 `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture"`, and its t32
 transcript is byte-identical to the stub's). 126 tests green. See "Run"

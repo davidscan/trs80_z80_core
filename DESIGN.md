@@ -337,7 +337,7 @@ and re-filed the rest under deeper blockers; grep can no longer answer
 "what would a working Z80 unlock" — only disassembly can.
 
 STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
-BUILT 2026-09-12 (commits 463097c and 045fd3b): `z80/cpu.py` passes all
+BUILT 2026-09-12 (commits 20f7a9e and 3164eb2): `z80/cpu.py` passes all
 1,604,000 pinned single-step vectors and `z80/coprocess.py` + `core.py`
 pass trs80basic's z80.sh conformance suite (DD-17). The bullets below
 are the plan as written before the build and stay as the record.
