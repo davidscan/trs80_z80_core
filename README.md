@@ -165,3 +165,12 @@ part is not the CPU; it is the high-level emulation of ROM services that
 real routines call (see DESIGN.md), and the protocol that streams video
 and key state while a routine is still running (PROTOCOL.md, with the
 work items in DANCING_DEMON.md).
+
+## License
+
+Copyright (c) 2026 David Forbis. GNU General Public License v3.0 — see
+`LICENSE`. Distributed WITHOUT ANY WARRANTY.
+
+**TRS-80**, **Radio Shack** and **Tandy** are trademarks of their
+respective owners, used only to describe compatibility; this project is not
+affiliated with or endorsed by them.

@@ -540,8 +540,8 @@ rulings — those bullets carry their own dates.)
      `z80/disasm.py` a CLI (goal (4) is "mostly built" but UNREACHABLE
      from a shell); a README "Commands and arguments" section (the
      sweep/oracle/fetch_vectors invocations exist only inside
-     Z80_FINDINGS prose); and a LICENSE (GPLv3 assumed, user ruling
-     still pending from 2026-08-14). A USER GUIDE was considered
+     Z80_FINDINGS prose). The LICENSE is DONE (GPLv3, byte-identical
+     to trs80basic's; user ruling 2026-09-13). A USER GUIDE was considered
      2026-09-08 and DEFERRED — there is no user-facing surface yet;
      revisit when a BASIC program with an embedded routine first runs
      end-to-end.
@@ -656,6 +656,6 @@ STANDING RULES (do not relearn these the hard way):
 - Remote: private GitHub davidscan/trs80-z80-core (created 2026-08-14 at
   the user's direction; hyphenated to match the naming
   of the repo that was then the parent). KEEP IT PRIVATE — the findings quote one-line loader
-  excerpts from magazine listings. No LICENSE file yet (user ruling
-  2026-08-14); GPLv3 mirroring trs80basic remains the default assumption
-  when one is added.
+  excerpts from magazine listings. LICENSE added 2026-09-13 at the user's
+  direction: GPLv3, byte-identical to trs80basic's, (c) 2026 David Forbis.
+  The keep-private rule above is a separate question and still stands.

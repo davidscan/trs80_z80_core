@@ -941,9 +941,9 @@ here):
    so the address does not change for them.
 
 STILL OPEN (decide when work starts):
-1. LICENSE: trs80basic is GPLv3 (c) 2026 David Forbis; mirroring it
-   here is the default assumption. No LICENSE file yet — user ruling
-   2026-08-14, with Phase A code already present.
+1. LICENSE: RULED 2026-09-13 -- GPLv3 (c) 2026 David Forbis, the LICENSE
+   file byte-identical to trs80basic's. (Until then: no LICENSE file, user
+   ruling 2026-08-14, with Phase A code already present.)
 2. R register: the interpreter's authentic-RND roadmap item reads R for
    seeding (RANDOM at 01D3H). Emulating R crudely (increment per
    instruction) lets the two items share it. Low stakes.
