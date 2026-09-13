@@ -653,9 +653,10 @@ STANDING RULES (do not relearn these the hard way):
   finding, baseline first so "unchanged" is a diff and not a belief.
 - Commit with `git commit -F <msgfile>`; use absolute paths in shell
   commands; every increment committed and green before the next.
-- Remote: private GitHub davidscan/trs80-z80-core (created 2026-08-14 at
-  the user's direction; hyphenated to match the naming
-  of the repo that was then the parent). KEEP IT PRIVATE — the findings quote one-line loader
+- Remote: private GitHub davidscan/trs80_z80_core. First created
+  2026-08-14 as trs80-z80-core; deleted and recreated 2026-09-13 after the
+  email rewrite, renamed to match this folder, the coprocess handshake name
+  and every doc (user ruling). KEEP IT PRIVATE — the findings quote one-line loader
   excerpts from magazine listings. LICENSE added 2026-09-13 at the user's
   direction: GPLv3, byte-identical to trs80basic's, (c) 2026 David Forbis.
   The keep-private rule above is a separate question and still stands.
