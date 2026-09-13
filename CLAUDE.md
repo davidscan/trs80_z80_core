@@ -37,7 +37,7 @@ sub-project of either. Neither is a "parent".
 - `../trs80basic` — the TRS-80 LEVEL II BASIC interpreter this core attaches
   to. Integration shape ratified 2026-09-04: COMPANION ENGINE, NEVER
   VENDORED — a p77 shim in trs80basic, `TRS80_Z80` discovery, releases may
-  bundle. BUILT AND MERGED 2026-09-11 (their `cc57dfc`, fast-forwarded
+  bundle. BUILT AND MERGED 2026-09-11 (their `76b95a0`, fast-forwarded
   into main the same day by the user): `src/p77_z80.awk` is the shim,
   `programs/tests/z80_stub.py` is the REFERENCE IMPLEMENTATION OF THIS
   SIDE (canned behaviour per entry address 7000H-700AH), and
@@ -50,7 +50,7 @@ sub-project of either. Neither is a "parent".
   "Program-memory mapping". TWO MORE THINGS THERE as of 2026-09-08:
   `handoff/to-trs80-z80-core.md`, their half of the channel — gitignored on
   that side like STATUS.local.md, so it exists only in a local checkout;
-  READ it, NEVER write it. And, COMMITTED in their `fe99d4b`, in
+  READ it, NEVER write it. And, COMMITTED in their `27192cd`, in
   `src/p75_mem.awk`, **"THE ADDRESS-RESOLUTION CONTRACT"** — the six-rule
   precedence order `dopeek` resolves a byte by, written at this project's
   request as a contract the core must reproduce exactly. It is the single
@@ -217,7 +217,7 @@ rulings — those bullets carry their own dates.)
   trs80basic's `sh programs/tests/z80.sh` passes with
   `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture"` (DD-17) and
   their t32 transcript is byte-identical to the stub's; 126 tests green
-  (`python3 -m unittest discover -s tests`). Commits e5dd614, 3eb73d6.
+  (`python3 -m unittest discover -s tests`). Commits 463097c, 045fd3b.
   [SUPERSEDED that day, kept for the record: "STAGE 1 IS NOT STARTED ON
   THIS SIDE. No opcode-execution code exists here and no protocol code
   exists here; `z80/` is still the table and the disassembler."]
@@ -249,7 +249,7 @@ rulings — those bullets carry their own dates.)
       CORRECTED 2026-09-11: it had NO notice at all until that day; it now
       prints ONE stderr line per run tallying the calls not executed by
       entry address, and TRS80_USR=strict raises ?FC (interpreter commit
-      a46b5da).  POKEd machine-code bytes still land in
+      b647ea3).  POKEd machine-code bytes still land in
       mem[], so only EXECUTION is stubbed and the memory image stays
       consistent for a later core. The measured hazard: 8 of the 11
       trs-80.com string-packing techniques fail SILENTLY today — a
@@ -269,7 +269,7 @@ rulings — those bullets carry their own dates.)
       never-commit-ROM rule), so code that READS the ROM cannot be
       served, only code that CALLS documented entry points; and a BASIC
       program can outgrow the 42E9H window that shows it — RULED
-      2026-09-11 on the interpreter side (their `9036f81`): the image
+      2026-09-11 on the interpreter side (their `b2c4cca`): the image
       TRUNCATES at a whole line before RAMTOP, writes the 00 00
       terminator there, 40F9H reports that end, one stderr note per
       build; the last visible next-line link is never garbage, which is
@@ -282,7 +282,7 @@ rulings — those bullets carry their own dates.)
   REPORTED not fixed (we do not edit trs80basic), all handed over in
   `handoff/to-trs80basic.md`.
   **ANSWERED 2026-09-08 — the channel round-tripped TWICE. Two shipped
-  (their `fe99d4b`), one measured at zero and deferred by agreement; their
+  (their `27192cd`), one measured at zero and deferred by agreement; their
   side is `../trs80basic/handoff/to-trs80-z80-core.md` (gitignored there,
   local only) and ours is the REPLY / REPLY 2 sections of
   `handoff/to-trs80basic.md`.** Verified from this side, not taken on
@@ -292,8 +292,8 @@ rulings — those bullets carry their own dates.)
   p75_mem.awk`**, six precedence rules the core MUST reproduce
   byte-for-byte or it will execute the wrong bytes with no error. Read it
   before writing any core memory path. THE WRITE HALF, asked 2026-09-08,
-  is CLOSED: the write contract shipped 2026-09-09 (their `efc1c02`) and
-  the store primitive is `poke_byte` (their `a42c41a`, `src/p80_stmt.awk`;
+  is CLOSED: the write contract shipped 2026-09-09 (their `4b5f7cd`) and
+  the store primitive is `poke_byte` (their `96d439f`, `src/p80_stmt.awk`;
   `st_poke` is now only the POKE parser in front of it). The core never
   reproduces either side: PROTOCOL.md rules that the frame IN is built by
   `fr_build` reading every defined address through `dopeek` (so every
@@ -345,7 +345,7 @@ rulings — those bullets carry their own dates.)
   inverse (assembler) index; corrected split was 1780 = 1033
   documented + 747 undocumented (previously reported 1043 + 737), and
   is **1032 + 748** since 2026-09-11, when the IM documented set was
-  found inverted too (commit 7f42678; the table's decode is the core's,
+  found inverted too (commit 6409065; the table's decode is the core's,
   so every `undoc` flag is load-bearing).
   The card's stated timing rule (index-half = H/L form + 4 T-states)
   holds 92/92 — the first and so far ONLY external validation of any
@@ -366,7 +366,7 @@ rulings — those bullets carry their own dates.)
   green 2026-09-11: `python3 -m unittest discover -s tests`. NOTE the
   oracle's p60 patch point BROKE TWICE in two days (usr_resolve on
   2026-09-10, the z80_usr() call on 2026-09-11) because it matched the
-  USR block's whole body; since `6c30f58` it anchors on the block's
+  USR block's whole body; since `ca970eb` it anchors on the block's
   opening line only. A failed anchor sys.exits the build and takes the
   suite down with NO summary — a run that prints dots and then a
   "patch point ... matched 0 times" line is a red suite, not a warning.
@@ -414,22 +414,22 @@ rulings — those bullets carry their own dates.)
   2026-09-11, recorded below so they are not reopened.
 - WHAT HAPPENED 2026-09-10/11 — THE INTERPRETER SIDE BUILT ITS HALF AND
   THE THREE OPENS CLOSED. Fourteen commits went out on trs80basic in one
-  day (their STATUS.local.md lists them; main == origin/main == f4012de
+  day (their STATUS.local.md lists them; main == origin/main == 21d371b
   at the end of it) and two commits in THIS tree were written by that
-  session with the user's permission (3614cf1, 410b9a5) — read their
+  session with the user's permission (9549a3c, 6d1df67) — read their
   messages, they are the record. State, verified from this side:
   (i) DD-4 THE STACK IS RULED (user, 2026-09-11): SP = the interpreter's
   SSP at call time, carried as `sp=` in every CALL; the core owns SP for
   the call and pushes into its own RAM beneath it (those bytes come back
   in the write-set, so BASIC can PEEK the stack afterwards); the USR
   RETURN ADDRESS IS A SENTINEL, **2FFDH**, ruled the same day on this
-  side's recommendation — DESIGN.md decision 6 (fbac111). PC entering
+  side's recommendation — DESIGN.md decision 6 (6dc2b32). PC entering
   0000H-2FFFH is the one fetch-time check: 2FFDH ends the frame,
   01C9H/0A7FH/0A9AH are the served HLE traps, anything else is `ERR rom`.
   The "stack grows into SPK" hazard first recorded on DD-4 was
   WITHDRAWN by its author: SSP is the BOTTOM of string space, a downward
   stack moves away from it.
-  (ii) THE STUB IS NOT SILENT (their `a46b5da`): one stderr tally line
+  (ii) THE STUB IS NOT SILENT (their `b647ea3`): one stderr tally line
   per run, `TRS80_USR=strict` raises ?FC; see (b) above.
   (iii) THE 42E9H OVERFLOW IS RULED: truncate at a whole line; see (c)
   above. DESIGN.md's UNDECIDED is closed.
@@ -511,7 +511,7 @@ rulings — those bullets carry their own dates.)
      offered 2026-09-09 as the instrument and never ruled on — the user
      ruled build first.]
   2. ITEMS THEIR REPLY 4 (2026-09-10) FOUND ON THIS SIDE, all
-     reproduced there; (d) and (e) were FIXED 2026-09-11 (7f42678), (a)-(c)
+     reproduced there; (d) and (e) were FIXED 2026-09-11 (6409065), (a)-(c)
      are still open: (a) `phasea/extract.py` finds READ/POKE
      only after a FOR on the SAME LINE, so a loader split across lines
      is filed `no-ml-in-listing` with no flag — a silent undercount in a

@@ -146,7 +146,7 @@ The entries below keep their pre-build text as the record.
   interpreter's sparse contract-resolved image with delta frames after
   the first; `K` is the only callback; `T` ticks carry BREAK.  See
   PROTOCOL.md; the interpreter's shim is built (`src/p77_z80.awk`, their
-  `cc57dfc`, MERGED to their main the same day) and
+  `76b95a0`, MERGED to their main the same day) and
   `programs/tests/z80_stub.py` there is the reference implementation of
   THIS side.  What remains of DD-7 is the core's half.** The animation writes
   3C00-3FFF *during* the USR call. FINDING 19's central point and still
@@ -189,12 +189,12 @@ stub in `TRS80_Z80`).
   links.** The chain is the dispatch mechanism, not decoration — a wrong
   link is a jump into garbage with no error. DESIGN.md used to flag the
   `% 65536` wrap in `pm_build`; RULED AND FIXED on the interpreter side
-  2026-09-11 (their `9036f81`): the image truncates at a whole line before
+  2026-09-11 (their `b2c4cca`): the image truncates at a whole line before
   RAMTOP, writes the 00 00 terminator, 40F9H reports that end. Correct
   links now hold for every program size; nothing outstanding.
 - **DD-12. 4000-41FF writable AND executable. — CORRECTED 2026-09-11: the
-  write contract shipped 2026-09-09 (efc1c02) and the store primitive is
-  now `poke_byte` (a42c41a); the write-set is applied through it, so a
+  write contract shipped 2026-09-09 (4b5f7cd) and the store primitive is
+  now `poke_byte` (96d439f); the write-set is applied through it, so a
   store to 4018H lands in the interpreter's MEM[] and comes back in the
   next frame.  Nothing outstanding.** The payload writes C3H
   to 4018H and a target to 4019H, then calls it. Whether writes there
@@ -270,7 +270,7 @@ stub in `TRS80_Z80`).
   the routine had stored, so the editor overwrote instead of appending.
   trs80basic made the image writable (dopeek returns MEM[a] when an image
   address was written, else the crunched byte; RUN/LIST still work from
-  the source text) -- see its `77d02f9` and the updated address-resolution
+  the source text) -- see its `42f576a` and the updated address-resolution
   contract.  The core needs no change: it keeps flat RAM and just reads
   back its own write-set. *The original static reasoning, kept as the
   record of the miss:* every real absolute write goes to system RAM

@@ -38,11 +38,11 @@ started; no core code has been written.
 STATUS 2026-09-11: still no core code HERE, but the other half now exists.
 The USR coprocess protocol is ratified (`PROTOCOL.md`, mirrored from
 trs80basic and identical there), its interpreter half is BUILT AND MERGED
-into trs80basic main (`cc57dfc`: the p77 shim, the reference stub
+into trs80basic main (`76b95a0`: the p77 shim, the reference stub
 `programs/tests/z80_stub.py`, the conformance script `programs/tests/z80.sh`),
 the stack policy is ruled (SP = SSP, return sentinel 2FFDH — DESIGN.md
 decision 6, DANCING_DEMON DD-4) and the 42E9H window overflow is ruled
-(truncate at a whole line, `9036f81`). The core's acceptance bar before any
+(truncate at a whole line, `b2c4cca`). The core's acceptance bar before any
 listing is DD-17: `z80.sh` passing with `TRS80_Z80` pointing at the core.
 Dated STATUS notes below mark each finding this settles; the measurements
 are unchanged.
@@ -798,7 +798,7 @@ interpreter must provide. FINDING 24 carries the deltas; work items are
 in `DANCING_DEMON.md`.
 
 **STATUS 2026-09-11 — the three protocol capabilities (a)-(c) above are
-DECIDED, not pending.** `PROTOCOL.md` (interpreter half built, `cc57dfc`):
+DECIDED, not pending.** `PROTOCOL.md` (interpreter half built, `76b95a0`):
 (a) video is STREAMED as `V` lines during the call, drawn as they arrive;
 (b) the keyboard is the ONLY callback — a read of 3800H+sel goes out as
 `K <sel>` and the live matrix byte comes back; (c) pacing to real time is
@@ -954,7 +954,7 @@ and ED76, undocumented duplicates, carried `undoc=False` — so the
 inverse index resolved `IM 0` to ED 4E. Net one more undocumented entry
 after the fix (three flipped to documented, two the other way, and ED66
 and ED7E were already right). `DAA`'s flag string also marked H
-unaffected; it is affected. Both fixed in commit 7f42678, the pin
+unaffected; it is affected. Both fixed in commit 6409065, the pin
 updated, 104 tests. The lesson below stands twice over: the card
 validated the index-half rule and SLL, and this one was found by a
 reader on the OTHER side of the seam — nothing on this side had a
@@ -1127,7 +1127,7 @@ program that repeatedly re-packs a routine. On real hardware this is what
 ### Note for the protocol, when it comes
 
 **STATUS 2026-09-11 — SETTLED THE WAY THIS NOTE ASKED.** The frame is not
-"the sparse mem[]": `fr_build` (trs80basic `6c6413f`) resolves every defined
+"the sparse mem[]": `fr_build` (trs80basic `073c8c3`) resolves every defined
 address through `dopeek`, so the address-resolution contract holds by
 construction and the protected region arrives as the bytes a PEEK would
 return; addresses in no frame read 255. `PROTOCOL.md` "The frame". The
@@ -1179,7 +1179,7 @@ immune, and that unwritten memory reads **255**, not 0.
 
 **STATUS 2026-09-11 — the unbounded case is CLOSED by ruling, and the write
 side has a contract.** The 42E9H window overflow, UNDECIDED in DESIGN.md when
-this was written, is ruled TRUNCATE AT A WHOLE LINE (trs80basic `9036f81`):
+this was written, is ruled TRUNCATE AT A WHOLE LINE (trs80basic `b2c4cca`):
 `pm_build` no longer wraps the next pointer modulo 65536 and writes above the
 address space; the image stops before the first line whose record would cross
 RAMTOP, terminates there with `00 00`, 40F9H reports that end, and one stderr
@@ -1187,8 +1187,8 @@ note is printed the first time the truncated image is consulted. So the
 13000-line row below (PMEND 887944) is now history — PMEND cannot exceed
 RAMTOP — though its observable, "every PEEK in the 16-bit space reads the
 image", is unchanged for a program that large, because the truncated image
-still reaches RAMTOP. The write side: the write contract shipped `efc1c02`
-and the single store primitive is `poke_byte` (`a42c41a`); a store into the
+still reaches RAMTOP. The write side: the write contract shipped `4b5f7cd`
+and the single store primitive is `poke_byte` (`96d439f`); a store into the
 image range is "stored but invisible", exactly the asymmetry measured here,
 and the USR write-set is applied through the same primitive
 (`PROTOCOL.md` "The return"). The mapping stays deliberately unbuilt.
@@ -1345,7 +1345,7 @@ Three consequences for the core, none of them optional:
 STATUS 2026-09-11 — all three are now provided for on the interpreter side,
 none needing core work beyond applying the frame: the next-line links hold
 for every program size because the image is truncated at a whole line below
-RAMTOP (`9036f81`, DD-11); a store to 4018H/4019H lands in the interpreter's
+RAMTOP (`b2c4cca`, DD-11); a store to 4018H/4019H lands in the interpreter's
 `MEM[]` through `poke_byte` and comes back in the next frame (DD-12 closed);
 and 40A4/40A5H are among the 14 constant/pointer bytes every frame carries
 (`PROTOCOL.md` "The frame", DD-13).
@@ -1564,13 +1564,13 @@ policy does not bind, and the stub-loudness question is orthogonal.
 
 STATUS 2026-09-11 — of the four "expensive" items named above, three are now
 on paper or built and one is the core's to write: the image projection with
-correct links is built (`9036f81`); 4000-41FFH writes go through `poke_byte`
+correct links is built (`b2c4cca`); 4000-41FFH writes go through `poke_byte`
 (DD-12); the stack policy is ruled (section 3 STATUS); and the streaming
-protocol is `PROTOCOL.md`, with the interpreter's half merged (`cc57dfc`)
+protocol is `PROTOCOL.md`, with the interpreter's half merged (`76b95a0`)
 and the core's half being Stage 1 itself (DD-7, DD-10). Both DESIGN.md open
 questions are also closed: overflow = truncate at a whole line, and the stub
 now prints a per-run stderr tally of unexecuted calls with `TRS80_USR=strict`
-raising ?FC (`a46b5da`). What remains is DD-1..DD-10, all in this repo.
+raising ?FC (`b647ea3`). What remains is DD-1..DD-10, all in this repo.
 
 THREE DOCUMENTS ARE CORRECTED HERE: FINDING 19 (the ROM call count and
 the dispatcher structure), README (the Model I instruction rate), and

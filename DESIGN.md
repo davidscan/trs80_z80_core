@@ -113,7 +113,7 @@ HL back to the evaluator). The agreed shape:
   terminating RET, returns HL, the memory write-set, and a cycle count.
   awk applies writes through its existing device mapping, so video writes
   render exactly like POKEs.
-  BUILT ON THE INTERPRETER SIDE 2026-09-11 (commit cc57dfc, MERGED to
+  BUILT ON THE INTERPRETER SIDE 2026-09-11 (commit 76b95a0, MERGED to
   trs80basic main the same day; `src/p77_z80.awk`): the exact wire is
   PROTOCOL.md in this tree, mirrored and identical.  What this bullet did not yet say and the
   protocol does: the frame is a sparse image resolved through the
@@ -132,13 +132,13 @@ HL back to the evaluator). The agreed shape:
   image, or read per address into `dopeek` with a cache) — not the raw
   `mem[]` array. The point here is only that `mem[]` is not the
   machine's memory.
-  MECHANISM DECIDED 2026-09-11 (same day, interpreter commit 6c6413f):
+  MECHANISM DECIDED 2026-09-11 (same day, interpreter commit 073c8c3):
   `fr_build` in p75 MATERIALISES a sparse image — every defined address
   read through `dopeek`, sent as ascending runs, full on the first frame
   and delta after (screen, the constant/pointer bytes, the system-
   variable window, every SPK cell, the image when rebuilt, and whatever
   was written since); everything not sent reads 255. The write-set
-  comes back through `poke_byte` (a42c41a), so a Z80 store lands where a
+  comes back through `poke_byte` (96d439f), so a Z80 store lands where a
   POKE would. PROTOCOL.md "The frame" is the authority.
 - DEVICE READS AS PROTOCOL CALLBACKS: reads of 3800H-38FFH (and any
   other live device) round-trip to awk, which answers from the live
@@ -158,7 +158,7 @@ HL back to the evaluator). The agreed shape:
 - GRACEFUL DEGRADATION: no python3 on the machine -> USR falls back to
   the interpreter's stub (evaluate and return the argument) with a one-time
   notice.
-  AS SHIPPED (2026-09-11, a46b5da and p77): the stub is used whenever
+  AS SHIPPED (2026-09-11, b647ea3 and p77): the stub is used whenever
   `TRS80_Z80` is unset, the command cannot start or does not answer
   HELLO, the `Z80` line carries another `proto`, or a call timed out
   earlier in the session; each prints one `USR CORE:` notice the first
@@ -337,7 +337,7 @@ and re-filed the rest under deeper blockers; grep can no longer answer
 "what would a working Z80 unlock" — only disassembly can.
 
 STAGE 1 (first core milestone): the Z80 core + minimal USR plumbing.
-BUILT 2026-09-12 (commits e5dd614 and 3eb73d6): `z80/cpu.py` passes all
+BUILT 2026-09-12 (commits 463097c and 045fd3b): `z80/cpu.py` passes all
 1,604,000 pinned single-step vectors and `z80/coprocess.py` + `core.py`
 pass trs80basic's z80.sh conformance suite (DD-17). The bullets below
 are the plan as written before the build and stay as the record.
@@ -478,7 +478,7 @@ unvalidated" until the core runs the pinned single-step vectors.
   wave through an external amp), bit 3 = 32-column video mode (pairs
   with the interpreter's CHR$(23) roadmap item). OUT elsewhere: no-op or
   error, decide from corpus evidence (Phase A).
-  INTERPRETER-SIDE STATE 2026-09-11 (their REPLY 9, e7839ac): `INP(255)`
+  INTERPRETER-SIDE STATE 2026-09-11 (their REPLY 9, 2d05df3): `INP(255)`
   reads 127 in 64-character mode and 63 in 32-character mode (bit 6 =
   mode, bit 7 = cassette input, never set); every other port reads 255;
   the interpreter DISCARDS `OUT`. A core executing `IN A,(FFH)` should
@@ -536,7 +536,7 @@ WHAT IS PROJECTED INTO THE 64K (everything else is the core's own RAM):
 keyboard 3800-38FF as the one live callback; video 3C00-3FFF carried
 in every frame and streamed back as it is written; 37E8-37E9 printer
 status; the system-variable window (cursor, printer, clock, current
-line, AUTO, TRON cells — live since 2026-09-11, their 17639c2); the
+line, AUTO, TRON cells — live since 2026-09-11, their c320f4a); the
 READ-ONLY tokenized program image at 42E9H; string bytes reachable
 through VARPTR, write-through. Numeric
 and array VARPTR do NOT materialise as contiguous memory (see the
@@ -561,7 +561,7 @@ STANDING RULES:
    record plus terminator would cross RAMTOP, the 00 00 terminator is
    written there, 40F9H reports the cut, and one stderr note is printed
    the first time the truncated image is consulted (interpreter commit
-   9036f81).  DD-11's "correct next-line links" therefore holds at every
+   b2c4cca).  DD-11's "correct next-line links" therefore holds at every
    program size.  It was a live question for goal (1)
    because FINDING 19's Dancing Demon payload lives inside the program
    image itself, at 42F6H.
@@ -611,7 +611,7 @@ the live mechanism that keeps packed strings clear of poked code.
 A DEFECT SAT IN THE OTHER HALF (FINDING 22): the interpreter treated
 everything above HIMEM as ABSENT rather than PROTECTED, so POKEs into
 the reserved region were discarded. Interpreter-owned, reported not
-built here — and FIXED there 2026-09-08 (fe99d4b): RAMTOP (physical
+built here — and FIXED there 2026-09-08 (27192cd): RAMTOP (physical
 top) is split from HIMEM (the MEMORY SIZE? answer), the region between
 is protected RAM, and the frame header carries both (`himem=`,
 `ramtop=`). FINDING 22's addendum records it.
@@ -671,7 +671,7 @@ THREE CAVEATS, so the pattern is not oversold:
 - The 16-bit next-line links USED TO wrap past FFFFH (`% 65536` in
   pm_build), so code walking the line-record chain — which is how a
   payload in the image is located — was only safe under 64K. RULED
-  and fixed 2026-09-11 (9036f81, "The address space" consequence 2):
+  and fixed 2026-09-11 (b2c4cca, "The address space" consequence 2):
   the image now truncates at a whole line, so the chain is always
   well-formed. "Early" remains load-bearing for the truncated tail: a
   payload past the cut is simply not in the image.
@@ -958,7 +958,7 @@ STILL OPEN (decide when work starts):
    CLOSED 2026-09-11: the details are ruled and written — PROTOCOL.md
    version 1 (framing, full/delta frames with `NEED full`, `T` ticks in
    place of an instruction budget, the version handshake in HELLO/Z80,
-   `ERR` codes). The frame IS consumed now: the p77 shim (cc57dfc) hands
+   `ERR` codes). The frame IS consumed now: the p77 shim (76b95a0) hands
    `slot=`/`entry=`/`arg=`/`sp=` to whatever `TRS80_Z80` names. Kept as
    a decision only in the sense that PROTOCOL.md is the authority and
    the two copies must stay identical.
