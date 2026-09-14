@@ -130,10 +130,19 @@ that is not published.
 
 ## Run
 
+Checked out beside trs80basic, as `../trs80_z80_core`, nothing needs
+naming: its launcher finds `core.py` by itself, and `USR` routines
+execute. Pace the clock, or a long routine runs as fast as Python goes:
+
+    cd ../trs80basic && TRS80_MHZ=1.77408 ./basic prog.bas
+
+From anywhere else, name the core; `TRS80_Z80=` (empty) runs without one:
+
     TRS80_Z80="python3 /path/to/trs80_z80_core/core.py" ../trs80basic/basic prog.bas
 
 `core.py` is what `TRS80_Z80` names; it speaks PROTOCOL.md version 1 on
-stdin/stdout and `USR` routines in `prog.bas` then execute. `--fixture`
+stdin/stdout and `USR` routines in `prog.bas` then execute. Python 3,
+standard library only. `--fixture`
 adds the machine-code routines behind the reference stub's canned entry
 addresses (laid out from 7100H and mapped by entry; 7004H and 7008H stay
 harness hooks), which is what trs80basic's conformance suite needs:
