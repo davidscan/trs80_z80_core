@@ -7,7 +7,7 @@ Input set per DESIGN.md "PHASE A INPUT SET":
   (empty). The anchors in OCRsamples/ are read IN PLACE, never copied.
 
 THE SWEEP REFUSES TO PUBLISH COUNTS UNLESS BOTH ANCHOR SUITES PASS.
-CLAUDE.md: "A count produced without both checks passing is not a
+The counting rule: "A count produced without both checks passing is not a
 measurement." That is enforced here rather than left to discipline.
 
 Usage:
@@ -154,7 +154,7 @@ def main():
         ok, summary = gate_check()
         print('anchor gate: %s  (%s)' % ('PASS' if ok else 'FAIL', summary))
         if not ok:
-            print('\nREFUSING TO PUBLISH COUNTS. CLAUDE.md: a count produced '
+            print('\nREFUSING TO PUBLISH COUNTS: a count produced '
                   'without both anchor checks passing is not a measurement.')
             return 2
 

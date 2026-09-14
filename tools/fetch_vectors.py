@@ -325,7 +325,7 @@ def coverage(lock):
     Phase A's discipline applied to the next stage: report the gap
     BEFORE relying on the suite, so 'the vectors pass' is never
     mistaken for 'the table is validated'. A silent gap is the whole
-    failure mode CLAUDE.md's anchors rule exists to prevent.
+    failure mode the anchors rule (DESIGN.md) exists to prevent.
     """
     from z80.table import TABLE
 

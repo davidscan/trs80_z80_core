@@ -1,6 +1,6 @@
 """ANCHOR 2 -- extractor and classifier against the ground-truth anchors.
 
-CLAUDE.md "ANCHORS BEFORE TRUST": the classifier must bucket the two
+The ANCHORS BEFORE TRUST rule (DESIGN.md "ACCEPTANCE ANCHORS"): the classifier must bucket the two
 ground-truth anchors correctly BEFORE its corpus-wide counts mean
 anything.
 

@@ -13,7 +13,7 @@ line-oriented transport.
     python3 core.py                # what TRS80_Z80 names
     python3 core.py --fixture      # plus the z80.sh conformance routines
 
-ROM SPACE HOLDS NO BYTES, by the never-commit-ROM rule (CLAUDE.md).  A
+ROM SPACE HOLDS NO BYTES, by the never-commit-ROM rule (DESIGN.md non-goals).  A
 routine may CALL the documented services below, and nothing else in
 0000H-2FFFH: the trap reimplements the documented effect and performs
 the RET the ROM routine would have.

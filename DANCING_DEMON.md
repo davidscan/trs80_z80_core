@@ -5,8 +5,8 @@ strategy", Z80_FINDINGS FINDING 19): **"silent Dancing Demon dances."**
 This file is the work-item ledger for that run — what must be true, who
 owns it, and what is already measured. It is not a plan of record and
 schedules nothing; Stage 1 was BUILT 2026-09-12 (it read "still not
-started" until then) and CLAUDE.md's "measure before building" rule
-still governs what comes next.
+started" until then) and the measure-before-building rule (DESIGN.md
+non-goals: measure first) still governs what comes next.
 
 EVIDENCE BASE: FINDING 19 (2026-09-02, the profile) and **FINDING 24
 (2026-09-09, the re-measurement)**, which reproduced FINDING 19 exactly
@@ -21,14 +21,17 @@ simulated screen at approximately period tempo, responding to keys,
 with the two sound `OUT`s suppressed and no other behavioural change.
 Visually self-verifying; no transcript can assert it.
 
-STATE 2026-09-12: DONE, short of the tempo judgement. The image loads
-intact (trs80basic R1, DD-14); driven through a pseudo-terminal with
-the core attached, preset show #1 plays 28.6 s of emulated time with no
-error, streams 82 KB of video, polls the keyboard 72 times and stops on
-the space bar (CLAUDE.md "WHERE TO PICK UP" item 0 has the run), and
-frames replayed from the protocol log (tools/render_frames.py) show
-the figure dancing. Whether it dances AT TEMPO to the eye is the user's
-interactive check (trs80basic HAND_TEST 14, `TRS80_MHZ=1.77`).
+STATE 2026-09-13: DONE. The image loads intact (trs80basic R1, DD-14);
+driven through a pseudo-terminal with the core attached, preset show #1
+plays 28.6 s of emulated time with no error, streams 82 KB of video,
+polls the keyboard 72 times and stops on the space bar (the run is under
+"Reproducing the measurements"), and frames replayed from the protocol
+log (tools/render_frames.py) show the figure dancing. The tempo
+judgement was the user's, at a real terminal with `TRS80_MHZ=1.77`
+(trs80basic HAND_TEST 14): CONFIRMED 2026-09-12, the demon dances
+center stage at period tempo. Measured 2026-09-13 on that same path: a
+paced USR routine of 4.57 s emulated time ran in 4.74 s of wall time
+from RUN to its result, interactive, the keyboard polled every tick.
 
 ## What the target actually is (measured, FINDING 24)
 
@@ -176,7 +179,9 @@ The entries below keep their pre-build text as the record.
 
 ## C. Interpreter-side dependencies — REPORT, NEVER BUILD
 
-Owned by trs80basic (CLAUDE.md: do not edit that repo at all). **NOT
+Owned by trs80basic. Until 2026-09-12 this side reported and never built
+there; since then one session works both repos, so an item here is built
+there directly and the handoff files are a dated record. **NOT
 AUDITED in the 2026-09-09 pass** — the audit was scoped to this project
 at the user's direction; the statuses marked DONE/CORRECTED below were
 reported by that side in its handoff replies (2026-09-10/11) and read
@@ -197,11 +202,11 @@ stub in `TRS80_Z80`).
   now `poke_byte` (96d439f); the write-set is applied through it, so a
   store to 4018H lands in the interpreter's MEM[] and comes back in the
   next frame.  Nothing outstanding.** The payload writes C3H
-  to 4018H and a target to 4019H, then calls it. Whether writes there
-  reach the core's RAM or fall into a projection is exactly the
-  `st_poke` asymmetry already raised with trs80basic and still
-  outstanding (CLAUDE.md; the address-resolution contract covers
-  `dopeek` only).
+  to 4018H and a target to 4019H, then calls it. [Until 2026-09-11 this
+  read: whether writes there reach the core's RAM or fall into a
+  projection is the `st_poke` asymmetry raised with trs80basic and still
+  outstanding, the contract covering `dopeek` only. The write side of
+  the contract is now written in their `src/p75_mem.awk`.]
 - **DD-13. 40A4H/40A5H reads 42E9H** — via `PEEK(16548/16549)` in BASIC
   and `LD HL,(40A4H)` in the payload. Both halves must agree.
 - **DD-14. LOAD of a tokenized program image. — DONE on the interpreter
@@ -308,9 +313,11 @@ stub in `TRS80_Z80`).
    needs a running core, so this was the first item that could not be
    settled by measurement before building.]
 3. **How faithful the pacing must be** to read as "dancing" (DD-9) —
-   a perceptual bar, not a numeric one. Still open, and the user's:
-   the pty run was unpaced (mhz=0); the interactive check is
-   `TRS80_MHZ=1.77` (trs80basic HAND_TEST 14).
+   a perceptual bar, not a numeric one. ANSWERED 2026-09-12 by the user
+   at a real terminal (`TRS80_MHZ=1.77`, trs80basic HAND_TEST 14): it
+   reads as dancing at period tempo. Measured 2026-09-13: paced execution
+   on that interactive path tracks real time within 4% ("State" above);
+   the 2026-09-12 pty run itself was unpaced (mhz=0).
 
 ## Reproducing the measurements
 
@@ -319,4 +326,16 @@ DD-1 lands. The profile is a linear sweep plus a recursive-descent trace
 seeded from 42F6H and the 106 fake-line body addresses; `z80/disasm.py`
 decodes all 8,068 instructions with zero undecodable, and every count in
 this file was produced by resolving addresses through the table rather
-than by matching text (CLAUDE.md, "corpus counting traps").
+than by matching text (the corpus-counting rule: resolve through the
+table, never match text).
+
+The 2026-09-12 run behind "State": a Python `pty.fork` driver typing
+'\r' (MEMORY SIZE), CLOAD of the image, RUN, '6', '20\r', '1\r', a wait,
+then ' ', with `TRS80_Z80="sh tools/corelog.sh /tmp/x"` logging the
+protocol. Six USR calls at entry 42F6H, no ERR: the intro's curtain
+(routine 39: 2.7 s, 262 V runs, 5 K polls) and bow (29: 6.1 s, 55 runs /
+800 bytes), the stage setup (27: 0.09 s, 2,773 bytes — its CLS), preset
+show #1 (routine 37: 28.6 s emulated, 5,440 V runs / 82,148 video bytes
+= 2.9 KB/s, 5,706 ticks, 72 K polls, ended by the space bar), then two
+bows. `python3 tools/render_frames.py /tmp/x.out 4 400 1200 2000 2800
+3600 4400` replays the streamed video.

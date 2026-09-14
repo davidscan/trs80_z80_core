@@ -11,7 +11,7 @@ CONVERTED 2026-09-07). This document used to say "the parent" for the
 pre-split ../awk_BASIC_interpreter, which then held both the
 interpreter and the corpus. Since 2026-08-28 the interpreter is
 ../trs80basic and awk_BASIC_interpreter is the corpus archive only;
-neither is a parent (CLAUDE.md "COMPANION REPOS"). Every occurrence has
+neither is a parent. Every occurrence has
 now been replaced by the thing it actually named — "the interpreter" /
 trs80basic for interpreter-side work, "the archive" / "the corpus
 archive" / awk_BASIC_interpreter for corpus-side work. Nothing about
@@ -253,7 +253,7 @@ builds is THE shared declarative opcode table (see "Architecture: the
 reusable seams") — the core's decoder and the future assembler are its
 other consumers; nothing is thrown away.
 ACCEPTANCE ANCHORS (ruled 2026-08-13, wording corrected 2026-08-14,
-see CLAUDE.md "ANCHORS BEFORE TRUST"): the table validates against
+the ANCHORS BEFORE TRUST rule): the table validates against
 known-good disassembly first; the classifier must be checked against
 Space Chase and endgame SCAN3, and its buckets reconciled with the
 evidence, before corpus-wide counts are reported; Phase A ends in a
@@ -831,7 +831,7 @@ reopened from scratch.
 That instruction was discharged on 2026-08-14 and the imperative was
 left standing in the navigation layer, which is the exact hazard this
 document keeps warning about. The name "The gate" is unchanged so
-CLAUDE.md's reference still resolves.)
+references to it still resolve.)
 
 Count rescued listings blocked on USR before building Stage 1 — now
 operationalized as PHASE A (the disassembler/classifier), which is
@@ -872,8 +872,7 @@ regressions. The ruling on the core was taken knowing the cheapest
 listings-per-hour on the table were not in this repo.
 
 RULED 2026-08-14 (user, in the companion session; recorded in
-awk_BASIC_interpreter's PROJECT_MAP.md and CLAUDE.md "WHERE THINGS
-STAND"): the rescue count does not justify Stage 1 and no longer has
+awk_BASIC_interpreter's PROJECT_MAP.md): the rescue count does not justify Stage 1 and no longer has
 to. The project is re-founded on its own merits — the user wants a
 standalone assembler/disassembler in addition to in-BASIC machine-code
 handling — with four goals in priority order: run BASIC with embedded

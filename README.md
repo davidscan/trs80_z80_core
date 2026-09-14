@@ -28,8 +28,8 @@ byte-identical, preset show #1 plays 28.6 s of emulated time through the
 core with no error (driven through a pseudo-terminal; batch cannot play
 it), and frames replayed from the streamed video with
 `tools/render_frames.py` show the figure dancing — the numbers are in
-CLAUDE.md "WHERE TO PICK UP" item 0. What is left is the user's eyes:
-that it dances at period tempo.
+DANCING_DEMON.md ("State"). The user confirmed at a real terminal on
+2026-09-12 that it dances at period tempo.
 [The line this replaced, kept for the record: "STATUS (2026-09-11):
 PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK CLOSED, MEMORY-MODEL
 HANDOFF CLOSED, NORTH STAR RE-MEASURED, PROTOCOL RATIFIED AND BUILT ON
@@ -44,7 +44,7 @@ gate number moved **5 → 6**. What is scarce in this corpus is not
 machine code; it is a listing whose ONLY obstacle is the absent Z80.
 The user ruled on 2026-08-14 that the rescue count does not justify
 the core and no longer has to: the project is wanted for its own sake,
-with four goals in priority order (CLAUDE.md "WHERE THINGS STAND") —
+with four goals in priority order (DESIGN.md, "RULED 2026-08-14") —
 run BASIC with embedded machine code, run magazine assembly listings,
 write new assembly, disassemble. The big-picture talk that gated Stage 1
 from 2026-08-14 was CLOSED by the user 2026-09-07; the active work is
@@ -125,7 +125,8 @@ the one-line `DEF USR 0=` parse fix — was PAID there 2026-08-14.
 Read DESIGN.md for everything: goal, staged plan, technical reference
 (addresses, ROM entry points, ports), the coprocess seam, testing
 strategy, legal constraints, and decisions. PROTOCOL.md is the wire
-contract the core must conform to. CLAUDE.md is the session bootstrap.
+contract the core must conform to. The session bootstrap is a local file
+that is not published.
 
 ## Run
 

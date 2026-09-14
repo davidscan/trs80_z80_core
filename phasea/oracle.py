@@ -23,7 +23,7 @@ interpreter's own build does (`cat src/p*.awk > trs80basic.awk`). Both added
 lines are gated on TRS80_POKELOG being present in the environment, so
 with the variable unset the scratch build is behaviorally identical to
 the shipped one -- the instrumentation cannot perturb what it measures.
-Interpreter-owned code stays interpreter-owned (CLAUDE.md standing
+Interpreter-owned code stays interpreter-owned (the standing
 split); this is a harness in THIS repo that happens to drive a peer's code.
 
     p80_stmt.awk  st_poke   -- log every (address, byte) actually poked,
@@ -42,7 +42,7 @@ expression would mean surgery on its control flow; a marker plus a
 timeout gets the same cut point (we read pokes up to the first USR)
 with two purely additive lines. Pokes after the marker are ignored.
 
-TRUST DISCIPLINE. CLAUDE.md "ANCHORS BEFORE TRUST" applies to the
+TRUST DISCIPLINE. The ANCHORS BEFORE TRUST rule (DESIGN.md) applies to the
 oracle exactly as it applied to the opcode table and the classifier:
 `python3 -m phasea.oracle --validate` runs it over the files static
 extraction ALREADY resolves and checks that it recovers the same bytes

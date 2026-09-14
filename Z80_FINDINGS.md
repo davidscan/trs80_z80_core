@@ -10,8 +10,7 @@ TERMINOLOGY (converted 2026-09-07): this document used to say "the
 parent" for the pre-split ../awk_BASIC_interpreter, which then held
 both the interpreter and the corpus. Since 2026-08-28 the interpreter
 is ../trs80basic and awk_BASIC_interpreter is the corpus archive only —
-this project is a peer of both, a child of neither (CLAUDE.md
-"COMPANION REPOS"). Every occurrence now names what it meant: "the
+this project is a peer of both, a child of neither. Every occurrence now names what it meant: "the
 interpreter" / trs80basic for interpreter-side work, "the archive" /
 "the corpus archive" for corpus-side work. Commit hashes cited for
 interpreter-side ships (c61fdae5, 7e6f0749, 8c38dca6) are PRE-SPLIT and
@@ -29,7 +28,7 @@ completion and presented, and the user RULED the same evening (in the
 companion session; recorded in awk_BASIC_interpreter's PROJECT_MAP.md):
 the rescue count does not justify the core and no longer has to — the
 project is wanted for its own sake, four goals in priority order
-(CLAUDE.md "WHERE THINGS STAND"). The gate is closed as a decision
+(DESIGN.md, "RULED 2026-08-14"). The gate is closed as a decision
 input and survives here as the measurement record. The same evening's
 blocked/ re-scan changed the bookkeeping of the six gate files without
 unlocking any (FINDING 20, recorded 2026-09-04). Stage 1 is still not
@@ -147,8 +146,8 @@ than the core is (FINDINGS 16 and 17), and reversed part of FINDING 9
 ## FINDING 1 — the opcode table validates, and its errors were real
 
 The declarative table (1780 encodings: main/CB/ED/DD/FD/DDCB) was
-validated before any classifier output was trusted, per CLAUDE.md
-"ANCHORS BEFORE TRUST": 176 hand-authored known-good vectors across all
+validated before any classifier output was trusted, per the
+ANCHORS BEFORE TRUST rule (DESIGN.md "ACCEPTANCE ANCHORS"): 176 hand-authored known-good vectors across all
 six pages, total structural coverage, declared-length-equals-consumed
 for every entry, and round-trip through the inverse index.
 
@@ -176,7 +175,7 @@ single-step vectors when the core is built.
 
 ## FINDING 2 — the endgame anchor is NOT a keyboard scan
 
-DESIGN.md and CLAUDE.md both describe the second ground-truth anchor as
+DESIGN.md and the orientation file both described the second ground-truth anchor as
 "ENDGAME/BAS SCAN3 (keyboard scan)". **It is not.** The 214-byte block
 at `B000H` contains no access to `3800H-38FFH` anywhere. It walks a
 caller-supplied table of 16-bit values with IX, finds a minimum via
@@ -456,7 +455,7 @@ emulator: no Z80 executes in it.
 
 ## FINDING 13 — the oracle never contradicts static extraction
 
-CLAUDE.md "ANCHORS BEFORE TRUST" applied to the oracle itself: before
+The ANCHORS BEFORE TRUST rule applied to the oracle itself: before
 its output on the unresolvable 96 meant anything, it had to reproduce
 the payloads static extraction ALREADY resolves. Over those 45 files:
 
@@ -583,7 +582,7 @@ recorded in the archive's STATUS.md, not done here. (PAID the same
 evening; the cmd/ half was measured by reachability rather than
 re-filed, and contributed zero to the gate — FINDING 20.)
 
-The fix was INTERPRETER-OWNED (memory map, CLAUDE.md standing split) and was
+The fix was INTERPRETER-OWNED (memory map, the standing interpreter/core split) and was
 made there: `MEM[16396] = 201` seeded at init (p10) rather than
 special-cased in `dopeek`, so `POKE 16396` still behaves normally. The
 counterfactual patch has been retired from `phasea/oracle.py`; a
@@ -694,7 +693,7 @@ material. The sweep output is gitignored.
 1. [APPLIED 2026-08-14] "ENDGAME/BAS SCAN3 (keyboard scan)" →
    **event-clock scan, pure-compute** (FINDING 2). Corrected in
    DESIGN.md "PHASE A ACCEPTANCE ANCHORS" and "Testing strategy", and
-   in CLAUDE.md "ANCHORS BEFORE TRUST". The anchor rule as written
+   in the orientation file's "ANCHORS BEFORE TRUST". The anchor rule as written
    required the classifier to bucket endgame as *keyboard*, which is
    unmeetable because the expectation is false; the rule now states
    the intent — check the anchors before trusting the counts — and
@@ -973,7 +972,8 @@ column that was believed unvalidatable.
 
 Raised by a user question about whether MEMORY SIZE still shields space for
 machine code. Read-only investigation of trs80basic's `src/p75_mem.awk` and
-`src/p80_stmt.awk`; **nothing was edited there** (CLAUDE.md standing rule).
+`src/p80_stmt.awk`; **nothing was edited there** (the standing rule of that time: report,
+never edit there).
 
 **STATUS 2026-09-08 — FIXED BY trs80basic, AND THIS FINDING HAD ONLY HALF OF
 IT.** They shipped the RAMTOP/HIMEM split exactly as specified below: `RAMTOP`
@@ -1578,5 +1578,5 @@ DESIGN.md (the north-star bullet's "calls no ROM", the self-modifying-code
 paragraph's "sits on the north-star path", and the relocation worked
 example, section 9 — all three applied 2026-09-09). Every correction was
 produced by resolving addresses through the disassembler rather than by
-matching text — the discipline CLAUDE.md's "corpus counting traps" rule
+matching text — the discipline the "corpus counting traps" rule
 demands, applied to a program the corpus tooling cannot currently read.
