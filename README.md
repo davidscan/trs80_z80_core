@@ -1,247 +1,366 @@
-# trs80_z80_core — machine-language call support for the TRS-80 interpreter
+# trs80_z80_core
 
-NOTE: This is a temporary README until I clean it up.  Mostly includes various discussions with Claude.
+## What it is
 
+A Z80 CPU emulator in Python 3 that executes the machine-language routines
+TRS-80 LEVEL II BASIC programs call with `USR`. It runs as a companion
+process to [trs80basic](https://github.com/davidscan/trs80basic), the BASIC
+interpreter, so embedded machine code (`DATA`/`POKE` loaders, string-packed
+routines) actually runs. The routine works on the same memory `PEEK` and
+`POKE` see; its video writes appear while it runs, the keyboard is live,
+and its cassette-port sound can be played or saved to a WAV file. That is
+enough to run Dancing Demon, machine code and sound included. It also
+includes a standalone Z80 disassembler. It uses only the standard library,
+contains no ROM bytes, and writes no files except a WAV file you name.
 
-A Z80 CPU core **in Python 3**, scoped to executing machine-language
-subroutines **called from BASIC** (`USR`) — never standalone machine
-language. Companion project to the TRS-80 LEVEL II BASIC interpreter at
-`../trs80basic` (private GitHub: davidscan/trs80basic) — an independent
-peer, not a sub-project.
+## Quick start
 
-Renamed from `awk_Z80_core` 2026-08-13 when the language ruling changed:
-the user deemed the machine-language portion outside the scope of BASIC,
-so it follows the project's standing split — the interpreter is awk,
-non-BASIC tooling is Python (the detok precedent). The core
-attaches to the interpreter as a persistent coprocess with a graceful
-stub fallback, so `trs80basic.awk` stays a complete single-file gawk
-program (see DESIGN.md "Language and the runtime seam").
+```bash
+git clone https://github.com/davidscan/trs80basic                 # the interpreter (needs GNU awk >= 5.0)
+git clone https://github.com/davidscan/trs80_z80_core             # this core, cloned beside it
+cd trs80basic
+TRS80_MHZ=1.77408 ./basic <program>.bas                           # USR routines now execute, paced to the Model I clock
+```
 
-**SOUND (2026-09-14): BUILT.** A `USR` routine's port FFH writes -- the
-cassette output, the machine's only sound -- are captured with their
-T-state positions and rendered to a live player, a WAV file, or both
-(`z80/sound.py`; DESIGN.md decision 7; "Run" below).
-
-**STATUS (2026-09-12): STAGE 1 IS BUILT.** The user gave the go ruling
-on 2026-09-12 and the core landed the same day in two commits: `20f7a9e`
-(`z80/cpu.py`, the execution core, passing **all 1,604,000** pinned
-single-step vectors, measured at 2.1-2.7M insn/s against the 313K bar)
-and `3164eb2` (`z80/coprocess.py` + `core.py`, PROTOCOL.md's core half;
-trs80basic's `sh programs/tests/z80.sh` passes end to end with
-`TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture"`, and its t32
-transcript is byte-identical to the stub's). 126 tests green. See "Run"
-below. **THE DANCING DEMON DANCES** (2026-09-12, the same day, once
-trs80basic built its R1 tokenized loader): the image CLOADs
-byte-identical, preset show #1 plays 28.6 s of emulated time through the
-core with no error (driven through a pseudo-terminal; batch cannot play
-it), and frames replayed from the streamed video with
-`tools/render_frames.py` show the figure dancing — the numbers are in
-DANCING_DEMON.md ("State"). The user confirmed at a real terminal on
-2026-09-12 that it dances at period tempo.
-[The line this replaced, kept for the record: "STATUS (2026-09-11):
-PHASE A COMPLETE, GATE RULED, BIG-PICTURE TALK CLOSED, MEMORY-MODEL
-HANDOFF CLOSED, NORTH STAR RE-MEASURED, PROTOCOL RATIFIED AND BUILT ON
-THE INTERPRETER SIDE, STAGE 1 (THE CORE) NOT STARTED."] Phase A — the static disassembler/classifier over the
-corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
-**5** unlocked listings. The one remaining hole in that measurement,
-FINDING 7's 96 loaders static extraction could not resolve, was then
-closed by building the dynamic extraction oracle (`phasea/oracle.py`,
-DESIGN.md's recorded escalation path). Result: the measured
-machine-code population more than **doubled, 46 → 107 files** (the static
-46 re-measured as 124 on 2026-09-15 once three extractor undercounts,
-string packing above all, were fixed, FINDING 26), and the
-gate number moved **5 → 6**. What is scarce in this corpus is not
-machine code; it is a listing whose ONLY obstacle is the absent Z80.
-The user ruled on 2026-08-14 that the rescue count does not justify
-the core and no longer has to: the project is wanted for its own sake,
-with four goals in priority order (DESIGN.md, "RULED 2026-08-14") —
-run BASIC with embedded machine code, run magazine assembly listings,
-write new assembly, disassemble. The big-picture talk that gated Stage 1
-from 2026-08-14 was CLOSED by the user 2026-09-07; the active work is
-now GOAL (1), integrating machine code into BASIC programming.
-
-The oracle also turned up two **interpreter-side** defects each worth
-more listings than the core is: `USR n(` at the call site raised ?SN (134
-listings — FINDING 8's sibling), and `PEEK(16396)` answered 255 where a
-cassette Level II answers 201, sending 88 listings down their Disk
-branch into CMD. Both were interpreter-owned, and **both SHIPPED there
-2026-08-14** (`8c38dca6`, pre-split; the code now lives in trs80basic):
-**53 blocked listings improved, 28 of them now running to completion,
-zero regressions**, the interpreter's bar held (t1-t28 exit 0). The
-corpus archive's `blocked/` re-scan followed the same evening: 280
-files moved to runnable/, including four of the six gate files —
-without any of them running to completion (FINDING 20).
-
-Working through goal (1) turned up three interpreter-side memory-model
-issues, all measured with runnable reproductions and all reported rather
-than fixed (this project does not edit trs80basic): FINDING 22 (memory
-reserved by MEMORY SIZE? is treated as ABSENT, so the classic
-reserve-then-load idiom cannot write it), FINDING 23 (the program image
-shadows POKEd bytes), and an uncapped `PEEK(16634)` that can return >255.
-Handed over through the handoff exchange (a dated record, kept in this repo's history).
-
-**RESOLVED 2026-09-08.** The handoff channel round-tripped twice: two
-shipped on the interpreter side, and FINDING 23 measured at **zero**
-across all 4,339 corpus files and deferred by agreement. That side also
-found a half this one had missed — `POKE 16561/16562` was silently
-dropped too, the programmatic form of the same idiom, 91 corpus listings,
-with a confirmed rescue in `wordsmth.bas`. **The durable artifact is
-neither the fixes nor the findings: it is "THE ADDRESS-RESOLUTION
-CONTRACT" now written in `../trs80basic/src/p75_mem.awk`** — six
-precedence rules for resolving one byte per address, which this core must
-reproduce byte-for-byte or it will execute the wrong bytes with no error.
-The exchange itself is a dated record in this repo's history, not in the tree.
-
-**RE-MEASURED 2026-09-09 (FINDING 24).** The north-star acceptance case
-was audited for readiness and FINDING 19 re-derived from its own prose,
-because no committed code implemented its extraction recipe. Every number
-reproduced; two claims did not. Dancing Demon is not a routine but a
-**self-relocating dispatcher** — it patches a JP trampoline into 4018H
-and finds its 106 subroutines by walking the BASIC line-record chain — so
-correct next-line links and a writable, executable 4000-41FF are hard
-requirements. It **does** call the ROM (`CALL 01C9H`, CLS, x4). It needs a
-Z80 stack inside the 64K that no document places there. It does **not**
-need a writable program image (measured, confirming what was already told
-to trs80basic). And it is **fully position-independent**: 0 absolute CALLs
-into its own body and 0 internal JPs in 10,931 bytes. (The stack question
-was ruled two days later — DD-4, above.) The work items are
-in **DANCING_DEMON.md**; three documents were corrected.
-
-**PROTOCOL RATIFIED AND BUILT — ON THE INTERPRETER SIDE — 2026-09-11.**
-`PROTOCOL.md` (mirrored byte-for-byte from trs80basic; the two copies must
-stay identical) is the USR coprocess contract, version 1: one persistent
-gawk coprocess per session, a contract-resolved sparse memory image in
-(deltas after the first frame), video streamed out *during* the call, the
-keyboard as the only callback, `T` ticks carrying BREAK, a write-set back
-applied through the interpreter's `poke_byte`. trs80basic's half is done
-and merged to its `main`: the p77 shim (`src/p77_z80.awk`), a reference
-stub for THIS side (`programs/tests/z80_stub.py`) and a conformance suite
-(`programs/tests/z80.sh`). The stack policy is ruled (DD-4: SP = the
-interpreter's SSP, the core owns it for the call, the USR return address
-is the sentinel **2FFDH** — DESIGN.md decision 6), and the 42E9H
-window-overflow question is ruled (truncate at a whole line). The core's
-acceptance bar before any listing is DD-17: pass `z80.sh` with
-`TRS80_Z80` pointing at it.
-
-See Z80_FINDINGS.md (24 findings) and DANCING_DEMON.md (the north-star
-work-item ledger). Stage 1 (the core itself) is BUILT as of 2026-09-12
-(it read "NOT started" until that day). Durable artifacts: the
-validated 1780-entry opcode table (z80/table.py), disassembler,
-extractor/classifier, sweep, the oracle, the pinned single-step vector
-suite (tools/fetch_vectors.py), the execution core (z80/cpu.py), the
-coprocess (z80/coprocess.py, core.py), 126 tests. The debt to the interpreter —
-the one-line `DEF USR 0=` parse fix — was PAID there 2026-08-14.
-
-Read DESIGN.md for everything: goal, staged plan, technical reference
-(addresses, ROM entry points, ports), the coprocess seam, testing
-strategy, legal constraints, and decisions. PROTOCOL.md is the wire
-contract the core must conform to. The session bootstrap is a local file
-that is not published.
-
-## Run
-
-Checked out beside trs80basic, as `../trs80_z80_core`, nothing needs
-naming: its launcher finds `core.py` by itself, and `USR` routines
-execute. Pace the clock, or a long routine runs as fast as Python goes:
-
-    cd ../trs80basic && TRS80_MHZ=1.77408 ./basic prog.bas
-
-From anywhere else, name the core; `TRS80_Z80=` (empty) runs without one:
-
-    TRS80_Z80="python3 /path/to/trs80_z80_core/core.py" ../trs80basic/basic prog.bas
-
-`core.py` is what `TRS80_Z80` names; it speaks PROTOCOL.md version 1 on
-stdin/stdout and `USR` routines in `prog.bas` then execute. Python 3,
-standard library only. `--fixture`
-adds the machine-code routines behind the reference stub's canned entry
-addresses (laid out from 7100H and mapped by entry; 7004H and 7008H stay
-harness hooks), which is what trs80basic's conformance suite needs:
-
-    cd ../trs80basic && TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh
-
-**Sound.** Three environment variables, inherited from the interpreter's
-environment (the protocol does not change), turn on machine-code sound:
-
-    TRS80_SOUND="auto"            live playback through an installed player
-    TRS80_SOUND_WAV=out.wav       a WAV file of the routines' audio, emulated time only
-    TRS80_SOUND_RATE=22050        the sample rate (default; 44100 also sensible)
-
-`auto` picks ffplay wherever it is installed (then ffmpeg's AudioToolbox
-device on macOS, aplay, pw-play). `TRS80_SOUND` may instead be any command that
-takes raw 16-bit little-endian mono PCM on stdin; `{rate}` in it becomes
-the rate, and it runs through `sh -c` with its output discarded:
-
-    TRS80_SOUND="ffmpeg -hide_banner -loglevel quiet -f s16le -ar {rate} -ch_layout mono -i - -f audiotoolbox -"
-    TRS80_SOUND="ffplay -nodisp -autoexit -loglevel quiet -f s16le -ar {rate} -ch_layout mono -i -"
-    TRS80_SOUND="aplay -q -f S16_LE -r {rate} -c 1"
-
-Live sound needs the core paced, so with a player set and no `TRS80_MHZ`
-it paces at 1.77408 MHz. A player that cannot start or that dies turns
-live sound off for the session, silently; the WAV, if any, carries on.
-The WAV's pitch is true at any pacing, and the same bytes come out paced
-or unpaced. From the interpreter, the `sound` metacommand switches both
-at the prompt (`sound on`, `sound wav out.wav`). Machine code only:
-BASIC's own `OUT 255` stays silent, by ruling.
-
-Tests here:
-
-    python3 -m unittest discover -s tests          # 150 tests; vectors sampled 40/file
-    python3 tools/fetch_vectors.py --all           # once: the 1.37 GB pinned suite
-    python3 tools/usr_sweep.py                     # the corpus's USR listings through the core (FINDING 25)
-    Z80_VECTORS=all python3 -m unittest tests.test_cpu_vectors   # all 1,604,000 cases, ~20 s
+Substitute any BASIC listing for `<program>.bas`. The interpreter finds the
+core by itself when the two repositories sit side by side.
 
 ## Commands and arguments
 
-Everything runs from this folder with the standard library.
+Everything runs from this folder with Python 3's standard library.
 
-| command | what it does |
-|---|---|
-| `python3 core.py` | the coprocess the interpreter names in `TRS80_Z80`; PROTOCOL.md on stdin/stdout. `--fixture` adds the conformance routines behind the stub's canned entries. Reads `TRS80_SOUND`, `TRS80_SOUND_WAV`, `TRS80_SOUND_RATE` (above). |
-| `python3 -m z80.disasm FILE --base ADDR` | disassemble raw Z80 bytes loaded at ADDR (`0x7F00`, `7F00H` or decimal); `--hex "CD 7F 0A ..."` instead of a file, `--skip N` and `--length N` for a slice. |
-| `python3 -m unittest discover -s tests` | the test suite; `Z80_VECTORS=all` runs every CPU vector. |
-| `python3 tools/fetch_vectors.py --all` | fetch the pinned CPU test vectors once (never committed; `tools/vectors.lock` pins them). |
-| `python3 -m phasea.sweep [--json out/manifest.json]` | Phase A: the static extractor and classifier over the corpus beside this checkout; refuses to publish counts unless the anchor suites pass. |
-| `python3 -m phasea.oracle [--hangs --files LIST]` | the dynamic extraction oracle: run a listing under the interpreter's stub and read what its loader deposited. |
-| `python3 tools/usr_sweep.py` | the corpus's USR listings executed by this core, three ways, classified (FINDING 25); writes `out/usr_sweep/`. |
-| `python3 tools/usr_pty_sweep.py [--class no-usr-reached]` | the same population driven through a pseudo-terminal with a keystroke script, for the listings whose USR call sits behind an INKEY$ menu; writes `out/usr_pty_sweep/`. |
-| `sh tools/corelog.sh PREFIX` | as `TRS80_Z80`, runs the core with both directions logged to PREFIX.in / PREFIX.out. |
-| `python3 tools/render_frames.py LOG CALL RUN...` | replay a log's video lines into pixel frames of one call. |
-| `python3 tools/reconstruct_screen.py CAPTURE` | the 64x16 grid a captured terminal stream actually drew. |
-| `python3 tools/tick_probe.py` | measure the interpreter's tick cost under a paced routine, batch and interactive. |
+### `python3 core.py`
 
-The corpus tools (`phasea.sweep`, `phasea.oracle`, `usr_sweep`,
-`usr_pty_sweep`, the anchor tests) read a local-only archive of period
-listings that is not published. They find it through a `corpus` link at
-this repo's root (`ln -s /path/to/archive corpus`; gitignored) or
-`TRS80_CORPUS`; without it the anchor tests skip and the sweeps refuse to
-run.
+The coprocess the interpreter starts: it speaks `PROTOCOL.md` over
+stdin/stdout. You don't run it by hand. **Writes:** nothing, except the WAV
+file named by `TRS80_SOUND_WAV`.
 
-## Why this exists (one paragraph)
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--fixture` | off | adds machine-code routines behind the interpreter's reference stub's canned entry addresses (7000H-700AH) | running trs80basic's conformance suite against the real core: `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh` |
 
-TRS-80 magazine listings constantly embed short Z80 routines via
-`DATA`/`POKE` loaders called through `USR` — sound effects, fast screen
-operations, keyboard scans, sorts. The interpreter runs the BASIC but
-must stub the `USR` call (since 2026-08-13 the stub evaluates and
-returns its argument; since 2026-09-11 it also prints one stderr line per
-run tallying the calls it did not execute, and `TRS80_USR=strict` raises
-?FC instead). The loader pattern already deposits the
-machine-language bytes into the interpreter's `mem[]`, video memory
-already maps to the simulated screen, the keyboard matrix is live at
-the memory level, and a table-driven Python core executes Z80
-instructions far faster than the real Model I's 1.77 MHz — measured
-2026-09-09, a pre-decoded dispatch with full flag computation runs ~17x
-the rate the north-star payload needs (FINDING 24) — so executing those
-bytes is a bounded, testable, surprisingly practical build. The expensive
-part is not the CPU; it is the high-level emulation of ROM services that
-real routines call (see DESIGN.md), and the protocol that streams video
-and key state while a routine is still running (PROTOCOL.md, with the
-work items in DANCING_DEMON.md).
+The core reads these from the environment it inherits from the interpreter:
+
+| variable | default | what it does | when you'd use it |
+|---|---|---|---|
+| `TRS80_SOUND` | unset (silent) | `auto` plays through the first installed player (ffplay, then ffmpeg's AudioToolbox device on macOS, aplay, pw-play); any other value is a shell command fed raw 16-bit little-endian mono PCM on stdin, with `{rate}` replaced by the sample rate | hearing a routine's sound live |
+| `TRS80_SOUND_WAV` | unset | writes the routines' audio to this WAV file, overwriting it when the core starts | keeping the sound, or checking it without speakers |
+| `TRS80_SOUND_RATE` | `22050` | the sample rate for both | `44100` if your player prefers it |
+
+These belong to the interpreter (see its README) but decide how the core is used:
+
+| variable | default | what it does | when you'd use it |
+|---|---|---|---|
+| `TRS80_Z80` | the core beside the checkout | the command that runs the core; empty (`TRS80_Z80=`) means no core | a core installed elsewhere: `TRS80_Z80="python3 /path/to/core.py"` |
+| `TRS80_MHZ` | unpaced | paces execution to this clock | games, animation and sound; `1.77408` is the Model I |
+| `TRS80_Z80_TIMEOUT` | `5000` | milliseconds to wait for each reply from the core | a slow machine |
+| `TRS80_USR` | unset | `strict` makes a `USR` call that no core executed raise `?FC` | making sure a listing never runs with its routines skipped |
+
+### `python3 -m z80.disasm`
+
+Disassembles raw Z80 bytes. **Writes:** nothing; the listing goes to stdout.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `FILE` | none | the file of raw bytes to disassemble | a routine saved from memory or cut out of a program image |
+| `--hex HEX` | none | the bytes as hex digits instead of a file; spaces allowed | bytes copied from a listing's `DATA` lines |
+| `--base ADDR` | `0` | address of the first byte disassembled (after `--skip`), as decimal, `0x7D00` or `7D00H` | always, so the address column and `JP`/`CALL` targets match where the listing POKEs the code |
+| `--skip N` | `0` | bytes to skip at the start of the file | code that follows a header or data |
+| `--length N` | to the end | how many bytes to disassemble | stopping before data that follows the code |
+
+### `python3 -m unittest discover -s tests`
+
+The test suite. **Writes:** `out/oracle/`, a scratch build of the
+interpreter, when `../trs80basic` is present.
+
+| variable | default | what it does | when you'd use it |
+|---|---|---|---|
+| `Z80_VECTORS` | 40 cases per vector file | `all` runs every case of the CPU test vectors (about 20 s) | after any change to `z80/cpu.py` or `z80/table.py` |
+| `Z80_VECTORS_FILES` | every file | comma-separated vector files, by name without `.json` (`ed b2`) or by prefix (`cb`) | reproducing one failure by the case name it printed |
+
+Test groups skip when their input is missing: the CPU vectors until
+`tools/fetch_vectors.py` has run, the anchor tests without the listing
+archive, and the oracle tests without `../trs80basic` and gawk. A good run
+ends in `OK (skipped=N)`.
+
+### `python3 tools/fetch_vectors.py`
+
+Fetches the third-party single-step CPU test vectors (SingleStepTests/z80,
+MIT), pinned to the commit in `tools/vectors.lock`. With no arguments it
+reports what is present and uses no network. **Writes:** `tests/vectors/`,
+which is not committed; `--update-lock` rewrites `tools/vectors.lock`.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--all` | off | downloads the whole suite as one tarball (about 1.3 GB extracted) | once, before running `Z80_VECTORS=all` |
+| `--pages P,...` | none | fetches only those pages: `main,cb,dd,ed,fd,ddcb,fdcb` | working on one prefix group without the full download |
+| `--limit N` | no cap | at most N files per page | a quick smoke test |
+| `--coverage` | off | compares the vectors' encodings with `z80/table.py` | after changing the opcode table |
+| `--update-lock` | off | re-pins to upstream's latest commit | deliberately moving to corrected upstream vectors |
+| `--force` | off | fetches again what is already present | a damaged or partial download |
+
+### `sh tools/corelog.sh PREFIX`
+
+Runs the core with both directions of the protocol logged. Name it as the
+interpreter's core. **Writes:** `PREFIX.in` (what the interpreter sent) and
+`PREFIX.out` (what the core answered).
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `PREFIX` | required | path prefix for the two logs | debugging a routine: `TRS80_Z80="sh ../trs80_z80_core/tools/corelog.sh run" ./basic prog.bas` |
+
+### `python3 tools/render_frames.py LOG CALL MARK...`
+
+Replays the video from a `corelog.sh` log and draws the 64x16 screen at
+chosen moments, semigraphics included, as text. **Writes:** nothing.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `LOG` | required | a `PREFIX.out` log | always |
+| `CALL` | required | which `USR` call in the log, counting from 1 | a program that calls its routine more than once |
+| `MARK` | required | a number N draws the screen after the call's Nth video update; `end` draws it at the call's return | checking what a routine drew without watching it |
+
+### `python3 tools/reconstruct_screen.py CAPTURE`
+
+Replays a raw capture of the interpreter's terminal output (for example
+from `script`) into the grid a person would have seen. **Writes:** nothing.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `CAPTURE` | required | the captured terminal bytes | telling a display bug in the interpreter from one in the routine's video |
+
+### Corpus measurement tools
+
+The next four read a local archive of period listings that is not
+published. They find it through a `corpus` link at this repository's root
+(`ln -s /path/to/archive corpus`; gitignored) or the `TRS80_CORPUS`
+variable, and refuse to run without it. All but `phasea.sweep` also run
+`../trs80basic`.
+
+#### `python3 -m phasea.sweep`
+
+Statically extracts and classifies every machine-code loader in the archive.
+It refuses to report counts unless the two anchor test suites pass.
+**Writes:** the manifest.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--json PATH` | `out/manifest.json` | where the manifest of extracted payloads goes | keeping two sweeps side by side |
+
+#### `python3 -m phasea.oracle`
+
+Runs listings under an instrumented copy of the interpreter, with no Z80,
+and reads back the bytes their loaders POKEd. It covers loaders static
+extraction cannot resolve. **Writes:** `out/oracle/`, plus the `--json` file.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--files PATH` | none | a JSON list of archive-relative listing keys; every mode below runs only these, so without it nothing runs | always |
+| `--validate` | off | checks the oracle against listings static extraction already resolves; exits 1 on any contradiction | before trusting `--run` |
+| `--run` | off | extracts from the listings | loaders the sweep could not resolve |
+| `--hangs` | off | traces listings that never finish, to see whether they wait on a `USR` result | a listing that hangs rather than fails |
+| `--timeout S` | `10.0` | seconds per listing | slow loaders |
+| `--limit N` | all | only the first N listings | a quick trial |
+| `--json PATH` | none | saves the results | keeping them |
+| `--verbose` | off | a progress line per listing | watching a long run |
+| `--rebuild` | off | rebuilds the instrumented interpreter | after the interpreter changes |
+
+#### `python3 tools/usr_sweep.py`
+
+Runs every archive listing that mentions `USR` three ways in batch mode:
+without a core, with the core, and with the core again as a control. Each
+run is classified by what the core changed. It takes about ten minutes.
+**Writes:** `out/usr_sweep/`. It has no arguments.
+
+#### `python3 tools/usr_pty_sweep.py`
+
+The same listings, driven through a pseudo-terminal with a keystroke script,
+for routines that sit behind an `INKEY$` menu batch mode cannot reach.
+**Writes:** `out/usr_pty_sweep/`.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--class CLS` | `no-usr-reached` | takes the listings `usr_sweep.py` put in this class, or `all` | the normal follow-up to `usr_sweep.py` |
+| `--files KEY...` | none | archive-relative listings instead of a class | re-running a few |
+| `--workers N` | `5` | listings run in parallel | a slower or faster machine |
+
+### Measurement probes
+
+#### `python3 tools/tick_probe.py`
+
+Times a sound-shaped routine three ways: the core alone, through the
+interpreter in batch mode, and through a pseudo-terminal. **Writes:**
+`out/tick_probe.json` and `out/tick_probe.json.bas`.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--basic PATH` | `../trs80basic` | the interpreter checkout | one that lives elsewhere |
+| `--passes N` | `12` | passes of 256 tone cycles | longer runs for steadier timings |
+
+#### `python3 tools/sound_probe.py {synth,sinks}`
+
+`synth` measures the pitch accuracy and cost of a prototype synthesizer.
+`sinks` sends silent streams to the installed players, about 40 s, to see
+how far each buffers ahead. **Writes:** nothing, except the `--wav` file.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `synth --wav PATH` | none | also writes a C-major arpeggio | hearing the synthesizer |
+
+## User manual
+
+### Workflow
+
+A BASIC listing loads a routine's bytes into memory, points a `USR` vector
+at them, and calls `USR`. With the core attached, the interpreter passes
+the memory to the core. The core executes from the entry address until the
+routine returns to BASIC. Video writes reach the screen while the routine
+runs, and the keyboard is read live. Every byte the routine stores comes
+back, so `PEEK` sees it afterwards.
+
+A worked example. Save this as `double.bas`. It POKEs seven bytes at 7D00H
+(32000), sets the `USR` vector at 16526/16527 to that address, and calls it:
+
+```basic
+10 FOR I=0 TO 6: READ B: POKE 32000+I,B: NEXT
+20 DATA 205,127,10,41,195,154,10
+30 POKE 16526,0: POKE 16527,125
+40 PRINT USR(21)
+```
+
+Run it from the trs80basic checkout:
+
+```bash
+./basic double.bas                  # with the core: prints 42
+TRS80_Z80= ./basic double.bas       # without it: prints 21, then a USR STUB: line naming 7D00H
+```
+
+To see what the routine does, disassemble the same bytes at the same address:
+
+```bash
+python3 -m z80.disasm --hex "CD 7F 0A 29 C3 9A 0A" --base 7D00H
+```
+
+```
+7D00  CD 7F 0A      CALL 0A7FH
+7D03  29            ADD HL,HL
+7D04  C3 9A 0A      JP 0A9AH
+```
+
+It fetches the `USR` argument into HL (ROM entry 0A7FH), doubles it, and
+returns HL to BASIC as the result (0A9AH).
+
+### Decision points
+
+- **Is the core attached?** Look at the end of the run. A `USR STUB:` line
+  means no routine executed: the core is not beside the interpreter,
+  `TRS80_Z80` is empty, or `python3` is missing. No line at all means the
+  core ran every call.
+- **Pace or not?** Leave it unpaced for routines that compute (sorts,
+  searches). Set `TRS80_MHZ=1.77408` for anything you watch or hear: an
+  unpaced delay loop takes almost no time.
+- **A `?FC` at a `USR` call, with a `USR CORE:` line.** Read the text:
+  - `no ROM here` means the routine called a ROM routine the core does not
+    provide (see Gotchas).
+  - `its memory was never written` means the loader never ran or put the
+    code somewhere else. Check the address the listing POKEs against the
+    `USR` vector.
+
+### Gotchas
+
+- **The ROM is not there.** You might expect a routine that calls any
+  LEVEL II ROM routine to work. Actually it stops with `?FC` and
+  `USR CORE: rom called 0500H, no ROM here`. The ROM is copyrighted and not
+  distributed, so ROM services are rewritten from their documentation one
+  at a time. Three are provided: 01C9H (CLS), 0A7FH (the `USR` argument
+  into HL) and 0A9AH (HL back to BASIC as the result). Code that reads ROM
+  bytes gets nothing meaningful either.
+- **Empty memory reads FFH, which is `RST 38H`.** You might expect a call to
+  an address nothing was loaded at to fail at that address. Actually the
+  message names 0038H: `rom called 0038H, no ROM here -- no routine at
+  C800H: its memory was never written`. The second half is the useful part.
+- **Port FFH always reads 127.** You might expect it to report the screen
+  width as BASIC's `INP(255)` does (63 in 32-character mode). Actually the
+  core does not know the display mode. Every other port reads 255.
+- **Batch mode has no keyboard.** You might expect a routine that scans the
+  keyboard to read piped input in batch mode. Actually it sees no keys, and
+  BREAK once input runs out. Run such programs at the interactive prompt.
+- **Only machine code makes sound.** You might expect BASIC's `OUT 255` to
+  click. Actually it stays silent. Only a `USR` routine's writes to port
+  FFH bits 0-1 produce sound.
+- **Live sound paces the core.** With a player set and no `TRS80_MHZ`, the
+  core paces itself at 1.77408 MHz, since a player cannot keep up with an
+  unpaced stream. The WAV's pitch is right at any speed.
+- **The WAV has no gaps.** You might expect it to follow wall-clock time.
+  Actually it holds only the time routines spent running, with consecutive
+  calls joined and nothing for the BASIC that ran between them.
+- **A failed player is silent.** A player that cannot start, or that exits,
+  turns live sound off for the session without a message. The core may not
+  write to the terminal. The WAV carries on.
+- **`core.py` has no `--help`.** Started by hand, it silently waits for the
+  interpreter's first message. Leave with Ctrl-D.
+- **`tools/usr_sweep.py` ignores its arguments.** `--help` starts the
+  ten-minute sweep.
+
+### Undo / recovery
+
+The core changes no files except the WAV named by `TRS80_SOUND_WAV`; delete
+that file to undo it. If the core stops answering, the interpreter prints
+a `USR CORE:` line and runs `USR` as the stub for the rest of the session.
+Restart the interpreter to attach a fresh core. Everything under `out/` and
+`tests/vectors/` can be regenerated by the command that wrote it.
+
+### Tips
+
+- `sound on` and `sound wav out.wav` at the interpreter's prompt switch
+  sound without restarting.
+- Bytes in a listing's `DATA` lines are decimal. Convert them for `--hex`
+  with `python3 -c "print(bytes([205,127,10,41]).hex(' '))"`.
+- To see exactly what a routine drew, log the call with `tools/corelog.sh`,
+  then replay it: `python3 tools/render_frames.py run.out 1 end`.
+- The disassembler sweeps linearly. Data mixed into code decodes as nonsense
+  instructions; trim with `--skip` and `--length`.
+
+### Not supported
+
+- ROM routines other than the three listed above, and code that reads the
+  ROM.
+- Interrupts. A routine that `HALT`s to wait for one stops with `?FC`.
+- Cassette and disk I/O from machine code. Port FFH output is sound only.
+- Running machine code outside a BASIC program. The core runs only routines
+  a program calls with `USR`; the disassembler is the one standalone tool.
+- An assembler.
+
+## Files and logs
+
+| path | what it holds | written by | safe to delete? |
+|---|---|---|---|
+| `core.py` | the entry point the interpreter runs | you | no |
+| `z80/` | the CPU (`cpu.py`), the opcode table everything decodes from (`table.py`), the disassembler, the coprocess, sound | you | no |
+| `phasea/` | the loader extractor, classifier, sweep and oracle | you | no |
+| `tools/` | the scripts above; `vectors.lock` pins the test vectors | you | no |
+| `tests/` | the test suite | you | no |
+| `tests/vectors/` | the downloaded CPU test vectors, about 1.3 GB, never committed | `fetch_vectors.py` | yes; fetch again |
+| `out/manifest.json` | payloads and classifications from the static sweep | `phasea.sweep` | yes; regenerable |
+| `out/oracle/` | the instrumented interpreter build and its scratch listings | `phasea.oracle`, the test suite | yes; rebuilt on demand |
+| `out/usr_sweep/` | `results.json`, per-listing protocol logs in `runs/`, and the working directory | `usr_sweep.py` | yes; `usr_pty_sweep.py --class` reads `results.json` |
+| `out/usr_pty_sweep/` | `results.json` and per-listing logs | `usr_pty_sweep.py` | yes |
+| `out/tick_probe.json`, `.json.bas` | the latest tick timings and the program used | `tick_probe.py` | yes |
+| `PREFIX.in`, `PREFIX.out` | a session's protocol, both directions | `corelog.sh` | yes |
+| the `TRS80_SOUND_WAV` file | routines' audio | the core | yes |
+| `corpus` | a link to the local listing archive | you | yes; the corpus tools then refuse to run |
+| `PROTOCOL.md` | the wire contract between interpreter and core; a mirror of trs80basic's copy, kept identical | trs80basic | no |
+| `DESIGN.md` | design, technical reference (addresses, ROM entry points, ports) and decisions | you | no |
+| `SOUND.md` | how machine-code sound is captured and rendered | you | no |
+| `DANCING_DEMON.md` | the Dancing Demon acceptance case, as work items | you | no |
+| `Z80_FINDINGS.md` | the measurements over the listing archive | you | no |
+| `LICENSE` | GNU GPL v3 | you | no |
 
 ## License
 
-Copyright (c) 2026 David Forbis. GNU General Public License v3.0 — see
+Copyright (c) 2026 David Forbis. GNU General Public License v3.0; see
 `LICENSE`. Distributed WITHOUT ANY WARRANTY.
 
 **TRS-80**, **Radio Shack** and **Tandy** are trademarks of their
-respective owners, used only to describe compatibility; this project is not
-affiliated with or endorsed by them.
+respective owners, used only to describe compatibility. This project is
+not affiliated with or endorsed by them.
