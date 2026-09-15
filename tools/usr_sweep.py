@@ -88,6 +88,9 @@ def one(path):
                 secs=[stub['secs'], core['secs'], ctrl['secs']], equal=equal, stable=stable)
 
 if __name__ == '__main__':
+    if not os.path.isdir(CORPUS):
+        sys.exit('no corpus archive at %s: link the listing archive as `corpus` at this '
+                 "repo's root, or set TRS80_CORPUS (README, Commands)" % os.path.dirname(CORPUS))
     os.makedirs(RUNS, exist_ok=True); os.makedirs(CWD, exist_ok=True)
     pop = population()
     print('population', len(pop), flush=True)

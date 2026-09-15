@@ -152,6 +152,9 @@ def main():
     ap.add_argument('--skip-gate', action='store_true',
                     help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if not os.path.isdir(PROGRAMS):
+        sys.exit('no corpus archive at %s: link the listing archive as `corpus` at this '
+                 "repo's root, or set TRS80_CORPUS (README, Commands)" % os.path.dirname(PROGRAMS))
 
     if not args.skip_gate:
         ok, summary = gate_check()

@@ -132,6 +132,9 @@ def main():
     ap.add_argument('--files', nargs='*', help='corpus-relative listings instead')
     ap.add_argument('--workers', type=int, default=5)
     a = ap.parse_args()
+    if not os.path.isdir(CORPUS):
+        sys.exit('no corpus archive at %s: link the listing archive as `corpus` at this '
+                 "repo's root, or set TRS80_CORPUS (README, Commands)" % os.path.dirname(CORPUS))
     os.makedirs(RUNS, exist_ok=True); os.makedirs(CWD, exist_ok=True)
     pop = population(a.cls, a.files)
     print('population', len(pop), flush=True)
