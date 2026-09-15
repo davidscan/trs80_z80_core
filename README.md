@@ -9,7 +9,7 @@ peer, not a sub-project.
 Renamed from `awk_Z80_core` 2026-08-13 when the language ruling changed:
 the user deemed the machine-language portion outside the scope of BASIC,
 so it follows the project's standing split — the interpreter is awk,
-non-BASIC tooling is Python (the basclean/detok precedent). The core
+non-BASIC tooling is Python (the detok precedent). The core
 attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
@@ -75,7 +75,7 @@ than fixed (this project does not edit trs80basic): FINDING 22 (memory
 reserved by MEMORY SIZE? is treated as ABSENT, so the classic
 reserve-then-load idiom cannot write it), FINDING 23 (the program image
 shadows POKEd bytes), and an uncapped `PEEK(16634)` that can return >255.
-Handed over in `handoff/to-trs80basic.md`.
+Handed over through the handoff exchange (a dated record, kept in this repo's history).
 
 **RESOLVED 2026-09-08.** The handoff channel round-tripped twice: two
 shipped on the interpreter side, and FINDING 23 measured at **zero**
@@ -87,7 +87,7 @@ neither the fixes nor the findings: it is "THE ADDRESS-RESOLUTION
 CONTRACT" now written in `../trs80basic/src/p75_mem.awk`** — six
 precedence rules for resolving one byte per address, which this core must
 reproduce byte-for-byte or it will execute the wrong bytes with no error.
-Both sides' halves of the exchange are in their `handoff/` directories.
+The exchange itself is a dated record in this repo's history, not in the tree.
 
 **RE-MEASURED 2026-09-09 (FINDING 24).** The north-star acceptance case
 was audited for readiness and FINDING 19 re-derived from its own prose,
@@ -205,6 +205,13 @@ Everything runs from this folder with the standard library.
 | `python3 tools/render_frames.py LOG CALL RUN...` | replay a log's video lines into pixel frames of one call. |
 | `python3 tools/reconstruct_screen.py CAPTURE` | the 64x16 grid a captured terminal stream actually drew. |
 | `python3 tools/tick_probe.py` | measure the interpreter's tick cost under a paced routine, batch and interactive. |
+
+The corpus tools (`phasea.sweep`, `phasea.oracle`, `usr_sweep`,
+`usr_pty_sweep`, the anchor tests) read a local-only archive of period
+listings that is not published. They find it through a `corpus` link at
+this repo's root (`ln -s /path/to/archive corpus`; gitignored) or
+`TRS80_CORPUS`; without it the anchor tests skip and the sweeps refuse to
+run.
 
 ## Why this exists (one paragraph)
 

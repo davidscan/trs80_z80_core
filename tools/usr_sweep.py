@@ -2,7 +2,8 @@
 mentions USR, run three ways in batch -- no core, the real core, and the
 real core again as the same-build control -- and classified by what the
 core changed.  Measurement, not emulator: the corpus is read in place
-(../awk_BASIC_interpreter/programs, runnable/ and blocked/*), the
+(the archive's programs/, runnable/ and blocked/*, through the `corpus`
+link at this repo's root or TRS80_CORPUS), the
 interpreter is the peer checkout (../trs80basic), and the protocol of
 every core run is logged per file so the ROM entry a routine reached, the
 frame it was given and the calls it made can be read afterwards.
@@ -20,7 +21,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEV = os.path.dirname(HERE)
-CORPUS = os.path.join(DEV, 'awk_BASIC_interpreter', 'programs')
+CORPUS = os.path.join(os.environ.get('TRS80_CORPUS') or os.path.join(HERE, 'corpus'), 'programs')
 BASIC = os.path.join(DEV, 'trs80basic', 'basic')
 CORELOG = os.path.join(HERE, 'tools', 'corelog.sh')
 CORE = 'python3 ' + os.path.join(HERE, 'core.py')

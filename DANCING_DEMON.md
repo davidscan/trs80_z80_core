@@ -29,7 +29,7 @@ polls the keyboard 72 times and stops on the space bar (the run is under
 "Reproducing the measurements"), and frames replayed from the protocol
 log (tools/render_frames.py) show the figure dancing. The tempo
 judgement was the user's, at a real terminal with `TRS80_MHZ=1.77`
-(trs80basic HAND_TEST 14): CONFIRMED 2026-09-12, the demon dances
+(trs80basic's real-terminal checklist): CONFIRMED 2026-09-12, the demon dances
 center stage at period tempo. Measured 2026-09-13 on that same path: a
 paced USR routine of 4.57 s emulated time ran in 4.74 s of wall time
 from RUN to its result, interactive, the keyboard polled every tick.
@@ -62,7 +62,7 @@ discarded, `IN A,(FFH)` reads 127.
 
 - **DD-1. An extractor for the program-image idiom.** No committed code
   reads this payload. `phasea/sweep.py` covers `runnable/` + `blocked/`
-  only, so `LargeCollection/` — and therefore this program — has never
+  only, so the large collection — and therefore this program — has never
   been measured by any committed instrument, and FINDING 19's recipe
   survived as prose until FINDING 24 reimplemented it. Needs a
   detokenizer-aware reader too: the corpus file is a **tokenized** image
@@ -198,8 +198,9 @@ there directly and the handoff files are a dated record. **NOT
 AUDITED in the 2026-09-09 pass** — the audit was scoped to this project
 at the user's direction; the statuses marked DONE/CORRECTED below were
 reported by that side in its handoff replies (2026-09-10/11) and read
-from its tree, not measured here. Anything owed there goes through
-`handoff/to-trs80basic.md` with a runnable reproduction and its expected
+from its tree, not measured here. Anything owed there went through
+the handoff exchange (a dated record, kept in this repo's history) with a
+runnable reproduction and its expected
 effect on their bar, t1-t33 as of 2026-09-11 (t32 needs the reference
 stub in `TRS80_Z80`).
 
@@ -327,7 +328,7 @@ stub in `TRS80_Z80`).
    settled by measurement before building.]
 3. **How faithful the pacing must be** to read as "dancing" (DD-9) —
    a perceptual bar, not a numeric one. ANSWERED 2026-09-12 by the user
-   at a real terminal (`TRS80_MHZ=1.77`, trs80basic HAND_TEST 14): it
+   at a real terminal (`TRS80_MHZ=1.77`, trs80basic's real-terminal checklist): it
    reads as dancing at period tempo. Measured 2026-09-13: paced execution
    on that interactive path tracks real time within 4% ("State" above);
    the 2026-09-12 pty run itself was unpaced (mhz=0).

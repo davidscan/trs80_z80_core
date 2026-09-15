@@ -4,8 +4,9 @@ The ANCHORS BEFORE TRUST rule (DESIGN.md "ACCEPTANCE ANCHORS"): the classifier m
 ground-truth anchors correctly BEFORE its corpus-wide counts mean
 anything.
 
-The anchors live in ../awk_BASIC_interpreter/OCRsamples/, a LOCAL-ONLY
-sibling holding transcriptions of copyrighted magazine listings. They
+The anchors live in the corpus archive's OCRsamples/, a LOCAL-ONLY
+repository (reached through the `corpus` link at this repo's root, or
+TRS80_CORPUS) holding transcriptions of copyrighted magazine listings. They
 are read IN PLACE by path and never copied into this repo (DESIGN.md
 "PHASE A INPUT SET"). If the sibling is absent these tests skip rather
 than fail, so the suite stays green on a machine without the corpus --
@@ -13,7 +14,7 @@ but the sweep refuses to publish counts if they did not run.
 
 ON THE ENDGAME ANCHOR. DESIGN.md described it as "endgame SCAN3
 (keyboard scan)". Phase A measured it as a PURE-COMPUTE routine with no
-3800H-38FFH access at all, and awk_BASIC_interpreter's own FINDING 29
+3800H-38FFH access at all, and the archive's own FINDING 29
 notes agree:
 SCAN3 is "the whole EVENT-CLOCK scan", and line 1240 calls it as
 USR 1(VARPTR(IC(1))) where IC() is the event-clock array. The
@@ -33,7 +34,7 @@ from phasea.classify import classify                         # noqa: E402
 from z80.disasm import disassemble                           # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OCR = os.path.join(os.path.dirname(HERE), 'awk_BASIC_interpreter', 'OCRsamples')
+OCR = os.path.join(os.environ.get('TRS80_CORPUS') or os.path.join(HERE, 'corpus'), 'OCRsamples')
 SPACECHASE = os.path.join(OCR, 'spacechase.transcribed.bas')
 ENDGAME = os.path.join(OCR, 'endgame.transcribed.cleaned.bas')
 ENDGAME_RAW = os.path.join(OCR, 'endgame.transcribed.bas')

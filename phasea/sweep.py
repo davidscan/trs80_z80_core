@@ -3,8 +3,8 @@
 Input set per DESIGN.md "PHASE A INPUT SET":
     programs/runnable/   +   programs/blocked/   (all categories)
   skipped: Model1/ and the zip archive (same content re-organised --
-  double-counts), dialect/ (non-Level-II), LargeCollection/Detokenized
-  (empty). The anchors in OCRsamples/ are read IN PLACE, never copied.
+  double-counts), dialect/ (non-Level-II), the large collection's
+  Detokenized/ (empty). The anchors in OCRsamples/ are read IN PLACE, never copied.
 
 THE SWEEP REFUSES TO PUBLISH COUNTS UNLESS BOTH ANCHOR SUITES PASS.
 The counting rule: "A count produced without both checks passing is not a
@@ -28,8 +28,11 @@ from phasea.classify import classify, ROM_NAMES                # noqa: E402
 
 # The corpus archive. The interpreter is NOT here any more (it moved to
 # ../trs80basic 2026-08-28); the sweep reads listings only.
+# The corpus archive is a local-only sibling repository of period listings,
+# never published.  It is reached through a `corpus` link at this repo's root
+# (gitignored: `ln -s /path/to/the/archive corpus`), or TRS80_CORPUS names it.
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CORPUS = os.path.join(os.path.dirname(HERE), 'awk_BASIC_interpreter')
+CORPUS = os.environ.get('TRS80_CORPUS') or os.path.join(HERE, 'corpus')
 PROGRAMS = os.path.join(CORPUS, 'programs')
 
 

@@ -1,20 +1,21 @@
 # Z80_FINDINGS — Phase A
 
-Numbered findings, basclean-style. Phase A is the static Z80
+Numbered findings, in the archive's style. Phase A is the static Z80
 disassembler/classifier run over the corpus archive's DATA/POKE loader
 bytes: measurement, not emulator. It ends here, at a reviewed
 checkpoint, with the gate count presented for the user's go/no-go
 ruling on Stage 1.
 
 TERMINOLOGY (converted 2026-09-07): this document used to say "the
-parent" for the pre-split ../awk_BASIC_interpreter, which then held
-both the interpreter and the corpus. Since 2026-08-28 the interpreter
-is ../trs80basic and awk_BASIC_interpreter is the corpus archive only —
+parent" for the pre-split repository, which then held both the
+interpreter and the corpus. Since 2026-08-28 the interpreter is
+../trs80basic and the corpus archive (local-only, not published; reached
+through the `corpus` link, see DESIGN.md) holds the listings only —
 this project is a peer of both, a child of neither. Every occurrence now names what it meant: "the
 interpreter" / trs80basic for interpreter-side work, "the archive" /
 "the corpus archive" for corpus-side work. Commit hashes cited for
 interpreter-side ships (c61fdae5, 7e6f0749, 8c38dca6) are PRE-SPLIT and
-resolve in awk_BASIC_interpreter's history; that code lives in
+resolve in the archive's history; that code lives in
 trs80basic now. No measurement, number or ruling changed — only names.
 
 RULING STATUS (2026-08-14): presented, reviewed (independent
@@ -25,7 +26,7 @@ unresolvable loaders stayed unmeasured, and directed that the gate be
 CLOSED — the oracle built and run — before ruling. That work is
 FINDINGS 13-18 below, completed 2026-08-14. The gate was measured to
 completion and presented, and the user RULED the same evening (in the
-companion session; recorded in awk_BASIC_interpreter's PROJECT_MAP.md):
+companion session; recorded in the archive's project map):
 the rescue count does not justify the core and no longer has to — the
 project is wanted for its own sake, four goals in priority order
 (DESIGN.md, "RULED 2026-08-14"). The gate is closed as a decision
@@ -46,7 +47,7 @@ listing is DD-17: `z80.sh` passing with `TRS80_Z80` pointing at the core.
 Dated STATUS notes below mark each finding this settles; the measurements
 are unchanged.
 
-Measured 2026-08-13 against `../awk_BASIC_interpreter/programs/`
+Measured 2026-08-13 against the archive's `programs/`
 (runnable 3283 + blocked 1062 = **4345 listings**). Reproduce with
 `python3 -m phasea.sweep`; the suite is `python3 -m unittest discover
 -s tests` (104 tests). The archive re-filed blocked/ on 2026-08-14, so a
@@ -113,7 +114,7 @@ gate number does not move.
   "LOADER EXTRACTION"). The gate constituency of 5 now needs ONLY the
   core, but nothing about the count changes, and the archive's varptr/
   blocked pile (359) is NOT auto-unblocked — re-classification is a
-  future measurement, recorded in the archive's STATUS.md. (Done that
+  future measurement, recorded in the archive's notes. (Done that
   evening: varptr/ retired, four gate files re-filed — FINDING 20.)
 
 | | files |
@@ -184,7 +185,7 @@ stashed at `B0D6H`. That is **pure computation**.
 
 The refutation is well-corroborated, not a lone disagreement:
 
-- awk_BASIC_interpreter's own FINDING 29 notes call SCAN3 "the whole
+- The archive's own FINDING 29 notes call SCAN3 "the whole
   **event-clock
   scan**" — not a keyboard scan. The name was mis-glossed.
 - Line 1240 invokes it as `KJ=USR 1(VARPTR(IC(1)))`, and `IC()` is the
@@ -364,7 +365,7 @@ this point; FINDING 15 later moved it to 6.
 
 ## FINDING 9 — the Stage 2 trap priority list is short and mostly not Level II
 
-Corpus-driven, per the basclean methodology — implement a ROM entry
+Corpus-driven, per the archive's methodology — implement a ROM entry
 point only when a measured real listing calls it. Across the whole
 gate population:
 
@@ -578,7 +579,7 @@ filed under `cmd/`, 28 under `varptr/`) and 22 runnable. The 29 in
 they are not Disk BASIC programs, they are cassette programs being told
 they are on a disk. This attacks FINDING 4's largest confound directly,
 and means **a re-scan of the archive's blocked/ categories is now owed** —
-recorded in the archive's STATUS.md, not done here. (PAID the same
+recorded in the archive's notes, not done here. (PAID the same
 evening; the cmd/ half was measured by reachability rather than
 re-filed, and contributed zero to the gate — FINDING 20.)
 
@@ -738,7 +739,7 @@ grew coverage of the spaced call form and the probe on purpose.
 7. [PAID] A re-scan of `blocked/`. FINDING 16 means some files are
    mis-filed: several `blocked/cmd/` listings were never Disk BASIC
    programs, they were cassette programs being told they were on a
-   disk. Done the same evening (awk_BASIC_interpreter 9ee96ca3 +
+   disk. Done the same evening (archive commits 9ee96ca3 +
    89d9269b) and verified from this side; the cmd/ half was measured
    rather than re-filed, and the gate population did not grow.
    FINDING 20.
@@ -747,7 +748,7 @@ grew coverage of the spaced call form and the probe on purpose.
 
 The famous acceptance question ("does it run Dancing Demon?") now has
 numbers behind it. The 1986 Powersoft image in the corpus archive
-(`programs/LargeCollection/Dancing Demon (1986)(...)[BAS]/dncdm86a.bas`)
+(`dncdm86a.bas`, in the archive's large collection)
 is `1 GOTO 259` plus **10,931 bytes of Z80 stored as 106 fake BASIC
 lines** (line numbers 2..258), loading at **42F6H** — the payload sits
 inside the tokenized program image itself, not in a DATA/POKE loader,
@@ -808,7 +809,7 @@ USR is not enough — is what the ratified shape is built on.
 ## FINDING 20 — the blocked/ re-scan moved four gate files without unlocking any (measured 2026-08-14, recorded 2026-09-04)
 
 The re-scan owed to the corpus archive after FINDINGS 16/17 was PAID
-the same evening (awk_BASIC_interpreter `9ee96ca3` and `89d9269b`) and
+the same evening (archive commits `9ee96ca3` and `89d9269b`) and
 verified from this side at once. The verification was offered as a
 finding and never written down, so the gate numbers above were being
 quoted as if the re-scan had not happened. Recorded now; the run under
@@ -1014,7 +1015,7 @@ HIMEM and installs a lowercase driver in the region it reserved. Verbatim A/B,
 
 A 48K machine was being told it was 16K because the user reserved memory.
 (Their handoff quoted the AFTER line as "48K CONFIRMED - INSTALLING", which
-appears nowhere in the corpus — corrected in `handoff/to-trs80basic.md`. The
+appears nowhere in the corpus — corrected in the handoff exchange. The
 finding was right; only the quote was reconstructed.)
 
 NOTE the "what it needs" section below is now HISTORY, not a request — it is
@@ -1095,7 +1096,7 @@ This also gives the machine-size question a home: a core that presents itself as
 ### Addendum: the string-space allocator does not reclaim (same reading)
 
 **STATUS 2026-09-10 — FIXED BY trs80basic, AND THE "HARDWARE PARITY" LINE
-BELOW WAS WRONG.** Their seam audit (`trs80basic/AUDIT_SEAM_2026-09-10.local.md`,
+BELOW WAS WRONG.** Their seam audit (in their working notes,
 finding 1) measured the consequence this addendum under-called: `VARPTR(A$)`
 answered a NEW address on every call (`65533 65520 65507`), so the two-call
 period idiom `PEEK(VARPTR(A$)+1)+256*PEEK(VARPTR(A$)+2)` composed a dead
@@ -1161,7 +1162,7 @@ does not need it — with the caveat that FINDING 19's linear sweep is a signal,
 not a control-flow proof, so that "no" is revisable once the core can run it.
 **The `PEEK(16634)` sub-bug below was FIXED the same day** (`pm_sysptr` now
 masks the high byte): the 1200-line program answers 125 where it answered 381,
-verified here. Full exchange in `handoff/to-trs80basic.md`.
+verified here. The full exchange is a dated record in this repo's history.
 
 **BOUND CORRECTION 2026-09-08 (this finding was right when written and is now
 stale).** The `min(PMEND, HIMEM)` bounds below described the code as it stood on
@@ -1173,7 +1174,8 @@ shadowed range, which is now simply `[17129, PMEND)` capped at RAMTOP. The
 thresholds quoted further down (~14.8 KB for a routine at 32000, ~47 KB to
 shadow everything) are unaffected — they never depended on HIMEM. The full
 post-fix resolution order, which the core must reproduce byte-for-byte, is set
-out in `handoff/to-trs80basic.md` §2 of the 2026-09-08 reply; note in particular
+out in trs80basic's `src/p75_mem.awk` (first stated in §2 of the 2026-09-08
+handoff reply); note in particular
 that `a in SPK` outranks the program image, which is what makes string packing
 immune, and that unwritten memory reads **255**, not 0.
 
@@ -1366,7 +1368,7 @@ Encyclopedia Vol 08. It is a **documented** entry point, so it is
 HLE-trappable under the never-commit-ROM rule, and reimplementing CLS is
 trivial. But the count is one, not zero, and **01C9H is not on Stage 2's
 trap list** (DESIGN.md: 002BH, 0033H, 1BC0H, 0028H) because the sweep
-population excludes `LargeCollection/` — see item 6.
+population excludes the large collection — see item 6.
 
 FINDING 19's linear-sweep caveat is what saved it from being worse: it
 said "the proof is running it", and it was right to.
@@ -1397,7 +1399,7 @@ PC entering 0000H-2FFFH anywhere else is either a served HLE trap (01C9H,
 
 ### 4. THE WRITABLE PROGRAM IMAGE IS NOT NEEDED — now measured, not reasoned
 
-`handoff/to-trs80basic.md` answered trs80basic's question ("do we need
+The handoff exchange answered trs80basic's question ("do we need
 the writable program image?") with "No. Not now, and not for Dancing
 Demon", by reading FINDING 19. That answer is **correct, and now has a
 measurement behind it.** Every real absolute write in reached code goes
@@ -1473,7 +1475,7 @@ claim (Python is faster) survives; the figure does not.
 
 ### 8. THE INSTRUMENT GAP — why none of this was measured before
 
-- `LargeCollection/` is **outside the sweep population** (`phasea/sweep.py`
+- The archive's large collection is **outside the sweep population** (`phasea/sweep.py`
   reads `runnable/` + `blocked/` only, by the settled Phase A input set).
   No committed instrument has ever measured this program.
 - The corpus file is a **tokenized** image (FF-prefixed, `8D` GOTO token).

@@ -20,7 +20,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEV = os.path.dirname(HERE)
-CORPUS = os.path.join(DEV, 'awk_BASIC_interpreter', 'programs')
+CORPUS = os.path.join(os.environ.get('TRS80_CORPUS') or os.path.join(HERE, 'corpus'), 'programs')
 BASIC = os.path.join(DEV, 'trs80basic')
 CORELOG = os.path.join(HERE, 'tools', 'corelog.sh')
 OUT = os.path.join(HERE, 'out', 'usr_pty_sweep')

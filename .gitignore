@@ -15,3 +15,6 @@ __pycache__/
 
 # macOS Finder droppings.
 .DS_Store
+
+# The corpus archive, a local-only sibling reached through this link (see phasea/sweep.py).
+corpus

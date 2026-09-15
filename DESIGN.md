@@ -1,26 +1,26 @@
 # DESIGN — Z80 core for USR calls from BASIC
 
-Agreed with the user 2026-08-07 (conversation in awk_BASIC_interpreter's
-session; summarized in ../trs80basic/STATUS.local.md under
-"Machine-language call support"), REVISED 2026-08-13 after ML Stage 0
+Agreed with the user 2026-08-07 (in the archive's session; summarized in
+the interpreter's working notes under "Machine-language call support"),
+REVISED 2026-08-13 after ML Stage 0
 shipped there and the language ruling changed to Python. This
 document is the authoritative context for starting the work.
 
 TERMINOLOGY (note added 2026-09-04; the wording it described was
 CONVERTED 2026-09-07). This document used to say "the parent" for the
-pre-split ../awk_BASIC_interpreter, which then held both the
-interpreter and the corpus. Since 2026-08-28 the interpreter is
-../trs80basic and awk_BASIC_interpreter is the corpus archive only;
-neither is a parent. Every occurrence has
-now been replaced by the thing it actually named — "the interpreter" /
-trs80basic for interpreter-side work, "the archive" / "the corpus
-archive" / awk_BASIC_interpreter for corpus-side work. Nothing about
-the decisions or the measurements changed; only the names did.
-Interpreter-side history cited by hash (c61fdae5, 7e6f0749, 8c38dca6)
-is PRE-SPLIT and lives in awk_BASIC_interpreter's git history; the code
-those hashes made is in trs80basic today. The interpreter's STATUS is
-trs80basic/STATUS.local.md, a gitignored local file; the archive's is
-awk_BASIC_interpreter/STATUS.md.
+pre-split repository, which then held both the interpreter and the
+corpus. Since 2026-08-28 the interpreter is ../trs80basic and the corpus
+archive — a local-only repository of period listings, not published,
+reached from this checkout through the `corpus` link (see
+`phasea/sweep.py`) — holds the listings only; neither is a parent. Every
+occurrence has now been replaced by the thing it actually named — "the
+interpreter" / trs80basic for interpreter-side work, "the archive" /
+"the corpus archive" for corpus-side work. Nothing about the decisions
+or the measurements changed; only the names did. Interpreter-side
+history cited by hash (c61fdae5, 7e6f0749, 8c38dca6) is PRE-SPLIT and
+lives in the archive's git history; the code those hashes made is in
+trs80basic today. Each side keeps its working notes outside its public
+tree.
 
 ## Goal and non-goals
 
@@ -82,7 +82,7 @@ NON-GOALS, standing:
 
 The core is PYTHON 3, not awk. Ruling: the machine-language portion is
 outside the scope of BASIC, so it follows the project's standing split
-(interpreter = awk; non-BASIC tooling = Python — the basclean/detok
+(interpreter = awk; non-BASIC tooling = Python — the detok
 precedent). Technical case: a Z80 core is ~700 opcodes of table-driven
 decode and wall-to-wall bit arithmetic; Python has real integers with
 native bit ops where gawk has doubles plus toU/toS juggling; the
@@ -216,11 +216,11 @@ anyway. Three seams:
 NEAR-TERM ASSEMBLER PAYOFF, noted for when it comes up: magazines often
 printed the assembly SOURCE beside the BASIC DATA/POKE loader (endgame's
 machine-code DATA block was hand-verified against its printed assembly
-listing — see FINDING 29 in awk_BASIC_interpreter's notes). With an
+listing — see FINDING 29 in the archive's notes). With an
 assembler sharing
 the table: transcribe the printed assembly, assemble it, and diff the
 bytes against the DATA block — OCR damage in DATA blocks, nearly
-unverifiable today, becomes machine-checkable. A basclean-adjacent
+unverifiable today, becomes machine-checkable. A corpus-side
 verification tool, and likely the assembler's first real use — well
 before any standalone-execution system exists.
 
@@ -242,7 +242,7 @@ validated against tok.py, plus MEMORY SIZE enforcement). CAVEAT for
 this repo: the interpreter's VARPTR serves the STRING idiom; numeric/array
 VARPTR returns per-element 4-byte-single addresses, NOT a contiguous
 2-byte-integer image (see the VARPTR paragraph below). See the
-"Machine-language call support" entry in trs80basic/STATUS.local.md.
+"Machine-language call support" entry in the interpreter's working notes.
 
 PHASE A (this repo's FIRST artifact, before any core code): a static
 Z80 DISASSEMBLER/CLASSIFIER run over the corpus archive's DATA/POKE
@@ -266,13 +266,13 @@ CORRECTION (Z80_FINDINGS FINDING 2): this section previously called
 endgame SCAN3 a KEYBOARD scan. It is not. The 214-byte block at B000H
 never touches 3800H-38FFH; it walks a caller-supplied table with IX and
 finds a minimum via SBC HL,DE — PURE COMPUTE. SCAN3 is the EVENT-CLOCK
-scan (awk_BASIC_interpreter's FINDING 29 notes say so, and line 1240
+scan (the archive's FINDING 29 notes say so, and line 1240
 calls it as
 `KJ=USR 1(VARPTR(IC(1)))` over the event-clock array `IC()`). Space
 Chase's expectation (sound-only) held.
 
 PHASE A INPUT SET (settled 2026-08-13, second session's question):
-- Primary sweep: ../awk_BASIC_interpreter/programs/runnable/ (3,280)
+- Primary sweep: the archive's programs/runnable/ (3,280)
   PLUS programs/blocked/ (1,065, all categories) — counts as of
   2026-08-13. The archive re-filed blocked/ on 2026-08-14 (280 moved
   to runnable/, varptr/ retired, blocked/ 1,065 → 779); the sweep re-run
@@ -287,8 +287,8 @@ PHASE A INPUT SET (settled 2026-08-13, second session's question):
   no OCR damage.
 - SKIP programs/Model1/ and the zip archive (same content
   re-organized; double-counts), programs/dialect/ (non-Level-II).
-  LargeCollection/Detokenized/ is empty.
-- The ~10 transcribed fixtures in ../awk_BASIC_interpreter/OCRsamples/
+  The large collection's Detokenized/ folder is empty.
+- The ~10 transcribed fixtures in the archive's OCRsamples/
   (LOCAL-ONLY sibling; includes BOTH anchors, spacechase + endgame):
   read IN PLACE by path, NEVER copy into this repo — transcriptions of
   copyrighted magazine listings, same rule as ROM bytes.
@@ -316,7 +316,7 @@ manifest of every ML payload in the collection).
   — a declared load address and a declared count the DATA satisfies
   exactly — are counted.
   Ready-made fixture: endgame's DATA block is count- and
-  address-locked against its printed assembly (awk_BASIC_interpreter
+  address-locked against its printed assembly (the archive's
   FINDING 29).
 - CLASSIFIER (Z80 knowledge, consumes the shared opcode table).
   Symbolic base is mostly harmless: classification keys on ABSOLUTE
@@ -393,7 +393,7 @@ are the plan as written before the build and stay as the record.
   (FINDING 2, pure compute). It needs the CPU, the 0A7FH trap, and
   interpreter-side VARPTR.
 
-STAGE 2: the HLE trap table, grown CORPUS-DRIVEN (the basclean
+STAGE 2: the HLE trap table, grown CORPUS-DRIVEN (the archive's
 methodology): implement a ROM entry point only when a measured real
 listing calls it. MEASURED (Z80_FINDINGS FINDINGS 9 and 18) — the list
 is short, and it took the dynamic oracle to find any of it:
@@ -744,8 +744,8 @@ in the image rather than in a loader." It does NOT. The demon's payload
 lives in the image but never writes to it — every real absolute write
 goes to system RAM (4019H-402BH, 4100H), and its self-modification
 target is the 4018H/4028H trampoline. Measured, not reasoned, and it
-confirms the answer already given to trs80basic in
-`handoff/to-trs80basic.md`. The read-only image gap is real and remains
+confirms the answer already given to trs80basic in the handoff
+exchange (a dated record, kept in this repo's history). The read-only image gap is real and remains
 unbuilt; it is simply not on the north-star path.
 
 WHAT ACTUALLY DESERVES THE ATTENTION is not 800K but ~15K: FINDING 23
@@ -779,7 +779,7 @@ reopened from scratch.
   (need a tiny CP/M-BDOS print trap to run). RULED 2026-08-13: the
   vector suites are third-party data — gitignore them with a fetch
   script, never commit them (the no-third-party-material practice
-  inherited from awk_BASIC_interpreter).
+  inherited from the archive).
   THEY RUN NOW (2026-09-12): `tests/test_cpu_vectors.py` executes the
   fetched suite through `Z80.step()` — every register, flag, MEMPTR, R,
   RAM cell, port access and the T-state count — sampled by default and
@@ -882,7 +882,7 @@ regressions. The ruling on the core was taken knowing the cheapest
 listings-per-hour on the table were not in this repo.
 
 RULED 2026-08-14 (user, in the companion session; recorded in
-awk_BASIC_interpreter's PROJECT_MAP.md): the rescue count does not justify Stage 1 and no longer has
+the archive's project map): the rescue count does not justify Stage 1 and no longer has
 to. The project is re-founded on its own merits — the user wants a
 standalone assembler/disassembler in addition to in-BASIC machine-code
 handling — with four goals in priority order: run BASIC with embedded
@@ -994,7 +994,7 @@ STILL OPEN (decide when work starts):
    the interpreter's spaced-call fix used to DISCARD the slot digit of
    `USR n(` before dispatch. trs80basic now folds the digit into the name
    and resolves a full frame per call (slot, entry address, argument) in
-   usr_resolve(). Recorded in trs80basic/STATUS.local.md's ML entry too.
+   usr_resolve(). Recorded in the interpreter's working notes too.
    CLOSED 2026-09-11: the details are ruled and written — PROTOCOL.md
    version 1 (framing, full/delta frames with `NEED full`, `T` ticks in
    place of an instruction budget, the version handshake in HELLO/Z80,
@@ -1026,7 +1026,7 @@ STILL OPEN (decide when work starts):
   every increment committed and green on a written regression bar.
 - Commit messages via `git commit -F <file>` (not heredocs); absolute
   paths in shell commands.
-- No third-party copyrighted material in the repo (awk_BASIC_interpreter
-  keeps its scan corpus in a local-only sibling git repo — the same pattern
+- No third-party copyrighted material in the repo (the archive
+  keeps its scan corpus in a local-only git repo — the same pattern
   applies to ROM-derived material and the downloaded test-vector
   suites here).

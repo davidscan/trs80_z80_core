@@ -73,7 +73,7 @@ corpus classification under "Scope".
    and the WAV is byte-identical whether or not the call was paced.
 3. The Dancing Demon's preset show #1 plays its music live, in step with
    the dance, at `TRS80_MHZ=1.77408`. A by-ear check at a real terminal,
-   like trs80basic HAND_TEST 14 (which confirmed the dance's own tempo
+   like the interpreter's real-terminal check (which confirmed the dance's own tempo
    on 2026-09-12).
 
 ## How the machine made sound (reference)
@@ -288,7 +288,7 @@ absorbs (S-4).
   `poke_byte`. The same restart is what lets a `speed` typed after the
   first USR call reach the core, which today it does not (the clock
   travels on HELLO once). Docs: README, the user guide, a `man sound`
-  page in `support/manpages.txt`, and a HAND_TEST entry. Test: a batch
+  page in `support/manpages.txt`, and a real-terminal checklist entry. Test: a batch
   fixture with the player command `cat` into a file, asserting that
   `sound on` before the first call captures audio, `sound off` after it
   stops the capture at the next call, and that the restart's full frame

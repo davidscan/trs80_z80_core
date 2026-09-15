@@ -16,7 +16,7 @@ Z80 executes anywhere in this module.
 
 HOW THE INTERPRETER IS INSTRUMENTED, AND WHY IT IS NOT MODIFIED. The
 interpreter is a PEER (../trs80basic since the 2026-08-28 split; the
-corpus is the only thing this module reads from ../awk_BASIC_interpreter),
+corpus archive, reached through the `corpus` link, is only read),
 and its repo is not touched. `build()` copies its `src/p*.awk` into out/, adds
 two lines, and concatenates a scratch interpreter exactly the way the
 interpreter's own build does (`cat src/p*.awk > trs80basic.awk`). Both added
@@ -71,11 +71,13 @@ from phasea.classify import classify                           # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Two neighbours, not one. The interpreter moved to ../trs80basic on
-# 2026-08-28; the corpus stayed in ../awk_BASIC_interpreter, which keeps a
-# duplicate of src/ that is scheduled for deletion there. Build from the
-# live interpreter, read listings from the archive.
+# 2026-08-28; the listings stayed in the archive. Build from the live
+# interpreter, read listings from the archive.
+# The corpus archive is a local-only sibling repository of period listings,
+# never published.  It is reached through a `corpus` link at this repo's root
+# (gitignored: `ln -s /path/to/the/archive corpus`), or TRS80_CORPUS names it.
 INTERP_REPO = os.path.join(os.path.dirname(HERE), 'trs80basic')
-CORPUS = os.path.join(os.path.dirname(HERE), 'awk_BASIC_interpreter')
+CORPUS = os.environ.get('TRS80_CORPUS') or os.path.join(HERE, 'corpus')
 SRC = os.path.join(INTERP_REPO, 'src')
 PROGRAMS = os.path.join(CORPUS, 'programs')
 OUT = os.path.join(HERE, 'out', 'oracle')
