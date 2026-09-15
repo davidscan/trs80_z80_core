@@ -1,0 +1,18 @@
+# The test suite on every push and pull request, on GitHub's Ubuntu image.
+# The third-party CPU vector suites are fetched, never committed, so those
+# tests skip here; so do the anchor tests, which read the local-only corpus.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        run: python3 --version
+      - name: Run the suite
+        run: python3 -m unittest discover -s tests
