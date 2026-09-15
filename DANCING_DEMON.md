@@ -18,7 +18,8 @@ before acting on anything here — several items exist only because of it.
 A BASIC program that is one of the 15 Dancing Demon images runs under
 trs80basic with the core attached, and the demon animates on the
 simulated screen at approximately period tempo, responding to keys,
-with the two sound `OUT`s suppressed and no other behavioural change.
+with the two sound `OUT`s suppressed (since 2026-09-14: captured and
+played when sound is on) and no other behavioural change.
 Visually self-verifying; no transcript can assert it.
 
 STATE 2026-09-13: DONE. The image loads intact (trs80basic R1, DD-14);
@@ -124,7 +125,10 @@ discarded, `IN A,(FFH)` reads 127.
   *Not needed for the demon: 0A7FH/0A9AH. The payload never converts the
   USR argument and never sets a result; it just RETs.*
 
-- **DD-6. Suppress the two sound `OUT`s — and keep the delay loops.**
+- **DD-6. The two sound `OUT`s: captured when sound is on (2026-09-14,
+  `z80/sound.py`, DESIGN.md decision 7), discarded otherwise — and
+  keep the delay loops.** [As written before the build: "Suppress the
+  two sound `OUT`s — and keep the delay loops."]
   Port FFH bit 3 selects 32-character video mode, but both writes carry
   02H/01H with bit 3 clear, so suppression has no display side effect.
   The surrounding `DJNZ` loops are the tempo and must still execute.

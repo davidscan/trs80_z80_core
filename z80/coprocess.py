@@ -28,18 +28,24 @@ the RET the ROM routine would have.
            caller, so this is an exit however it is reached.
 
 Port FFH reads 127 (the 64-character mode value the interpreter's INP
-returns) and every other port 255; every OUT is discarded (DD-6: the
-two sound OUTs of the north-star listing carry bit 3 clear, so nothing
-is lost).  The interpreter's display mode is not part of the frame, so
-a routine reading port FFH in 32-character mode sees 127 here where
-BASIC's INP(255) would say 63 -- recorded as the one known divergence.
+returns) and every other port 255.  OUT (FFH) has two effects and the
+rest of the byte is discarded: bit 3 is the 32/64-column latch, reported
+to the interpreter as a MODE line; bits 0-1 are the cassette output --
+the machine's sound -- and, when a sound variable is set, every change
+of them is stamped with its T-state position and rendered by
+`z80.sound` to a player, a WAV file, or both (DESIGN.md decision 7).
+The interpreter's display mode is not part of the frame, so a routine
+reading port FFH in 32-character mode sees 127 here where BASIC's
+INP(255) would say 63 -- recorded as the one known divergence.
 """
 
 import os
+import signal
 import sys
 import time
 
 from .cpu import Z80
+from .sound import from_env as sound_from_env
 
 PROTO = '1'
 NAME = 'trs80_z80_core'
@@ -104,10 +110,12 @@ class EndCall(Exception):
 class Machine:
     """RAM, devices and the run loop; transport-free so tests can drive it."""
 
-    def __init__(self, send, recv, mhz=0.0):
+    def __init__(self, send, recv, mhz=0.0, sound=None):
         self.send = send
         self.recv = recv
         self.mhz = mhz
+        self.sound = sound          # a z80.sound.Sound, or None: no capture at all
+        self.bits = 0               # port FFH bits 0-1 as last written; carries across calls
         self.ram = bytearray(b'\xff' * 65536)
         self.gen = 0
         self.dirty = {}            # addr -> last value written, non-video
@@ -153,6 +161,16 @@ class Machine:
         # entry width).  Pending video is flushed first so the switch lands
         # between the right frames.
         if (port & 0xFF) == 0xFF:
+            # bits 0-1 are the cassette output, the machine's sound.  The
+            # stamp is taken before step() adds this OUT's cost, so it marks
+            # the START of the instruction: at most 12 T-states early, under
+            # a sixth of a sample at 22,050 Hz.  With sound off this is one
+            # attribute test.
+            if self.sound is not None:
+                bits = v & 3
+                if bits != self.bits:
+                    self.sound.transition(self.cycles, bits)
+                    self.bits = bits
             nw = (v >> 3) & 1
             if nw != self.wide:
                 self.flush_video()
@@ -198,6 +216,8 @@ class Machine:
         reply = self.recv()
         if reply == 'BREAK':
             raise Break()
+        if self.sound is not None:
+            self.sound.tick(self.cycles)     # this tick's audio, before the sleep
         if self.mhz > 0:
             ahead = self.cycles / (self.mhz * 1e6) - (time.monotonic() - self.wall0)
             if ahead > 0.0005:
@@ -253,22 +273,28 @@ class Machine:
         cpu.pc = entry
         brk = 0
         step = cpu.step
+        if self.sound is not None:
+            self.sound.begin_call()
         try:
-            while True:
-                if cpu.pc < ROM_TOP:
-                    self.rom_entry(cpu.pc)
-                    continue
-                n = step()
-                self.cycles += n
-                self.since_tick += n
-                if cpu.halted:
-                    raise CoreError('halt', 'HALT at %04XH' % ((cpu.pc - 1) & 0xFFFF))
-                if self.since_tick >= TICK_TSTATES:
-                    self.tick()
-        except EndCall:
-            pass
-        except Break:
-            brk = 1
+            try:
+                while True:
+                    if cpu.pc < ROM_TOP:
+                        self.rom_entry(cpu.pc)
+                        continue
+                    n = step()
+                    self.cycles += n
+                    self.since_tick += n
+                    if cpu.halted:
+                        raise CoreError('halt', 'HALT at %04XH' % ((cpu.pc - 1) & 0xFFFF))
+                    if self.since_tick >= TICK_TSTATES:
+                        self.tick()
+            except EndCall:
+                pass
+            except Break:
+                brk = 1
+        finally:
+            if self.sound is not None:
+                self.sound.end_call(self.cycles)    # the last partial tick, on every exit
         self.flush_video()
         writes = self.runs(self.dirty)
         self.send('RET hl=%d result=%d cycles=%d break=%d writes=%d'
@@ -301,6 +327,11 @@ class Fixture:
             m.ram[a] = b
 
 
+def fields(line):
+    """The key=value pairs of a header line, by key."""
+    return dict(kv.split('=', 1) for kv in line.split()[1:] if '=' in kv)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     fixture = Fixture() if '--fixture' in argv else None
@@ -315,9 +346,6 @@ def main(argv=None):
         if not line:
             sys.exit(0)
         return line.rstrip('\r\n')
-
-    def fields(line):
-        return dict(kv.split('=', 1) for kv in line.split()[1:] if '=' in kv)
 
     hello = recv()
     if not hello.startswith('HELLO '):
@@ -336,9 +364,28 @@ def main(argv=None):
         mhz = float(h.get('mhz', '0'))
     except ValueError:
         mhz = 0.0
-    m = Machine(send, recv, mhz)
+    # sound, when asked for: the player starts now, at HELLO, so its
+    # startup cost never delays the first notes; with a player and no
+    # clock the call is paced at 1.77408 MHz (z80.sound).  The interpreter's
+    # give-up path kills this process; SIGTERM then closes the sinks (the
+    # WAV header, the player's pipe) on the way out.  BYE and EOF exit
+    # cleanly through the same finally.
+    snd, mhz = sound_from_env(os.environ, mhz)
+    if snd is not None:
+        try:
+            signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+        except (ValueError, OSError, AttributeError):
+            pass
+    m = Machine(send, recv, mhz, snd)
     send('Z80 proto=%s name=%s pid=%d' % (proto, NAME, os.getpid()))
+    try:
+        return serve(m, recv, send, fixture)
+    finally:
+        if snd is not None:
+            snd.close()
 
+
+def serve(m, recv, send, fixture):
     while True:
         line = recv()
         if line == 'BYE':

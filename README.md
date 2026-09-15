@@ -14,6 +14,11 @@ attaches to the interpreter as a persistent coprocess with a graceful
 stub fallback, so `trs80basic.awk` stays a complete single-file gawk
 program (see DESIGN.md "Language and the runtime seam").
 
+**SOUND (2026-09-14): BUILT.** A `USR` routine's port FFH writes -- the
+cassette output, the machine's only sound -- are captured with their
+T-state positions and rendered to a live player, a WAV file, or both
+(`z80/sound.py`; DESIGN.md decision 7; "Run" below).
+
 **STATUS (2026-09-12): STAGE 1 IS BUILT.** The user gave the go ruling
 on 2026-09-12 and the core landed the same day in two commits: `20f7a9e`
 (`z80/cpu.py`, the execution core, passing **all 1,604,000** pinned
@@ -149,9 +154,33 @@ harness hooks), which is what trs80basic's conformance suite needs:
 
     cd ../trs80basic && TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh
 
+**Sound.** Three environment variables, inherited from the interpreter's
+environment (the protocol does not change), turn on machine-code sound:
+
+    TRS80_SOUND="auto"            live playback through an installed player
+    TRS80_SOUND_WAV=out.wav       a WAV file of the routines' audio, emulated time only
+    TRS80_SOUND_RATE=22050        the sample rate (default; 44100 also sensible)
+
+`auto` picks ffplay wherever it is installed (then ffmpeg's AudioToolbox
+device on macOS, aplay, pw-play). `TRS80_SOUND` may instead be any command that
+takes raw 16-bit little-endian mono PCM on stdin; `{rate}` in it becomes
+the rate, and it runs through `sh -c` with its output discarded:
+
+    TRS80_SOUND="ffmpeg -hide_banner -loglevel quiet -f s16le -ar {rate} -ch_layout mono -i - -f audiotoolbox -"
+    TRS80_SOUND="ffplay -nodisp -autoexit -loglevel quiet -f s16le -ar {rate} -ch_layout mono -i -"
+    TRS80_SOUND="aplay -q -f S16_LE -r {rate} -c 1"
+
+Live sound needs the core paced, so with a player set and no `TRS80_MHZ`
+it paces at 1.77408 MHz. A player that cannot start or that dies turns
+live sound off for the session, silently; the WAV, if any, carries on.
+The WAV's pitch is true at any pacing, and the same bytes come out paced
+or unpaced. From the interpreter, the `sound` metacommand switches both
+at the prompt (`sound on`, `sound wav out.wav`). Machine code only:
+BASIC's own `OUT 255` stays silent, by ruling.
+
 Tests here:
 
-    python3 -m unittest discover -s tests          # 126 tests; vectors sampled 40/file
+    python3 -m unittest discover -s tests          # 150 tests; vectors sampled 40/file
     python3 tools/fetch_vectors.py --all           # once: the 1.37 GB pinned suite
     Z80_VECTORS=all python3 -m unittest tests.test_cpu_vectors   # all 1,604,000 cases, ~20 s
 

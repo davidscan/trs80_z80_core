@@ -67,6 +67,9 @@ NON-GOALS, standing:
   column), so accumulating cycles between port-FFH toggles recovers
   pitch information for possible OFFLINE sound synthesis someday. Do
   not design the counter out; do not build the synth now.
+  SUPERSEDED 2026-09-13 (user): sound IS in scope, machine code only,
+  live and/or to a WAV file. The core already counts exact T-states
+  and paces on them. Decision 7; BUILT 2026-09-14 (`z80/sound.py`).
 - Interrupts, R-register-based timing, undocumented-opcode exotica in
   v1 (document what real listings demand; measure first).
 - SHIPPING ROM BYTES — never. The Level II ROM is copyrighted. All ROM
@@ -938,6 +941,29 @@ here):
    REPLY 9 -- executing the 400CH BREAK vector, calling a custom device
    driver named at 4026H -- are each another frame with the same push,
    so the address does not change for them.
+
+RULED 2026-09-13 (user), BUILT 2026-09-14:
+7. SOUND IS IN SCOPE, MACHINE CODE ONLY. Port FFH bits 0-1 are
+   captured with T-state stamps and synthesized to a live player, a
+   WAV file, or both; BASIC `OUT 255` stays silent in trs80basic.
+   Supersedes the "do not build the synth now" non-goal. The plan, its
+   measurements and its open questions are SOUND.md; the code is
+   `z80/sound.py` (the synthesizer, the two sinks, the environment
+   reader), the capture is `Machine.port_out`, and `tests/test_sound.py`
+   pins pitch, the level map, chunk-independence, the lead policy and
+   protocol identity. The questions SOUND.md left open were settled at
+   the build, each by its recommendation: bits 0-1 both set is rest; a
+   player that fails is silent (the core may not write to the terminal;
+   emulation and the WAV carry on); live sound with `mhz` 0 paces at
+   1.77408 MHz; the WAV holds emulated time only, calls butted together;
+   `auto` picks ffplay wherever it is installed (the by-ear check S-9,
+   2026-09-15, heard both players in step with the picture and the user
+   chose the cross-platform one; ffmpeg's AudioToolbox device is the
+   macOS fallback); 22,050 Hz is
+   the default rate; the variable names are `TRS80_SOUND`,
+   `TRS80_SOUND_WAV` and `TRS80_SOUND_RATE`. PROTOCOL.md did not change:
+   with the variables unset every line is byte-identical, and the
+   transport test proves it with them set.
 
 STILL OPEN (decide when work starts):
 1. LICENSE: RULED 2026-09-13 -- GPLv3 (c) 2026 David Forbis, the LICENSE
