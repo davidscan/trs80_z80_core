@@ -1,4 +1,4 @@
-"""The Z80 execution core -- a pure library (DESIGN.md seam 1).
+"""The Z80 execution core -- a pure library.
 
 No I/O, no TRS-80 knowledge, no protocol.  A `Z80` is a register file
 plus four callbacks -- `read(addr)`, `write(addr, value)`, `port_in(port)`,
@@ -10,8 +10,8 @@ encoding: `_build()` walks `z80.table.TABLE` once per instance and turns
 every entry into a closure from the entry's mnemonic, operand pattern and
 cycle column.  The closures are stored in seven 256-slot pages (main, CB,
 ED, DD, FD, DDCB, FDCB) so dispatch is one list index per byte fetched --
-the pre-decoded shape DD-3 measured as the only one fast enough
-(DANCING_DEMON.md).  Semantics live here; encodings live in the table.
+the pre-decoded shape measured as the only one fast enough.  Semantics
+live here; encodings live in the table.
 
 WHAT IS MODELLED, because the pinned single-step vectors
 (tests/test_cpu_vectors.py) check all of it: every documented and

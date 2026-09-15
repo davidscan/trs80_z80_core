@@ -1,18 +1,17 @@
 """ANCHOR 2 -- extractor and classifier against the ground-truth anchors.
 
-The ANCHORS BEFORE TRUST rule (DESIGN.md "ACCEPTANCE ANCHORS"): the classifier must bucket the two
+The ANCHORS BEFORE TRUST rule: the classifier must bucket the two
 ground-truth anchors correctly BEFORE its corpus-wide counts mean
 anything.
 
 The anchors live in the corpus archive's OCRsamples/, a LOCAL-ONLY
 repository (reached through the `corpus` link at this repo's root, or
 TRS80_CORPUS) holding transcriptions of copyrighted magazine listings. They
-are read IN PLACE by path and never copied into this repo (DESIGN.md
-"PHASE A INPUT SET"). If the sibling is absent these tests skip rather
+are read IN PLACE by path and never copied into this repo. If the sibling is absent these tests skip rather
 than fail, so the suite stays green on a machine without the corpus --
 but the sweep refuses to publish counts if they did not run.
 
-ON THE ENDGAME ANCHOR. DESIGN.md described it as "endgame SCAN3
+ON THE ENDGAME ANCHOR. The design notes described it as "endgame SCAN3
 (keyboard scan)". Phase A measured it as a PURE-COMPUTE routine with no
 3800H-38FFH access at all, and the archive's own FINDING 29
 notes agree:

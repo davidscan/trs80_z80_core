@@ -6,13 +6,13 @@ expression evaluator for loader bounds and POKE addresses.
 
 This is deliberately NOT an interpreter. Anything it cannot resolve is
 returned as None so the caller can FLAG it rather than guess -- the
-DESIGN.md rule for computed addresses.
+standing rule for computed addresses.
 """
 
 import re
 
 # A blocked/ corpus file carries an annotation header on line 0 that is
-# not part of the original listing (DESIGN.md "Mechanical").
+# not part of the original listing; extraction ignores it.
 BLOCKED_HDR = re.compile(r'^\s*0\s+REM\s+\*\*\*\s*BLOCKED:')
 
 LINE_RE = re.compile(r'^\s*(\d+)\s?(.*)$', re.S)

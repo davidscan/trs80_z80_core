@@ -3,7 +3,7 @@
 96 USR listings have a real machine-language loader whose address or
 bounds static extraction cannot resolve: bases computed from INPUT,
 bases built from other variables, and one loader assembled inside a
-string. DESIGN.md "LOADER EXTRACTION" records the fallback:
+string. The recorded fallback for them:
 
     for loaders static extraction cannot crack, the interpreter
     is the extraction ORACLE -- run the listing under the shipped USR
@@ -42,7 +42,7 @@ expression would mean surgery on its control flow; a marker plus a
 timeout gets the same cut point (we read pokes up to the first USR)
 with two purely additive lines. Pokes after the marker are ignored.
 
-TRUST DISCIPLINE. The ANCHORS BEFORE TRUST rule (DESIGN.md) applies to the
+TRUST DISCIPLINE. The ANCHORS BEFORE TRUST rule applies to the
 oracle exactly as it applied to the opcode table and the classifier:
 `python3 -m phasea.oracle --validate` runs it over the files static
 extraction ALREADY resolves and checks that it recovers the same bytes

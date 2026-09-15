@@ -1,6 +1,6 @@
 """The single-step vector suite: its pin, and what it says about our table.
 
-DESIGN.md decision 4 -- the vectors themselves are third-party data,
+The vectors themselves are third-party data,
 fetched by tools/fetch_vectors.py and NEVER committed. What IS
 committed is tools/vectors.lock: the pinned SHA, file census, and
 license. These tests run entirely off the lock file, so they are green
@@ -92,7 +92,7 @@ class TestLock(unittest.TestCase):
         self.assertEqual(self.lock['file_count'], UPSTREAM_TOTAL)
 
     def test_vectors_are_not_committed(self):
-        """DESIGN.md decision 4, enforced rather than trusted."""
+        """Never committed: enforced rather than trusted."""
         import subprocess
         out = subprocess.run(
             ['git', 'ls-files', 'tests/vectors'],

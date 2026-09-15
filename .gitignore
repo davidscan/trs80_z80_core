@@ -1,5 +1,5 @@
 # Third-party single-step test-vector suites (Tom Harte / jsmoo) --
-# fetched by script, NEVER committed. DESIGN.md decision 4.
+# fetched by script (tools/fetch_vectors.py), NEVER committed.
 tests/vectors/
 zexdoc*
 zexall*

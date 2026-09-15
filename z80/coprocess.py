@@ -13,7 +13,7 @@ line-oriented transport.
     python3 core.py                # what TRS80_Z80 names
     python3 core.py --fixture      # plus the z80.sh conformance routines
 
-ROM SPACE HOLDS NO BYTES, by the never-commit-ROM rule (DESIGN.md non-goals).  A
+ROM SPACE HOLDS NO BYTES, by the never-commit-ROM rule.  A
 routine may CALL the documented services below, and nothing else in
 0000H-2FFFH: the trap reimplements the documented effect and performs
 the RET the ROM routine would have.
@@ -33,7 +33,7 @@ rest of the byte is discarded: bit 3 is the 32/64-column latch, reported
 to the interpreter as a MODE line; bits 0-1 are the cassette output --
 the machine's sound -- and, when a sound variable is set, every change
 of them is stamped with its T-state position and rendered by
-`z80.sound` to a player, a WAV file, or both (DESIGN.md decision 7).
+`z80.sound` to a player, a WAV file, or both.
 The interpreter's display mode is not part of the frame, so a routine
 reading port FFH in 32-character mode sees 127 here where BASIC's
 INP(255) would say 63 -- recorded as the one known divergence.

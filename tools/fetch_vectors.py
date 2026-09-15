@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the single-step Z80 test vectors -- DESIGN.md decision 4.
+"""Fetch the single-step Z80 test vectors -- fetched, never committed.
 
     Third-party data. NEVER committed. Fetch script + gitignore, per
     the interpreter repo's no-third-party-material practice.
@@ -10,7 +10,7 @@ instruction executed from a fully-specified random state --
 
     (registers, ram) -> (registers', ram')
 
--- which is exactly the shape DESIGN.md seam 1 requires of the core (a
+-- which is exactly the shape the core is built to (a
 pure library with no TRS-80 knowledge and no devices). The test format
 and the architecture ruling agree; that is not a coincidence.
 
@@ -325,7 +325,7 @@ def coverage(lock):
     Phase A's discipline applied to the next stage: report the gap
     BEFORE relying on the suite, so 'the vectors pass' is never
     mistaken for 'the table is validated'. A silent gap is the whole
-    failure mode the anchors rule (DESIGN.md) exists to prevent.
+    failure mode the anchors rule exists to prevent.
     """
     from z80.table import TABLE
 
@@ -374,7 +374,7 @@ def coverage(lock):
 def status(lock):
     print('suite   %s' % lock['repo'])
     print('pinned  %s  (%s)' % (lock['sha'], lock['pinned_date']))
-    print('license %s -- third-party, never committed (DESIGN.md decision 4)'
+    print('license %s -- third-party, never committed'
           % lock['license'])
     print('expect  %d files, %s extracted'
           % (lock['file_count'], _human(lock['total_bytes'])))

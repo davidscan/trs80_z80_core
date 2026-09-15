@@ -350,10 +350,6 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 | the `TRS80_SOUND_WAV` file | routines' audio | the core | yes |
 | `corpus` | a link to the local listing archive | you | yes; the corpus tools then refuse to run |
 | `PROTOCOL.md` | the wire contract between interpreter and core; a mirror of trs80basic's copy, kept identical | trs80basic | no |
-| `DESIGN.md` | design, technical reference (addresses, ROM entry points, ports) and decisions | you | no |
-| `SOUND.md` | how machine-code sound is captured and rendered | you | no |
-| `DANCING_DEMON.md` | the Dancing Demon acceptance case, as work items | you | no |
-| `Z80_FINDINGS.md` | the measurements over the listing archive | you | no |
 | `LICENSE` | GNU GPL v3 | you | no |
 
 ## License

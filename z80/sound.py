@@ -11,7 +11,7 @@ PCM; `WavSink` writes a file and `LiveSink` feeds a player command;
 variables set nothing here runs and every protocol line is unchanged.
 
 Levels: 0 is rest, 1 one polarity, 2 the other; 3 is treated as rest,
-since no library text describes it (DESIGN.md decision 7).
+since no library text describes it.
 
 Time base.  T-states convert to seconds at the clock from HELLO, or at
 the LITERAL 1.77408 MHz when the interpreter sent 0, so an unpaced run

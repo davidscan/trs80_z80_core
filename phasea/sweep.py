@@ -1,6 +1,6 @@
 """Phase A corpus sweep -- produces the gate numbers.
 
-Input set per DESIGN.md "PHASE A INPUT SET":
+Input set:
     programs/runnable/   +   programs/blocked/   (all categories)
   skipped: Model1/ and the zip archive (same content re-organised --
   double-counts), dialect/ (non-Level-II), the large collection's

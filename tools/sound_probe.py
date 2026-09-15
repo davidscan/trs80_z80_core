@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sound_probe.py -- the 2026-09-13 measurements behind SOUND.md.
+"""sound_probe.py -- the 2026-09-13 measurements behind machine-code sound.
 
     python3 tools/sound_probe.py synth [--wav PATH]
         Prototype synthesizer: T-state-stamped port FFH level changes into
@@ -14,8 +14,8 @@
         across a one-second pause.  A player that is not installed is
         skipped.  Takes about 40 seconds.
 
-A prototype, not the core: z80/sound.py (SOUND.md S-2) replaces the
-synthesizer here once it is built.  Standard library only.
+A prototype, not the core: z80/sound.py is the synthesizer built from
+it.  Standard library only.
 """
 import argparse
 import array
@@ -28,7 +28,7 @@ import time
 import wave
 
 CLOCK_HZ = 10.6445e6 / 6                      # Model I: 1.77408 MHz
-LEVEL = {0: 0.0, 1: 1.0, 2: -1.0, 3: 0.0}     # bits 0-1; 3 is SOUND.md open question 1
+LEVEL = {0: 0.0, 1: 1.0, 2: -1.0, 3: 0.0}     # bits 0-1; 3 is treated as rest
 
 
 def synth(transitions, total_t, clock_hz, rate, amp=9000, hp=0.995):

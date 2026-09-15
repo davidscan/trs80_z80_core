@@ -2,7 +2,7 @@
 
 Buckets a payload: sound / keyboard / video / pure-compute / ROM-calling
 (recording WHICH entry points), and answers the gate question directly:
-does STAGE 1 as specified in DESIGN.md unlock this routine, or does it
+does STAGE 1 (the CPU plus the USR traps) unlock this routine, or does it
 need a Stage 2 HLE trap?
 
 EVIDENCE IS TIERED AND REPORTED SEPARATELY. Three tiers, weakest last:
@@ -10,7 +10,7 @@ EVIDENCE IS TIERED AND REPORTED SEPARATELY. Three tiers, weakest last:
   direct    an absolute operand: LD A,(3800H), OUT (FFH),A, CALL 0A7FH.
             Visible in the bytes regardless of load address, which is
             why a symbolic VARPTR base does not block classification
-            (DESIGN.md "LOADER EXTRACTION").
+            (only relative branches need the base).
   inferred  register-indirect access whose pointer register held a
             known constant: LD HL,3C00H ... LD (HL),A. Without this a
             video routine is invisible, so it must exist -- but it is a
@@ -31,13 +31,13 @@ KBD_LO, KBD_HI = 0x3800, 0x38FF
 PRINTER_LO, PRINTER_HI = 0x37E0, 0x37FF
 ROM_HI = 0x2FFF                     # Level II ROM occupies 0000-2FFF
 
-# The only two ROM entry points Stage 1 implements (DESIGN.md Stage 1).
+# The two ROM entry points Stage 1 was specified with (the USR idiom).
 STAGE1_TRAPS = {0x0A7F, 0x0A9A}
 
-# Documented candidates, for naming what we find (DESIGN.md Stage 2).
+# Documented candidates for Stage 2 traps, for naming what we find.
 # Names cross-checked 2026-09-06 against the scanned reference library
 # (ROM Routines Documented, Micro-80 Level II ROM Reference Manual, Tab
-# Books Level II ROMs, Farvour) — see DESIGN.md "Technical reference".
+# Books Level II ROMs, Farvour).
 # The two Stage 1 traps are named by their ROM SERVICE, not by the USR
 # idiom that composes them: 0A7FH is CINT, 0A9AH stores HL into ACCUM.
 ROM_NAMES = {

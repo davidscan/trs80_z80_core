@@ -2,18 +2,17 @@
 
 Turns a rescued listing into zero or more machine-language PAYLOAD
 records plus the USR-entry evidence that says whether anything can
-reach them. Emits the JSON intermediate defined in DESIGN.md
-"LOADER EXTRACTION":
+reach them. Emits a JSON intermediate:
 
     {file, idiom, base (int|symbolic), bytes, provenance, confidence}
 
 which is itself a durable corpus artifact -- a manifest of every ML
 payload in the collection -- not just plumbing into the classifier.
 
-STANDING RULE, DESIGN.md: computed addresses this cannot resolve are
+STANDING RULE: computed addresses this cannot resolve are
 FLAGGED, never guessed. "N files unextractable" is a reported category.
 
-A second discipline the corpus forced (see Z80_FINDINGS.md): NOT EVERY
+A second discipline the corpus forced: NOT EVERY
 POKE LOOP IS A MACHINE-CODE LOADER. Loops that stream bytes to a fixed
 device address (37E8H printer), or fill video RAM (3C00H-3FFFH), or
 walk an offset/value graphics table, are DATA. They are recognised and
@@ -721,7 +720,7 @@ CTRL_OK = {9, 10, 13}
 def find_raw_byte_runs(text, min_run=8):
     """Runs of bytes the detokenizer could not render as BASIC text.
 
-    DESIGN.md says bucket these as `raw`, not force them through the
+    The rule is to bucket these as `raw`, not force them through the
     loader parser. We surface run LENGTHS so the findings can state how
     many are plausibly routines versus how many are stray damage --
     B1.bas's 'raw bytes' are a two-byte fragment, not a routine.

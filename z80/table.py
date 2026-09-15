@@ -1,6 +1,6 @@
 """THE declarative Z80 opcode table -- single source of truth.
 
-Three consumers, per DESIGN.md "Architecture: the reusable seams":
+Three consumers:
   1. the Phase A disassembler/classifier   (encoding -> mnemonic)
   2. the future core's decoder             (encoding -> execution)
   3. a future assembler                    (mnemonic -> encoding)
@@ -19,10 +19,10 @@ cycle cost, flag effects, and the memory/port access it performs.
 CYCLE COSTS ARE CARRIED BUT LARGELY UNVALIDATED. Nothing in the Phase
 A gate measurement depends on them; they exist because the ruling
 requires the column and because omitting them would design out the
-offline sound-synthesis option (DESIGN.md non-goals). They are
+offline sound-synthesis option. They are
 validated when the core is built against the single-step vectors.
-ONE PARTIAL EXTERNAL CHECK EXISTS (2026-09-07, Z80_FINDINGS FINDING
-21): the Nano Systems reference card states that every index-half
+ONE PARTIAL EXTERNAL CHECK EXISTS (2026-09-07, FINDING 21): the Nano
+Systems reference card states that every index-half
 instruction costs its H/L-operand equivalent plus 4 T-states, and all
 92 of them satisfy that (tests/test_table.py). That is a rule holding
 over 92 entries, not a per-opcode table; the other 1688 are still
@@ -637,7 +637,7 @@ TABLE = build_table()
 
 # Inverse index for the future assembler: signature -> encoding.
 # Built here (not later, by hand) precisely so the assembler never has
-# to re-derive ~700 encodings -- see DESIGN.md seam 2.
+# to re-derive ~700 encodings.
 INVERSE = {}
 for _enc, _op in TABLE.items():
     if _op.kind == 'invalid':

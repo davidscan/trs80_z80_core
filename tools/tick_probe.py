@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tick_probe.py -- the 2026-09-13 speed and tick round-trip measurements behind SOUND.md.
+"""tick_probe.py -- the 2026-09-13 speed and tick round-trip measurements behind machine-code sound.
 
     python3 tools/tick_probe.py [--basic PATH] [--passes N]
 

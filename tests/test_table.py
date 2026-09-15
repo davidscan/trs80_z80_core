@@ -1,6 +1,6 @@
 """ANCHOR 1 -- the opcode table validated against known-good disassembly.
 
-DESIGN.md "ACCEPTANCE ANCHORS" (the ANCHORS BEFORE TRUST rule): the table must pass this
+The ANCHORS BEFORE TRUST rule: the table must pass this
 BEFORE any classifier output is trusted. A classifier count produced
 over an unvalidated table is not a measurement.
 

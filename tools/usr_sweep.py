@@ -1,4 +1,4 @@
-"""The corpus USR sweep (Z80_FINDINGS FINDING 25): every listing that
+"""The corpus USR sweep (FINDING 25): every listing that
 mentions USR, run three ways in batch -- no core, the real core, and the
 real core again as the same-build control -- and classified by what the
 core changed.  Measurement, not emulator: the corpus is read in place
