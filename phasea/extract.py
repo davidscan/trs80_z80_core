@@ -141,6 +141,8 @@ FOR_RE = re.compile(r'^\s*FOR\s*([A-Za-z][A-Za-z0-9]*[%!#]?)\s*=\s*(.+?)\s*TO\s*
 READ_RE = re.compile(r'^\s*READ\s*(.+)$', re.I | re.S)
 POKE_RE = re.compile(r'^\s*POKE\s*(.+?)\s*,\s*(.+)$', re.I | re.S)
 RESTORE_RE = re.compile(r'^\s*RESTORE\s*(\d*)\s*$', re.I)
+NEXT_RE = re.compile(r'^\s*NEXT\b', re.I)
+LOADER_SPAN = 4          # lines after the FOR in which its READ/POKE may sit
 DEFUSR_RE = re.compile(r'^\s*DEF\s*USR\s*(\d?)\s*=\s*(.+)$', re.I | re.S)
 VARPTR_RE = re.compile(r'VARPTR\s*\(\s*([A-Za-z][A-Za-z0-9]*[%!#$]?)\s*'
                        r'(?:\(\s*([^)]*)\s*\))?\s*\)', re.I)
@@ -192,13 +194,18 @@ def find_loaders(path, prog, stream, symbols):
     payloads = []
     fname = os.path.basename(path)
 
+    # A RESTORE on the line BEFORE the loader redirects it too (REPLY 4
+    # item c: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
+    # None: no RESTORE; 0: a bare RESTORE, the program's first DATA.
+    prev_restore = None
     for li, (lineno, _body, stmts) in enumerate(prog):
-        # RESTORE appearing on this line redirects the DATA pointer.
-        restore_target = None
+        restore_target = prev_restore
+        prev_restore = None
         for st in stmts:
             m = RESTORE_RE.match(st)
             if m:
                 restore_target = int(m.group(1)) if m.group(1) else 0
+                prev_restore = restore_target
 
         for si, st in enumerate(stmts):
             fm = FOR_RE.match(st)
@@ -209,27 +216,42 @@ def find_loaders(path, prog, stream, symbols):
             end = eval_const(fm.group(3), symbols)
             step = eval_const(fm.group(4), symbols) if fm.group(4) else 1
 
-            # Find READ then POKE (or array READ) later on this line.
+            # Find READ then POKE (or array READ) after the FOR: on this
+            # line, or on the next few lines up to the NEXT that closes the
+            # loop (REPLY 4 item a: a loader split across lines was filed
+            # no-ml-in-listing).  read_line is the READ's own line, which
+            # is where the DATA pointer is taken from.
             read_targets = None
             read_si = None
+            read_line = lineno
             poke = None
-            for sj in range(si + 1, len(stmts)):
-                s2 = stmts[sj]
-                if is_comment(s2):
-                    continue
-                if read_targets is None:
-                    rm = READ_RE.match(s2)
-                    if rm:
-                        read_targets = split_args(rm.group(1))
-                        read_si = sj
+            done = False
+            for lj in range(li, min(li + 1 + LOADER_SPAN, len(prog))):
+                ln2, _b2, stmts2 = prog[lj]
+                for sj in range(si + 1 if lj == li else 0, len(stmts2)):
+                    s2 = stmts2[sj]
+                    if is_comment(s2):
                         continue
-                else:
-                    pm = POKE_RE.match(s2)
-                    if pm:
-                        poke = (pm.group(1), pm.group(2), sj)
-                        break
-                    if FOR_RE.match(s2):
-                        break
+                    if read_targets is None:
+                        rm = READ_RE.match(s2)
+                        if rm:
+                            read_targets = split_args(rm.group(1))
+                            read_si, read_line = sj, ln2
+                            continue
+                        if FOR_RE.match(s2) or NEXT_RE.match(s2):
+                            done = True
+                            break
+                    else:
+                        pm = POKE_RE.match(s2)
+                        if pm:
+                            poke = (pm.group(1), pm.group(2), sj)
+                            done = True
+                            break
+                        if FOR_RE.match(s2) or NEXT_RE.match(s2):
+                            done = True
+                            break
+                if done:
+                    break
             if read_targets is None:
                 continue
 
@@ -244,9 +266,7 @@ def find_loaders(path, prog, stream, symbols):
                 count = (end - start) // step + 1
                 if count <= 0:
                     continue
-                sp = (stream_pos_at_line(stream, restore_target)
-                      if restore_target else
-                      stream_pos_after(stream, lineno, read_si))
+                sp = _data_start(stream, restore_target, read_line, read_si)
                 vals, _e, exact = take_from(stream, sp, count)
                 payloads.append(_make_varptr_payload(
                     fname, arr, lineno, count, vals, exact, restore_target))
@@ -307,14 +327,22 @@ def find_loaders(path, prog, stream, symbols):
                 kind = 'table-data'
                 flags.append('multi-value-read-%d' % per_iter)
 
-            sp = (stream_pos_at_line(stream, restore_target)
-                  if restore_target else
-                  stream_pos_after(stream, lineno, read_si))
+            sp = _data_start(stream, restore_target, read_line, read_si)
             need = count * per_iter
             vals, _e, exact = take_from(stream, sp, need)
 
             conf, cflags = grade(vals, need, exact, restore_target)
             flags.extend(cflags)
+
+            # The POKE's VALUE expression (REPLY 4 item c): `POKE I,A` stores
+            # the DATA byte; `POKE I,255-A` or `POKE I,A XOR K` stores a
+            # transform of it, so the raw DATA is not the routine.  Flag it
+            # and never call it high confidence.
+            vm = re.match(r'^\s*([A-Za-z][A-Za-z0-9]*[%!#$]?)\s*$', val_expr)
+            if not (vm and vm.group(1).upper() in read_vars):
+                flags.append('poke-value-transformed')
+                if conf == 'high':
+                    conf = 'low'
 
             if per_iter == 1:
                 by = [v & 0xFF for v in vals if v is not None]
@@ -331,8 +359,10 @@ def find_loaders(path, prog, stream, symbols):
                 base=base, base_symbol=None, length=len(by), bytes=by,
                 provenance={'loader_line': lineno, 'count_declared': count,
                             'values_found': len(vals),
-                            'data_from': 'restore-%d' % restore_target
-                            if restore_target else 'adjacent',
+                            'data_from': ('restore-%d' % restore_target
+                                          if restore_target else
+                                          'restore-first' if restore_target == 0
+                                          else 'adjacent'),
                             'ends_on_data_boundary': exact,
                             'fixed_address': fixed},
                 confidence=conf, flags=flags, kind=kind))
@@ -372,6 +402,17 @@ def resolve_poke_target(addr_expr, var, start, step, symbols):
     if v1 - v0 != 1:
         return None, None, 'poke-stride-%d' % (v1 - v0)
     return to_addr(v0), None, None
+
+
+def _data_start(stream, restore_target, read_line, read_si):
+    """Where the loader's READ starts in the DATA stream: after a RESTORE n
+    at line n's DATA, after a bare RESTORE at the program's first DATA,
+    otherwise adjacent -- the first DATA after the READ itself."""
+    if restore_target:
+        return stream_pos_at_line(stream, restore_target)
+    if restore_target == 0:
+        return 0
+    return stream_pos_after(stream, read_line, read_si)
 
 
 def grade(vals, need, exact, restored):

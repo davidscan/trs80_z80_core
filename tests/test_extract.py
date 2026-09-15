@@ -110,6 +110,36 @@ class TestLoaderIdioms(unittest.TestCase):
                      '40 DATA 7,8,9\n'))
         self.assertEqual(p.bytes, [7, 8, 9])
 
+    def test_loader_split_across_lines(self):
+        """READ and POKE on the lines after the FOR (REPLY 4 item a)."""
+        p = only(run('10 FOR I=32000 TO 32002\n'
+                     '20 READ J\n'
+                     '30 POKE I,J\n'
+                     '40 NEXT I\n'
+                     '50 DATA 205,127,10\n'))
+        self.assertEqual(p.bytes, [205, 127, 10])
+        self.assertEqual(p.base, 32000)
+
+    def test_restore_on_the_line_before(self):
+        p = only(run('10 RESTORE 40\n'
+                     '20 FOR I=100 TO 102:READ J:POKE I,J:NEXT\n'
+                     '30 DATA 99,99,99\n'
+                     '40 DATA 7,8,9\n'))
+        self.assertEqual(p.bytes, [7, 8, 9])
+
+    def test_bare_restore_means_the_first_data(self):
+        p = only(run('5 DATA 1,2,3\n'
+                     '10 RESTORE:FOR I=100 TO 102:READ J:POKE I,J:NEXT\n'
+                     '30 DATA 99,99,99\n'))
+        self.assertEqual(p.bytes, [1, 2, 3])
+        self.assertEqual(p.provenance['data_from'], 'restore-first')
+
+    def test_transformed_poke_value_is_flagged_not_high(self):
+        p = only(run('20 FOR I=100 TO 102:READ J:POKE I,255-J:NEXT\n'
+                     '30 DATA 1,2,3\n'))
+        self.assertIn('poke-value-transformed', p.flags)
+        self.assertNotEqual(p.confidence, 'high')
+
     def test_adjacency_not_program_order(self):
         """DATA earlier in the file must not be stolen by a later loader."""
         p = only(run('10 DATA 99,98,97\n'
