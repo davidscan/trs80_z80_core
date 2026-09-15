@@ -1,5 +1,8 @@
 # trs80_z80_core — machine-language call support for the TRS-80 interpreter
 
+NOTE: This is a temporary README until I clean it up.  Mostly includes various discussions with Claude.
+
+
 A Z80 CPU core **in Python 3**, scoped to executing machine-language
 subroutines **called from BASIC** (`USR`) — never standalone machine
 language. Companion project to the TRS-80 LEVEL II BASIC interpreter at
