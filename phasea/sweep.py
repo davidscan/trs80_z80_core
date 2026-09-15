@@ -92,7 +92,7 @@ def analyse(path):
 # lands inside the block. Only these enter the gate population.
 # `raw-bytes` has none of that and is reported separately: see
 # random_baseline() for why it carries no signal.
-STRUCTURAL_IDIOMS = {'for-read-poke', 'varptr-array', 'poke-seq'}
+STRUCTURAL_IDIOMS = {'for-read-poke', 'varptr-array', 'poke-seq', 'string-packed'}
 
 
 def well_formed(c):

@@ -142,6 +142,50 @@ READ_RE = re.compile(r'^\s*READ\s*(.+)$', re.I | re.S)
 POKE_RE = re.compile(r'^\s*POKE\s*(.+?)\s*,\s*(.+)$', re.I | re.S)
 RESTORE_RE = re.compile(r'^\s*RESTORE\s*(\d*)\s*$', re.I)
 NEXT_RE = re.compile(r'^\s*NEXT\b', re.I)
+# String packing (REPLY 4 item b): a routine built as a string and run at
+# VARPTR -- A$=CHR$(205)+CHR$(127)+... or STRING$(n,c) terms, or appended
+# one byte per loop pass, A$=A$+CHR$(V), from READ.
+STR_ASSIGN_RE = re.compile(r'^\s*(?:LET\s*)?([A-Za-z][A-Za-z0-9]*\$)\s*=\s*(.+)$', re.I | re.S)
+STR_APPEND_RE = re.compile(r'^\s*(?:LET\s*)?([A-Za-z][A-Za-z0-9]*\$)\s*=\s*\1\s*\+\s*'
+                           r'CHR\$\s*\(\s*([A-Za-z][A-Za-z0-9]*[%!#]?)\s*\)\s*$', re.I | re.S)
+TERM_CHR_RE = re.compile(r'^\s*CHR\$\s*\((.+)\)\s*$', re.I | re.S)
+TERM_STRING_RE = re.compile(r'^\s*STRING\$\s*\((.+?)\s*,\s*(.+)\)\s*$', re.I | re.S)
+TERM_LIT_RE = re.compile(r'^\s*"([^"]*)"\s*$', re.S)
+VARPTR_STR_RE = re.compile(r'VARPTR\s*\(\s*([A-Za-z][A-Za-z0-9]*\$)\s*\)', re.I)
+
+
+USR_SINK_RE = re.compile(r'DEF\s*USR|POKE\s*(?:16526|16527|&H408E|&H408F)\b', re.I)
+ALIAS_RE = re.compile(r'^\s*(?:LET\s*)?([A-Za-z][A-Za-z0-9]*[%!#]?)\s*=\s*(.+)$', re.I | re.S)
+
+
+def varptr_strings(prog):
+    """The string variables whose VARPTR feeds the USR ENTRY -- a DEF USR
+    or a POKE of the 408EH vector that names VARPTR(X$), directly or
+    through a numeric variable assigned from it (V=VARPTR(X$):DEFUSR=
+    PEEK(V+1)+256*PEEK(V+2)).  A packed routine is always run that way;
+    VARPTR(X$) anywhere else is a string handed to a routine as its
+    argument or aliased for a screen trick, and its bytes are text."""
+    alias = {}                    # numeric var -> string var it was set from
+    sinks = []                    # statements that set the USR entry
+    for _ln, _body, stmts in prog:
+        for st in stmts:
+            if is_comment(st):
+                continue
+            m = ALIAS_RE.match(st)
+            if m and not m.group(1).endswith('$'):
+                vs = VARPTR_STR_RE.findall(m.group(2))
+                if vs:
+                    alias[m.group(1).upper()] = vs[0].upper()
+            if USR_SINK_RE.search(st):
+                sinks.append(st)
+    out = set()
+    for st in sinks:
+        for v in VARPTR_STR_RE.findall(st):
+            out.add(v.upper())
+        for ident in re.findall(r'[A-Za-z][A-Za-z0-9]*[%!#]?', st):
+            if ident.upper() in alias:
+                out.add(alias[ident.upper()])
+    return out
 LOADER_SPAN = 4          # lines after the FOR in which its READ/POKE may sit
 DEFUSR_RE = re.compile(r'^\s*DEF\s*USR\s*(\d?)\s*=\s*(.+)$', re.I | re.S)
 VARPTR_RE = re.compile(r'VARPTR\s*\(\s*([A-Za-z][A-Za-z0-9]*[%!#$]?)\s*'
@@ -193,6 +237,7 @@ def find_loaders(path, prog, stream, symbols):
     """FOR/READ/POKE loops and VARPTR-array loads."""
     payloads = []
     fname = os.path.basename(path)
+    packed_ok = varptr_strings(prog)
 
     # A RESTORE on the line BEFORE the loader redirects it too (REPLY 4
     # item c: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
@@ -247,6 +292,12 @@ def find_loaders(path, prog, stream, symbols):
                             poke = (pm.group(1), pm.group(2), sj)
                             done = True
                             break
+                        am2 = STR_APPEND_RE.match(s2)
+                        if am2 and am2.group(1).upper() in packed_ok:
+                            # A$=A$+CHR$(V): string packing from DATA
+                            poke = ('@STRING@' + am2.group(1).upper(), am2.group(2), sj)
+                            done = True
+                            break
                         if FOR_RE.match(s2) or NEXT_RE.match(s2):
                             done = True
                             break
@@ -276,6 +327,7 @@ def find_loaders(path, prog, stream, symbols):
                 continue
 
             addr_expr, val_expr, poke_si = poke
+            packed_var = addr_expr[8:] if addr_expr.startswith('@STRING@') else None
 
             # A POKE whose ADDRESS comes out of the READ stream is an
             # address/value table, not a linear code block. Naming that
@@ -289,7 +341,7 @@ def find_loaders(path, prog, stream, symbols):
             addr_ids = set(x.upper() for x in
                            re.findall(r'[A-Za-z][A-Za-z0-9]*[%!#$]?',
                                       addr_expr))
-            if addr_ids & read_vars:
+            if addr_ids & read_vars and not packed_var:
                 payloads.append(Payload(
                     file=fname, idiom='for-read-poke', base=None,
                     base_symbol=None, length=0, bytes=[],
@@ -311,16 +363,22 @@ def find_loaders(path, prog, stream, symbols):
                 continue
 
             # Resolve the POKE destination relative to the loop variable.
-            base, fixed, flag = resolve_poke_target(addr_expr, var, start,
-                                                    step, symbols)
-            if base is None and fixed is None:
+            if packed_var:
+                base, fixed, flag = None, None, None
+            else:
+                base, fixed, flag = resolve_poke_target(addr_expr, var, start,
+                                                        step, symbols)
+            if base is None and fixed is None and not packed_var:
                 payloads.append(_unresolved(fname, 'for-read-poke', lineno,
                                             flag or 'poke-address-unresolved',
                                             count=count))
                 continue
 
             per_iter = len(read_targets)
-            kind, dflag = classify_destination(base, count, fixed)
+            if packed_var:
+                kind, dflag = 'candidate-ml', None
+            else:
+                kind, dflag = classify_destination(base, count, fixed)
             flags = [f for f in (flag, dflag) if f]
 
             if per_iter != 1:
@@ -355,8 +413,9 @@ def find_loaders(path, prog, stream, symbols):
                     kind = 'table-data'
 
             payloads.append(Payload(
-                file=fname, idiom='for-read-poke',
-                base=base, base_symbol=None, length=len(by), bytes=by,
+                file=fname, idiom='string-packed' if packed_var else 'for-read-poke',
+                base=base, base_symbol='VARPTR(%s)' % packed_var if packed_var else None,
+                length=len(by), bytes=by,
                 provenance={'loader_line': lineno, 'count_declared': count,
                             'values_found': len(vals),
                             'data_from': ('restore-%d' % restore_target
@@ -402,6 +461,94 @@ def resolve_poke_target(addr_expr, var, start, step, symbols):
     if v1 - v0 != 1:
         return None, None, 'poke-stride-%d' % (v1 - v0)
     return to_addr(v0), None, None
+
+
+def split_plus(s):
+    """Split a string expression on the '+' operators outside quotes and
+    parentheses."""
+    out, depth, q, cur = [], 0, False, []
+    for ch in s:
+        if ch == '"':
+            q = not q
+        elif not q:
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            elif ch == '+' and depth == 0:
+                out.append(''.join(cur)); cur = []
+                continue
+        cur.append(ch)
+    out.append(''.join(cur))
+    return out
+
+
+def _string_term_bytes(term, symbols):
+    """The bytes one term of a string expression contributes, or None."""
+    m = TERM_CHR_RE.match(term)
+    if m:
+        v = eval_const(m.group(1), symbols)
+        return None if v is None else [int(v) & 0xFF]
+    m = TERM_STRING_RE.match(term)
+    if m:
+        n = eval_const(m.group(1), symbols)
+        c = m.group(2).strip()
+        lm = TERM_LIT_RE.match(c)
+        cv = ord(lm.group(1)[0]) if lm and lm.group(1) else eval_const(c, symbols)
+        if n is None or cv is None or n < 0 or n > 255:
+            return None
+        return [int(cv) & 0xFF] * int(n)
+    m = TERM_LIT_RE.match(term)
+    if m:
+        return [ord(ch) & 0xFF for ch in m.group(1)]
+    return None
+
+
+def find_string_packed(path, prog, symbols, min_len=8):
+    """A$=CHR$(..)+CHR$(..)+STRING$(..)+"..." (and A$=A$+... continuations)
+    with every term constant: the routine's bytes, at the symbolic base
+    VARPTR(A$).  A term that cannot be resolved stops the string there
+    and flags it; the READ-loop form A$=A$+CHR$(V) is find_loaders' job."""
+    fname = os.path.basename(path)
+    packed_ok = varptr_strings(prog)
+    acc = {}                      # var -> [bytes, first_line, flags]
+    for lineno, _body, stmts in prog:
+        for st in stmts:
+            if is_comment(st) or STR_APPEND_RE.match(st):
+                continue
+            m = STR_ASSIGN_RE.match(st)
+            if not m:
+                continue
+            var = m.group(1).upper()
+            terms = split_plus(m.group(2))
+            first = terms[0].strip().upper()
+            if first == var:
+                terms = terms[1:]
+                if var not in acc:
+                    acc[var] = [[], lineno, []]
+            else:
+                acc[var] = [[], lineno, []]
+            entry = acc[var]
+            for t in terms:
+                b = _string_term_bytes(t, symbols)
+                if b is None:
+                    if 'string-term-unresolved' not in entry[2]:
+                        entry[2].append('string-term-unresolved')
+                    break
+                entry[0].extend(b)
+    out = []
+    for var, (by, lineno, flags) in acc.items():
+        if len(by) < min_len or var not in packed_ok:
+            continue
+        out.append(Payload(
+            file=fname, idiom='string-packed', base=None,
+            base_symbol='VARPTR(%s)' % var, length=len(by), bytes=by,
+            provenance={'loader_line': lineno, 'count_declared': len(by),
+                        'values_found': len(by), 'variable': var,
+                        'ends_on_data_boundary': True, 'data_from': 'string-terms'},
+            confidence='low' if flags else 'high', flags=flags,
+            kind='candidate-ml'))
+    return out
 
 
 def _data_start(stream, restore_target, read_line, read_si):
@@ -626,6 +773,7 @@ def extract_file(path):
 
     rep.payloads.extend(find_loaders(path, prog, stream, symbols))
     rep.payloads.extend(find_poke_sequences(path, prog, symbols))
+    rep.payloads.extend(find_string_packed(path, prog, symbols))
 
     entries, calls, syscalls = find_usr_evidence(prog, symbols)
     rep.usr_entries = entries

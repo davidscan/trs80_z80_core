@@ -148,6 +148,51 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertEqual(p.bytes, [1, 2, 3])
 
 
+class TestStringPacked(unittest.TestCase):
+
+    def test_chr_concatenation_is_a_payload_at_varptr(self):
+        p = only(run('10 A$=CHR$(205)+CHR$(127)+CHR$(10)+CHR$(41)+CHR$(195)+CHR$(154)+CHR$(10)+CHR$(0)\n'
+                     '20 DEFUSR=PEEK(VARPTR(A$)+1)+256*PEEK(VARPTR(A$)+2)\n'))
+        self.assertEqual(p.idiom, 'string-packed')
+        self.assertEqual(p.base_symbol, 'VARPTR(A$)')
+        self.assertEqual(p.bytes, [205, 127, 10, 41, 195, 154, 10, 0])
+        self.assertEqual(p.confidence, 'high')
+
+    def test_string_dollar_and_literal_terms_and_continuation(self):
+        p = only(run('10 M$=STRING$(4,0)+"AB"\n'
+                     '20 M$=M$+CHR$(201)+CHR$(&HC9)\n'
+                     '30 POKE 16526,PEEK(VARPTR(M$)+1):POKE 16527,PEEK(VARPTR(M$)+2)\n'))
+        self.assertEqual(p.bytes, [0, 0, 0, 0, 65, 66, 201, 201])
+
+    def test_unresolved_term_stops_and_flags(self):
+        p = only(run('10 A$=CHR$(1)+CHR$(2)+CHR$(3)+CHR$(4)+CHR$(5)+CHR$(6)+CHR$(7)+CHR$(8)+CHR$(X)+CHR$(9)\n'
+                     '20 DEFUSR=PEEK(VARPTR(A$)+1)+256*PEEK(VARPTR(A$)+2)\n'))
+        self.assertEqual(p.bytes, [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertIn('string-term-unresolved', p.flags)
+        self.assertEqual(p.confidence, 'low')
+
+    def test_read_loop_appending_chr_is_string_packing(self):
+        p = only(run('10 FOR I=1 TO 8:READ V:A$=A$+CHR$(V):NEXT\n'
+                     '20 DATA 205,127,10,41,195,154,10,0\n'
+                     '30 V=VARPTR(A$):DEFUSR=PEEK(V+1)+256*PEEK(V+2)\n'))
+        self.assertEqual(p.idiom, 'string-packed')
+        self.assertEqual(p.base_symbol, 'VARPTR(A$)')
+        self.assertEqual(p.bytes, [205, 127, 10, 41, 195, 154, 10, 0])
+
+
+    def test_a_string_nobody_takes_varptr_of_is_text(self):
+        rep = run('10 PR$=" PREPROCESSING":F$=CHR$(24)+STRING$(34,24)+CHR$(26)+CHR$(13)\n'
+                  '20 FOR I=1 TO 8:READ V:L$=L$+CHR$(V):NEXT\n'
+                  '30 DATA 1,2,3,4,5,6,7,8\n')
+        self.assertEqual([p.idiom for p in rep.payloads], [])
+
+    def test_a_string_passed_as_the_usr_argument_is_text(self):
+        # VARPTR(S$) hands the string TO a routine; S$ is not the routine
+        rep = run('10 S$="THIS IS A STRING TO REVERSE"\n'
+                  '20 DEFUSR=32000:X=USR(VARPTR(S$))\n')
+        self.assertEqual([p.idiom for p in rep.payloads], [])
+
+
 class TestNotMachineCode(unittest.TestCase):
     """The discriminations that stop DATA inflating the gate number."""
 

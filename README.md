@@ -45,8 +45,8 @@ FINDING 7's 96 loaders static extraction could not resolve, was then
 closed by building the dynamic extraction oracle (`phasea/oracle.py`,
 DESIGN.md's recorded escalation path). Result: the measured
 machine-code population more than **doubled, 46 → 107 files** (the static
-46 re-measured as 60 on 2026-09-15 once three extractor undercounts were
-fixed, FINDING 26), and the
+46 re-measured as 124 on 2026-09-15 once three extractor undercounts,
+string packing above all, were fixed, FINDING 26), and the
 gate number moved **5 → 6**. What is scarce in this corpus is not
 machine code; it is a listing whose ONLY obstacle is the absent Z80.
 The user ruled on 2026-08-14 that the rescue count does not justify

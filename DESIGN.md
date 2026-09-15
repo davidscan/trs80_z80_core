@@ -278,7 +278,7 @@ PHASE A INPUT SET (settled 2026-08-13, second session's question):
   to runnable/, varptr/ retired, blocked/ 1,065 → 779); the sweep re-run
   2026-09-04 reads 4,339 listings with the same 46-file gate
   population, now 17 blocked / 29 runnable (Z80_FINDINGS FINDING 20;
-  60 files, 21 / 39, since the extractor fixes of 2026-09-15, FINDING 26).
+  124 files, 60 / 64, since the extractor fixes of 2026-09-15, FINDING 26).
   Both halves matter:
   blocked/ is the gate constituency; runnable/ includes the 148 files
   the USR stub + DEF FN re-selections moved, and classifying THEIR
@@ -859,8 +859,8 @@ unlocked programs before building the emulator.
 MEASURED AND CLOSED 2026-08-14. Phase A returned **5**; closing
 FINDING 7's 96 unresolvable loaders with the dynamic oracle returned
 **6**. The measured machine-code population more than doubled (46 → [the
-static 46 is 60 since FINDING 26, 2026-09-15: three extractor undercounts
-fixed] →
+static 46 is 124 since FINDING 26, 2026-09-15: three extractor undercounts
+fixed, string packing above all] →
 107 files) and the unlock count moved by one, because what is scarce
 in this corpus is not machine code — it is a listing whose ONLY
 obstacle is the absent Z80. Full numbers and method in Z80_FINDINGS.md
@@ -934,10 +934,18 @@ here):
    difference table), and the highest entry point in ROM Routines
    Documented's index is about 2CBDH. No corpus listing (LC_ALL=C sweep
    for 12285-12287, &H2FFD-F, 2FFDH-2FFFH) and nothing in trs80basic's
-   source names it. CITATION STATUS: both books were read in the OCR
-   text; the PDF pages have not been read (the archive path is needed),
-   so this is the one ruling here still owed a page check -- it would
-   only ever move the sentinel within the same tail.
+   source names it. CITATION STATUS: PAGE CHECK DONE 2026-09-15, the
+   PDF pages read from the archive. Tab "Level II ROMs" p. 526 (PDF
+   535): "2FFBH - 2FFFH THE END OF THE LEVEL II BASIC ROMS ... Nothing
+   here", with the edit routine's last jump at 2FF8H-2FFAH (p. 514, PDF
+   523: "2E53H - 2FFAH LEVEL II BASIC EDIT ROUTINE"). "ROM Routines
+   Documented" p. 94 (PDF 99), Appendix III's version table: the
+   original ROM holds NOPs at 2FFBH-2FFFH, the newer ROM `SBC A,0C3H`
+   and `JP 0B244H` there, and "These changes appear to be nothing more
+   than leftover garbage ... These final five bytes are not accessed by
+   any other ROM code"; its cross-reference (p. 124, PDF 129) lists no
+   entry above 2FFFH's own memory-map mention. The sentinel stays at
+   2FFDH: no ROM version has a service there.
    WHAT SEES THE VALUE. The shim never does (it reads only `RET`/`ERR`),
    and the reference stub uses no sentinel. BASIC can: the two pushed
    bytes at SP-2 (FDH) and SP-1 (2FH) return in the write-set like any

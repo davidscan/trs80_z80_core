@@ -1707,18 +1707,21 @@ that want a name or a number the script never types, programs that
 need a file); a listing-specific script, as the Dancing Demon had, is
 the remaining way in, one at a time.
 
-## FINDING 26 — the extractor's three known undercounts fixed, and the gate population re-measured: 46 → 60 files (2026-09-15)
+## FINDING 26 — the extractor's three known undercounts fixed, and the gate population re-measured: 46 → 124 files (2026-09-15)
 
 REPLY 4 of the seam audit (2026-09-10) reported three defects in
 `phasea/extract.py` that this side reproduced and left open as items
-(a)-(c): the READ and POKE of a loader were looked for only on the FOR's
-own line, so a loader split across lines was filed `no-ml-in-listing`
-with no flag; a `RESTORE` on the line before the loader was ignored and a
-bare `RESTORE` read as "adjacent"; and the POKE's value expression was
+(a)-(c): (a) the READ and POKE of a loader were looked for only on the
+FOR's own line, so a loader split across lines was filed
+`no-ml-in-listing` with no flag; (b) no `STRING$`/`CHR$` recognition,
+so a routine packed into a string was absent from every static count;
+(c) a `RESTORE` on the line before the loader was ignored, a bare
+`RESTORE` read as "adjacent", and the POKE's value expression was
 parsed and never used, so `POKE I,255-A` extracted the raw DATA at
-confidence high. All three fixed today, each pinned in
-`tests/test_extract.py` (43 tests, the anchor suites still green — the
-sweep would not publish otherwise):
+confidence high. All three fixed today — (a) and (c) first, (b) after
+(an earlier draft of this finding called (a) and (c) "the three"; it
+was two of them) — each pinned in `tests/test_extract.py` (49 tests,
+the anchor suites still green: the sweep would not publish otherwise):
 
 - a FOR's READ and POKE may now sit on the following lines, up to the
   NEXT that closes the loop (`LOADER_SPAN` 4 lines); the DATA pointer
@@ -1726,37 +1729,49 @@ sweep would not publish otherwise):
 - a RESTORE on the previous line redirects the loader; a bare RESTORE
   means the program's first DATA (`data_from: restore-first`);
 - a value expression that is not the READ variable itself flags
-  `poke-value-transformed` and is never graded high.
+  `poke-value-transformed` and is never graded high;
+- **string packing**: `A$=CHR$(205)+CHR$(127)+…`, `STRING$(n,c)` and
+  literal terms with continuations (`A$=A$+…`), and the READ-loop form
+  `A$=A$+CHR$(V)`, become a `string-packed` payload at the symbolic
+  base `VARPTR(A$)` — but only when that VARPTR feeds the USR ENTRY (a
+  `DEF USR` or a POKE of 408EH naming it, directly or through a numeric
+  variable assigned from it). Without that link a CHR$ string is text:
+  a prompt, a screen-control sequence, a string handed to a routine as
+  its argument (`USR(VARPTR(S$))`), or a graphics string aliased for a
+  screen trick — the first cut, which accepted any VARPTR(X$), counted
+  602 "payloads" in 260 files and two of three samples were text.
 
-`python3 -m phasea.sweep` over the same 4,339 listings, before → after:
+`python3 -m phasea.sweep` over the same 4,339 listings, at each step:
 
-| number | before | after |
-|---|---|---|
-| payload records | 7,625 | 7,695 |
-| **gate population (files with a strict, well-formed, Stage-1-runnable payload)** | **46** | **60** |
-| Stage 1 unlocks | 42 | 55 |
-| Stage 2 needed | 4 | 5 |
-| USR files: no ML in the listing | 287 | 217 |
-| USR files: loader found, base unresolvable | 91 | 140 |
-| USR files: ML extracted | 46 | 59 |
-| for-read-poke candidate-ml, high | 72 | 102 |
-| payloads flagged poke-value-transformed | — | 8 |
-| ROM entry points named statically | 9 | 10 (0221H, one caller) |
+| number | before | after (a)+(c) | after (b) |
+|---|---|---|---|
+| payload records | 7,625 | 7,695 | 7,794 |
+| **gate population (files with a strict, well-formed, Stage-1-runnable payload)** | **46** | **60** | **124** |
+| gate by half, blocked / runnable | 17 / 29 | 21 / 39 | 60 / 64 |
+| Stage 1 unlocks | 42 | 55 | 119 |
+| Stage 2 needed | 4 | 5 | 5 |
+| USR files: no ML in the listing | 287 | 217 | 175 |
+| USR files: loader found, base unresolvable | 91 | 140 | 105 |
+| USR files: ML extracted | 46 | 59 | 123 |
+| files by bucket: sound / video / pure-compute | 25 / 11 / 6 | 30 / 15 / 7 | 83 / 22 / 11 |
+| 0A7FH callers named statically | 27 | 32 | 86 |
+| string-packed payloads (files; strict-formed) | — | — | 99 (98; 65) |
 
-70 USR listings moved out of "no ML in the listing": 49 into "loader
-found but unresolvable" (the multi-line loaders whose base is an INPUT
-or a variable — the oracle's population, FINDING 14, now has them) and
-the rest into extracted. Thirty-nine files gained a candidate-ml
-for-read-poke payload they did not have (GLOBE, INDY, PASSKILL,
-SCRECOPY, TAPE16, diablo, dsdrtmr1/2/5, keydbcjc, …); several of those
-are files FINDING 25 had already executed, which is the cross-check: the
-sweep found their routines in the frame while the static count said the
-listing held none.
+The string-packed payloads bucket as sound 62, pure-compute 26, video
+9, ROM-calling 1: the idiom is the corpus's dominant way of carrying a
+short sound or delay routine, which is what FINDING 10 found the
+DATA/POKE population to be and FINDING 14's oracle found again
+dynamically. The gate number quoted from FINDING 3 onward, 46, was
+therefore a silent undercount of nearly two-thirds, exactly the class
+REPLY 4 named. Cross-check against FINDING 25's executed run: of the 94
+files whose only static machine code is now a packed string, the batch
+sweep had reached a USR call in 28 (9 identical output, 9 core-only
+timeouts, 5 ERR, 4 both timeouts, 1 load-bearing difference) — the
+executed and the static views now name the same files.
 
-The gate number quoted from FINDING 3 onward, 46, was therefore a
-silent undercount of about a quarter, exactly as REPLY 4 said. The
-conclusions do not move: 60 is still a small number, Stage 2's callers
-are still ones and twos (FINDING 25 executed them), and "the corpus is
-richer than the gate suggests" (FINDING 14) is now true statically as
-well. Earlier findings keep their numbers as the dated record; this one
-is the number to quote.
+The conclusions do not move: 124 is still a small number against
+4,339, Stage 2's callers are still ones and twos (FINDING 25 executed
+them; the static ROM-entry table gained only 0221H, one caller), and
+"the corpus is richer than the gate suggests" (FINDING 14) is now true
+statically as well. Earlier findings keep their numbers as the dated
+record; this one is the number to quote.
