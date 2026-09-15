@@ -124,6 +124,15 @@ discarded, `IN A,(FFH)` reads 127.
   never saw.
   *Not needed for the demon: 0A7FH/0A9AH. The payload never converts the
   USR argument and never sets a result; it just RETs.*
+  The trap does what the ROM's does, and both halves of its 64-column
+  restore matter: it emits `MODE 0` (the hardware latch, so the figure is
+  drawn at full width) and clears bit 3 of the port image at 403DH in the
+  write-set (the ROM's print flag, so the BASIC PRINTs that paint the
+  stage after the call step one byte). The second half was missing from
+  2026-09-13, when the interpreter split the latch from the flag, to
+  2026-09-15: the stage rows landed on every other cell, the "background
+  not clearing". test_coprocess pins both; z80.sh entry 700D pins it
+  through the protocol.
 
 - **DD-6. The two sound `OUT`s: captured when sound is on (2026-09-14,
   `z80/sound.py`, DESIGN.md decision 7), discarded otherwise — and

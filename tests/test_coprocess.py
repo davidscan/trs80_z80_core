@@ -172,10 +172,24 @@ class TestCalls(unittest.TestCase):
 
     def test_cls_restores_64_column(self):
         # OUT (FFH),8 -> 32-column (MODE 1); CALL 01C9H -> CLS restores 64 (MODE 0)
+        # and clears bit 3 of the ROM's port image at 403DH (the print flag
+        # BASIC's CHR$(23) set), the other bits kept
         m, sc = machine(bytes.fromhex('3E08' 'D3FF' 'CDC901' 'C9'))
+        m.ram[0x403D] = 0x0C
         m.run(0x7000, 0, 0xF000)
         modes = [l for l in sc.out if l.startswith('MODE')]
         self.assertEqual(modes, ['MODE 1', 'MODE 0'], sc.out)
+        self.assertIn('16445:4', sc.writes())
+        self.assertEqual(m.ram[0x403D], 0x04)
+
+    def test_cls_in_64_column_still_clears_the_print_flag(self):
+        # CHR$(23) from BASIC sets 403DH bit 3 and the latch; a routine's
+        # CLS with no OUT of its own must clear the flag (MODE 0 stated once)
+        m, sc = machine(bytes.fromhex('CDC901' 'C9'))
+        m.ram[0x403D] = 0x08
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual([l for l in sc.out if l.startswith('MODE')], ['MODE 0'])
+        self.assertIn('16445:0', sc.writes())
 
 
 class TestFixtureLayout(unittest.TestCase):

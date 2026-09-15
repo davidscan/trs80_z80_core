@@ -238,13 +238,20 @@ class Machine:
             self.write(0x4021, 0x3C)
             cpu.a = CLS_A
             # CLS returns the display to 64-column mode, as the ROM does and
-            # as BASIC's own CLS does (s_cls in the interpreter's p20).  A
-            # routine that printed 32-column text then cleared -- the Dancing
-            # Demon's intro -- must draw its figure at full width afterward.
-            if self.wide != 0:
-                self.flush_video()
-                self.send('MODE 0')
-                self.wide = 0
+            # as BASIC's own CLS does (s_cls in the interpreter's p20): the
+            # driver clears bit 3 of its port-FFH image at 403DH and writes
+            # the byte to the port.  Both halves matter.  The OUT emits
+            # MODE 0 (the first OUT of a call always states the mode), so a
+            # routine that printed 32-column text then cleared -- the
+            # Dancing Demon's intro -- draws its figure at full width.  The
+            # image byte reaches the interpreter in the write-set, where it
+            # clears the ROM's 32-column PRINT flag: without it the BASIC
+            # PRINTs that follow the call (the demon paints its stage that
+            # way) still step two bytes and land on every other cell -- the
+            # "background not clearing" seen 2026-09-15.
+            flag = self.read(0x403D) & 0xF7
+            self.write(0x403D, flag)
+            self.port_out(0xFF, flag)
         elif pc == 0x0A7F:
             cpu.hl = int(self.arg) & 0xFFFF
         else:
