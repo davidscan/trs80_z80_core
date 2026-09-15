@@ -1580,3 +1580,108 @@ example, section 9 — all three applied 2026-09-09). Every correction was
 produced by resolving addresses through the disassembler rather than by
 matching text — the discipline the "corpus counting traps" rule
 demands, applied to a program the corpus tooling cannot currently read.
+
+## FINDING 25 — the corpus's USR programs executed by the real core: what the engine changed, what it cannot, and the one interpreter defect it exposed (2026-09-15)
+
+Until this sweep exactly one listing had run end to end against the
+core: the north star. `tools/usr_sweep.py` ran every listing in
+`runnable/` and `blocked/*` that mentions USR — 606 files — three ways
+in batch (no core; the core, protocol logged per file; the core again
+as the same-build control), with the corpus measurement controls
+(`--seed 1`, the oracle's stdin feed, gawk diagnostics and the USR
+notices dropped before comparing, cwd outside both repos). Batch has no
+keyboard, so a matrix poll reads 0 and the end of stdin is BREAK.
+
+| class | files | meaning |
+|---|---|---|
+| no USR reached | 317 | the run never got to a call under either build (INPUT ran dry, ?SN, a CMD, a menu) |
+| ERR rom | 89 | the routine reached ROM space that is neither the sentinel nor a served trap — see below |
+| timeout, core only | 80 | the stub run finished, the core run did not in 10 s — see below |
+| identical | 64 | the same output with and without the core: the USR result was decorative, or the routine's effect is invisible in batch |
+| timeout, both | 46 | non-terminating under both (INKEY$ loops on the feed) |
+| differs, stable | 6 | the core changed the output and the control run agrees — the load-bearing cases |
+| stub only reached | 4 | `USR(` with no entry ever defined: the stub returns the argument, the core side raises ?FC by ruling (PROTOCOL "an undefined entry is ?FC on this side") |
+
+**The load-bearing six**, checked by hand: `gnt2mod1` (the routine
+sets 32-column mode by OUT, MODE 1, and the rest of the run prints
+wide, correctly), `shtglun1` (the game ends after one round instead of
+looping, its USR result read), `polar2` (the stub run spins; the core's
+routine polls the keyboard matrix, and at the end of stdin batch answers
+BREAK — the harness's rule, not a defect), `INDY`, `rammer`, `shdstcf1`
+(a screen cell each, the routine's write reaching the grid). None wrong.
+
+**The 89 ERRs are not 89 missing traps.** Every entry address was
+checked against the frame the core was given and the routine's first
+bytes disassembled (`z80/disasm.py`):
+
+| reached | files | what it is |
+|---|---|---|
+| 0038H, entry never written | 24 | no routine in memory: the loader is a SYSTEM tape, a CMD, or a menu batch never reached; the core executes FFH (RST 38H) from its unwritten RAM |
+| 0038H, entry written | 20 | 8 are the Dancing Demon variants whose payload the ASCII detokenizer damaged (the known loader gap); the rest are data at the entry (graphics, spaces, a float), a routine that fell off its end, and Space Chase (below) |
+| 0000H | 18 | 14 unwritten or non-code entries at FFFCH/FFF8H (a routine expected above MEMORY SIZE that no loader placed); 3 are `JP 0000H` guards in Space Battle (`CP 30H: JP NZ,0000H` — a marker byte the missing companion load would have set); yahtz15a/b POKE their routine at address 0 because OCR turned the variable TEXT into TEST on one line |
+| 00FEH | 6 | one program in six copies (MOVE123), non-code bytes at the entry |
+| real ROM entries | 21 | the corpus-driven Stage 2 evidence, next table |
+
+**ROM entries reached by real, loaded code** (executed callers, files;
+the static/oracle counts of FINDINGS 9 and 18 are in DESIGN.md):
+
+| entry | files | routine | note |
+|---|---|---|---|
+| 0060H delay | 3 | DSPEED/SA1/TACHO, one program | `DI: LD A,(A0FFH)` … a timing routine |
+| 002BH keyboard scan-once | 3 | m2t1s1a, shtglun4, typttpf2 | typttpf2 makes 703 calls |
+| 035BH | 2 | fulscnts, scrgenmf | screen-to-printer utilities; the ROM's printer path |
+| 1B2CH find a BASIC line by number | 2 | stellar, DEMON, one routine | self-modifying BASIC |
+| 06CCH | 2 | FILES, SCRECOPY | Disk BASIC utilities (FILES walks 40A4H) |
+| 0215H cassette drive on | 2 | tape2, tworecrd | cassette I/O, entry inside 40B5H |
+| 1BC0H tokenize a line | 1 | express | a line editor: `CALL 1BC0H: JP 2337H` |
+| 0150H POINT/SET/RESET | 1 | strwrsu2 | |
+| 000AH | 1 | spctgsm1 | CMD-blocked, then garbage |
+| 0007H, 0001H | 3 | entry inside the loader's own text, or DEFUSR=1 | not calls |
+
+No entry has more than three executed callers and the top two are one
+program each in variants. The Stage 2 rule holds: nothing earns a trap
+yet. Note 0033H (character to display), which the static count gave
+six callers, was reached by none — those six never get to their call in
+batch.
+
+**The 80 core-only timeouts are mostly the machine's own time.** 68 of
+them returned from every call and were still calling when the 10 s ran
+out: sound and delay routines called hundreds of times (gtrek2k5 662
+calls, musik 40 calls of 0.9 M T-states each). Measured over the 80:
+the core executed 2.0 M T-states per wall second unpaced, about 1.1x
+the 1.77 MHz machine — so a program that needs a minute of machine time
+needs a minute here, where the stub returns at once. The 12 whose first
+call never returned are waiting for hardware the core does not have:
+the disk index hole (dskspdcl, dsdrtmr2, dskdvtp), the serial port
+(trslink, trslink3, trslink4), a key (qcklife2/3 draw generations and
+poll: 150 K reads, 2,000 video runs — they run), or an unresolved loop
+(bsmajlge, laddrrp1, utlcp80m). dthtrap2 is the "no entry defined"
+case again: ?FC under ON ERROR, which restarts the game forever.
+
+**The defect: Space Chase (80 Micro 5/1982, `runnable/spcchas1.bas`).**
+Its loader POKEs a 29-byte routine at 16446-16474 (403EH-405AH) and sets
+408EH to it — the Level II idiom of parking code in the unused system
+bytes. 340 calls ran and the 341st died at 0038H. The frame the
+interpreter sent held, at 4041H-4046H, the host's wall clock (SS MN HH
+YY DD MM: 40 35 8 26 15 9 in the first call, the seconds byte counting
+up) in place of the six POKEd bytes, because the interpreter's system
+variable window served those cells live and discarded POKEs to them —
+a documented deviation modelled on Disk BASIC's clock, where the
+interrupt maintains them. Level II has no clock interrupt: on the
+cassette machine those bytes hold whatever was last stored, which is
+what a loader relies on. The 341st call crashed when the seconds byte
+became 30H (`JR NC`). Fixed in trs80basic the same day: a POKE to
+16449-16454 makes the cell plain RAM from then on (read back, sent in
+the frame); an unwritten cell still serves the host clock, so the
+time/date tips and TIME$ agree as before. Space Chase then runs its
+whole game: 841 calls, 841 returns, exit 0. Pinned in `sysvar.bas`
+(the POKE reads back) and `z80core.sh` (a routine across the six cells,
+through this core: USR(3) = 48). The corpus count for this idiom is one
+loader; eight other listings POKE the date into those cells, and they
+now keep it.
+
+Recommendations, not built: (a) the core could name "no routine here"
+when the entry address was never written — 25 of the 89 ERRs would then
+say so instead of `called 0038H`; (b) a batch feed cannot reach the
+INKEY$-driven half of the population, so the pty driver used for the
+Dancing Demon is the way to any of the 317.

@@ -182,6 +182,7 @@ Tests here:
 
     python3 -m unittest discover -s tests          # 150 tests; vectors sampled 40/file
     python3 tools/fetch_vectors.py --all           # once: the 1.37 GB pinned suite
+    python3 tools/usr_sweep.py                     # the corpus's USR listings through the core (FINDING 25)
     Z80_VECTORS=all python3 -m unittest tests.test_cpu_vectors   # all 1,604,000 cases, ~20 s
 
 ## Why this exists (one paragraph)

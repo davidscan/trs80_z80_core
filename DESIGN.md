@@ -403,6 +403,10 @@ is short, and it took the dynamic oracle to find any of it:
         the CMD blocker, not with HLE
   0049H wait-key, 003BH char-to-printer, 0060H delay:  ZERO callers,
         measured twice. Do not build them on spec.
+  EXECUTED 2026-09-15 (FINDING 25, the corpus run through this core):
+        0060H delay 3 files (one program), 002BH 3, 035BH 2, 1B2CH 2
+        (one routine), 06CCH 2, 0215H 2, 1BC0H 1, 0150H 1; 0033H none
+        reached. No entry above three executed callers: still no trap.
 CORRECTION 2026-09-06 (reference library, three books agreeing): this
 list previously read `1BC0H (not a documented Level II entry)`. It IS
 documented — "COMPRESS BASIC LINE" (ROM Routines Documented p62),
