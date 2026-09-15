@@ -25,6 +25,11 @@ TRS80_MHZ=1.77408 ./basic <program>.bas                           # USR routines
 Substitute any BASIC listing for `<program>.bas`. The interpreter finds the
 core by itself when the two repositories sit side by side.
 
+Needs Python 3, plus GNU awk 5.0 or later for trs80basic. Live sound also
+needs an audio player: ffplay (part of FFmpeg) anywhere, or ffmpeg alone on
+macOS, or aplay or pw-play on Linux; `ffplay -version` checks for it.
+Writing a WAV file needs nothing extra.
+
 ## Commands and arguments
 
 Everything runs from this folder with Python 3's standard library.
