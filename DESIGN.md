@@ -277,7 +277,8 @@ PHASE A INPUT SET (settled 2026-08-13, second session's question):
   2026-08-13. The archive re-filed blocked/ on 2026-08-14 (280 moved
   to runnable/, varptr/ retired, blocked/ 1,065 → 779); the sweep re-run
   2026-09-04 reads 4,339 listings with the same 46-file gate
-  population, now 17 blocked / 29 runnable (Z80_FINDINGS FINDING 20).
+  population, now 17 blocked / 29 runnable (Z80_FINDINGS FINDING 20;
+  60 files, 21 / 39, since the extractor fixes of 2026-09-15, FINDING 26).
   Both halves matter:
   blocked/ is the gate constituency; runnable/ includes the 148 files
   the USR stub + DEF FN re-selections moved, and classifying THEIR
@@ -857,7 +858,9 @@ unlocked programs before building the emulator.
 
 MEASURED AND CLOSED 2026-08-14. Phase A returned **5**; closing
 FINDING 7's 96 unresolvable loaders with the dynamic oracle returned
-**6**. The measured machine-code population more than doubled (46 →
+**6**. The measured machine-code population more than doubled (46 → [the
+static 46 is 60 since FINDING 26, 2026-09-15: three extractor undercounts
+fixed] →
 107 files) and the unlock count moved by one, because what is scarce
 in this corpus is not machine code — it is a listing whose ONLY
 obstacle is the absent Z80. Full numbers and method in Z80_FINDINGS.md

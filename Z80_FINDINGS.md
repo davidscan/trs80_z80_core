@@ -1680,8 +1680,83 @@ through this core: USR(3) = 48). The corpus count for this idiom is one
 loader; eight other listings POKE the date into those cells, and they
 now keep it.
 
-Recommendations, not built: (a) the core could name "no routine here"
-when the entry address was never written — 25 of the 89 ERRs would then
-say so instead of `called 0038H`; (b) a batch feed cannot reach the
-INKEY$-driven half of the population, so the pty driver used for the
-Dancing Demon is the way to any of the 317.
+Both recommendations were built the same day. (a) The core keeps a map
+of every byte a frame or a store has written; an `ERR rom` whose entry
+address was never written adds `-- no routine at XXXXH: its memory was
+never written` (PROTOCOL.md, `test_coprocess`). (b) `tools/usr_pty_sweep.py`
+drives a listing the way a person would — the interactive prompt on a
+pseudo-terminal, ENTER at MEMORY SIZE?, CLOAD, RUN, then a keystroke
+script (1, ENTER, Y, ENTER, space, 2, ENTER, N, 3 …) for 12 s with the
+core logged — and measures whether the routine was reached. Over the
+317 batch never reached:
+
+| pty pass | files |
+|---|---|
+| reached, every call returned | 20 |
+| reached, still running at the cut | 3 |
+| reached, ERR | 4 (3 "no routine": frankns1/2, voyagrah — SYSTEM-tape loads; primladv, a CMD file) |
+| not reached in 12 s of keystrokes | 290 |
+
+The 23 that ran are the menu-gated games batch could never start:
+Galactic Revolution in four versions (2,500-3,200 calls each), the
+Match/Fox-and-Hounds/Reversi/Mountain families, Fireman, Gambler,
+Critical Mass, Slag, Star Blaster. None of them reached a ROM entry —
+the Stage 2 table is unchanged by the pty pass. The 290 are what a
+fixed keystroke script cannot answer (CMD-blocked files, INPUT prompts
+that want a name or a number the script never types, programs that
+need a file); a listing-specific script, as the Dancing Demon had, is
+the remaining way in, one at a time.
+
+## FINDING 26 — the extractor's three known undercounts fixed, and the gate population re-measured: 46 → 60 files (2026-09-15)
+
+REPLY 4 of the seam audit (2026-09-10) reported three defects in
+`phasea/extract.py` that this side reproduced and left open as items
+(a)-(c): the READ and POKE of a loader were looked for only on the FOR's
+own line, so a loader split across lines was filed `no-ml-in-listing`
+with no flag; a `RESTORE` on the line before the loader was ignored and a
+bare `RESTORE` read as "adjacent"; and the POKE's value expression was
+parsed and never used, so `POKE I,255-A` extracted the raw DATA at
+confidence high. All three fixed today, each pinned in
+`tests/test_extract.py` (43 tests, the anchor suites still green — the
+sweep would not publish otherwise):
+
+- a FOR's READ and POKE may now sit on the following lines, up to the
+  NEXT that closes the loop (`LOADER_SPAN` 4 lines); the DATA pointer
+  is taken from the READ's own line;
+- a RESTORE on the previous line redirects the loader; a bare RESTORE
+  means the program's first DATA (`data_from: restore-first`);
+- a value expression that is not the READ variable itself flags
+  `poke-value-transformed` and is never graded high.
+
+`python3 -m phasea.sweep` over the same 4,339 listings, before → after:
+
+| number | before | after |
+|---|---|---|
+| payload records | 7,625 | 7,695 |
+| **gate population (files with a strict, well-formed, Stage-1-runnable payload)** | **46** | **60** |
+| Stage 1 unlocks | 42 | 55 |
+| Stage 2 needed | 4 | 5 |
+| USR files: no ML in the listing | 287 | 217 |
+| USR files: loader found, base unresolvable | 91 | 140 |
+| USR files: ML extracted | 46 | 59 |
+| for-read-poke candidate-ml, high | 72 | 102 |
+| payloads flagged poke-value-transformed | — | 8 |
+| ROM entry points named statically | 9 | 10 (0221H, one caller) |
+
+70 USR listings moved out of "no ML in the listing": 49 into "loader
+found but unresolvable" (the multi-line loaders whose base is an INPUT
+or a variable — the oracle's population, FINDING 14, now has them) and
+the rest into extracted. Thirty-nine files gained a candidate-ml
+for-read-poke payload they did not have (GLOBE, INDY, PASSKILL,
+SCRECOPY, TAPE16, diablo, dsdrtmr1/2/5, keydbcjc, …); several of those
+are files FINDING 25 had already executed, which is the cross-check: the
+sweep found their routines in the frame while the static count said the
+listing held none.
+
+The gate number quoted from FINDING 3 onward, 46, was therefore a
+silent undercount of about a quarter, exactly as REPLY 4 said. The
+conclusions do not move: 60 is still a small number, Stage 2's callers
+are still ones and twos (FINDING 25 executed them), and "the corpus is
+richer than the gate suggests" (FINDING 14) is now true statically as
+well. Earlier findings keep their numbers as the dated record; this one
+is the number to quote.

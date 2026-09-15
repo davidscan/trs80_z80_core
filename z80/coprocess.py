@@ -117,6 +117,7 @@ class Machine:
         self.sound = sound          # a z80.sound.Sound, or None: no capture at all
         self.bits = 0               # port FFH bits 0-1 as last written; carries across calls
         self.ram = bytearray(b'\xff' * 65536)
+        self.known = bytearray(65536)   # see reset_ram
         self.gen = 0
         self.dirty = {}            # addr -> last value written, non-video
         self.video = {}            # addr -> last value written, video
@@ -143,6 +144,7 @@ class Machine:
 
     def write(self, a, v):
         self.ram[a] = v
+        self.known[a] = 1
         if VIDEO_LO <= a < VIDEO_HI:
             self.video[a] = v
         else:
@@ -180,14 +182,19 @@ class Machine:
     # ---- frames -------------------------------------------------------
     def reset_ram(self):
         self.ram = bytearray(b'\xff' * 65536)
+        # which bytes a frame or a routine has ever stored: the difference
+        # between "no ROM here" and "no routine here" (FINDING 25: 25 of the
+        # sweep's 89 ERRs were calls into memory nothing had written)
+        self.known = bytearray(65536)
         self.cpu = Z80(self.read, self.write, self.port_in, self.port_out)
 
     def apply_run(self, run):
         addr, bs = run.split(':', 1)
         a = int(addr)
-        ram = self.ram
+        ram, known = self.ram, self.known
         for i, b in enumerate(bs.split(',')):
             ram[(a + i) & 0xFFFF] = int(b)
+            known[(a + i) & 0xFFFF] = 1
 
     # ---- streaming ----------------------------------------------------
     @staticmethod
@@ -255,7 +262,12 @@ class Machine:
         elif pc == 0x0A7F:
             cpu.hl = int(self.arg) & 0xFFFF
         else:
-            raise CoreError('rom', 'called %04XH, no ROM here' % pc)
+            text = 'called %04XH, no ROM here' % pc
+            if not self.known[self.entry]:
+                # unwritten RAM reads FFH, RST 38H: the loader never ran,
+                # or it is a SYSTEM tape the listing expects loaded already
+                text += ' -- no routine at %04XH: its memory was never written' % self.entry
+            raise CoreError('rom', text)
         # the RET the ROM routine would have done
         sp = cpu.sp
         cpu.pc = cpu.wz = self.ram[sp] | (self.ram[(sp + 1) & 0xFFFF] << 8)
@@ -266,6 +278,7 @@ class Machine:
         cpu = self.cpu
         cpu.reset()
         self.arg = arg
+        self.entry = entry
         self.result = 0
         self.dirty = {}
         self.video = {}
@@ -332,6 +345,7 @@ class Fixture:
     def load(self, m):
         for a, b in self.image.items():
             m.ram[a] = b
+            m.known[a] = 1
 
 
 def fields(line):

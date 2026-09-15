@@ -54,6 +54,7 @@ def machine(code, at=0x7000, replies=()):
     sc = Scripted(replies)
     m = Machine(sc.send, sc.recv)
     m.ram[at:at + len(code)] = code
+    m.known[at:at + len(code)] = b'\x01' * len(code)
     return m, sc
 
 
@@ -106,6 +107,21 @@ class TestCalls(unittest.TestCase):
 
     def test_rst_is_rom_too(self):
         m, sc = machine(bytes.fromhex('FF'))
+        with self.assertRaises(Exception) as cm:
+            m.run(0x7000, 0, 0xF000)
+        self.assertEqual(cm.exception.text, 'called 0038H, no ROM here')
+
+    def test_rom_from_an_unwritten_entry_says_no_routine(self):
+        # nothing stored at the entry: the FFH bytes are RST 38H, and the
+        # text says the routine was never there (FINDING 25)
+        m, sc = machine(b'')
+        with self.assertRaises(Exception) as cm:
+            m.run(0x7000, 0, 0xF000)
+        self.assertEqual(cm.exception.text,
+                         'called 0038H, no ROM here -- no routine at 7000H: its memory was never written')
+        # a frame run marks its bytes: the same call with the entry written is the plain text
+        m, sc = machine(b'')
+        m.apply_run('28672:255')
         with self.assertRaises(Exception) as cm:
             m.run(0x7000, 0, 0xF000)
         self.assertEqual(cm.exception.text, 'called 0038H, no ROM here')

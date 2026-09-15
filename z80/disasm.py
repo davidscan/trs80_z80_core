@@ -203,3 +203,39 @@ def listing(data, base=0):
         hexb = ' '.join('%02X' % b for b in ins.raw)
         lines.append('%04X  %-12s  %s' % (ins.addr, hexb, ins.text))
     return '\n'.join(lines)
+
+
+def main(argv=None):
+    """Disassemble a file of raw Z80 bytes (goal (4) from a shell):
+
+        python3 -m z80.disasm ROUTINE.bin --base 0x7F00
+        python3 -m z80.disasm --hex "CD 7F 0A 29 C3 9A 0A" --base 32000
+
+    `--base` is the address the bytes live at (decimal, or 0x/H hex);
+    `--skip` and `--length` pick a slice of the file.  Output is the same
+    listing the anchor validation reads: address, bytes, mnemonic.
+    """
+    import argparse
+    ap = argparse.ArgumentParser(description=main.__doc__.split('\n\n')[0])
+    ap.add_argument('file', nargs='?', help='raw bytes; omit with --hex')
+    ap.add_argument('--hex', help='the bytes as hex digits instead of a file')
+    ap.add_argument('--base', default='0', help='load address (decimal, 0x.., or ..H)')
+    ap.add_argument('--skip', type=int, default=0, help='bytes of the file to skip first')
+    ap.add_argument('--length', type=int, default=None, help='bytes to disassemble')
+    a = ap.parse_args(argv)
+    b = a.base.strip()
+    base = int(b[:-1], 16) if b[-1:] in 'Hh' else int(b, 0)
+    if a.hex is not None:
+        data = bytes.fromhex(a.hex.replace(' ', ''))
+    elif a.file:
+        data = open(a.file, 'rb').read()
+    else:
+        ap.error('a file or --hex is required')
+    data = data[a.skip:]
+    if a.length is not None:
+        data = data[:a.length]
+    print(listing(data, base))
+
+
+if __name__ == '__main__':
+    main()

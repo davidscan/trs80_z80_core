@@ -44,7 +44,9 @@ corpus's DATA/POKE loader bytes — ran over 4345 listings and returned
 FINDING 7's 96 loaders static extraction could not resolve, was then
 closed by building the dynamic extraction oracle (`phasea/oracle.py`,
 DESIGN.md's recorded escalation path). Result: the measured
-machine-code population more than **doubled, 46 → 107 files**, and the
+machine-code population more than **doubled, 46 → 107 files** (the static
+46 re-measured as 60 on 2026-09-15 once three extractor undercounts were
+fixed, FINDING 26), and the
 gate number moved **5 → 6**. What is scarce in this corpus is not
 machine code; it is a listing whose ONLY obstacle is the absent Z80.
 The user ruled on 2026-08-14 that the rescue count does not justify
@@ -184,6 +186,25 @@ Tests here:
     python3 tools/fetch_vectors.py --all           # once: the 1.37 GB pinned suite
     python3 tools/usr_sweep.py                     # the corpus's USR listings through the core (FINDING 25)
     Z80_VECTORS=all python3 -m unittest tests.test_cpu_vectors   # all 1,604,000 cases, ~20 s
+
+## Commands and arguments
+
+Everything runs from this folder with the standard library.
+
+| command | what it does |
+|---|---|
+| `python3 core.py` | the coprocess the interpreter names in `TRS80_Z80`; PROTOCOL.md on stdin/stdout. `--fixture` adds the conformance routines behind the stub's canned entries. Reads `TRS80_SOUND`, `TRS80_SOUND_WAV`, `TRS80_SOUND_RATE` (above). |
+| `python3 -m z80.disasm FILE --base ADDR` | disassemble raw Z80 bytes loaded at ADDR (`0x7F00`, `7F00H` or decimal); `--hex "CD 7F 0A ..."` instead of a file, `--skip N` and `--length N` for a slice. |
+| `python3 -m unittest discover -s tests` | the test suite; `Z80_VECTORS=all` runs every CPU vector. |
+| `python3 tools/fetch_vectors.py --all` | fetch the pinned CPU test vectors once (never committed; `tools/vectors.lock` pins them). |
+| `python3 -m phasea.sweep [--json out/manifest.json]` | Phase A: the static extractor and classifier over the corpus beside this checkout; refuses to publish counts unless the anchor suites pass. |
+| `python3 -m phasea.oracle [--hangs --files LIST]` | the dynamic extraction oracle: run a listing under the interpreter's stub and read what its loader deposited. |
+| `python3 tools/usr_sweep.py` | the corpus's USR listings executed by this core, three ways, classified (FINDING 25); writes `out/usr_sweep/`. |
+| `python3 tools/usr_pty_sweep.py [--class no-usr-reached]` | the same population driven through a pseudo-terminal with a keystroke script, for the listings whose USR call sits behind an INKEY$ menu; writes `out/usr_pty_sweep/`. |
+| `sh tools/corelog.sh PREFIX` | as `TRS80_Z80`, runs the core with both directions logged to PREFIX.in / PREFIX.out. |
+| `python3 tools/render_frames.py LOG CALL RUN...` | replay a log's video lines into pixel frames of one call. |
+| `python3 tools/reconstruct_screen.py CAPTURE` | the 64x16 grid a captured terminal stream actually drew. |
+| `python3 tools/tick_probe.py` | measure the interpreter's tick cost under a paced routine, batch and interactive. |
 
 ## Why this exists (one paragraph)
 
