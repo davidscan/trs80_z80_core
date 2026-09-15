@@ -202,6 +202,29 @@ interpreter in batch mode, and through a pseudo-terminal. **Writes:**
 | `--basic PATH` | `../trs80basic` | the interpreter checkout | one that lives elsewhere |
 | `--passes N` | `12` | passes of 256 tone cycles | longer runs for steadier timings |
 
+#### `python3 tools/kbd_probe.py`
+
+Times what one keyboard read costs through the interpreter: the pipeline
+it starts at a terminal when no key is queued, the core alone, batch mode,
+a pseudo-terminal with no key and with a key held, and BASIC's own `PEEK`
+and `INKEY$` loops. With `--listing` it measures a program whose routine
+keeps running instead, four ways: speed, keyboard reads and ticks a
+second, and the share of time spent waiting on each. With `--rates` it
+runs a routine that polls at each given rate, paced, to find where a
+program falls behind real time. **Writes:** `out/kbd_probe/`.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--basic PATH` | `../trs80basic` | the interpreter checkout | one that lives elsewhere |
+| `--reads N` | `20000` | reads in the core-alone and batch runs, 1-65535 | steadier batch timings |
+| `--tty-reads N` | `1000` | reads in each terminal run, 1-65535 | steadier terminal timings |
+| `--loops N` | `1000` | passes of each BASIC loop at the terminal | steadier BASIC timings |
+| `--pipe-runs N` | `200` | runs of the pipeline alone | a noisy host |
+| `--listing FILE` | none | measures that listing instead | what a real program loses at a terminal |
+| `--seconds N` | `15` | seconds measured per way with `--listing`, per rate with `--rates` | longer windows |
+| `--rates R,R...` | none | a routine polling at each rate, paced, at the terminal | where a program falls behind real time |
+| `--work DIR` | `out/kbd_probe` | where the programs and logs go | keeping runs apart |
+
 #### `python3 tools/sound_probe.py {synth,sinks}`
 
 `synth` measures the pitch accuracy and cost of a prototype synthesizer.
@@ -351,6 +374,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 | `out/usr_sweep/` | `results.json`, per-listing protocol logs in `runs/`, and the working directory | `usr_sweep.py` | yes; `usr_pty_sweep.py --class` reads `results.json` |
 | `out/usr_pty_sweep/` | `results.json` and per-listing logs | `usr_pty_sweep.py` | yes |
 | `out/tick_probe.json`, `.json.bas` | the latest tick timings and the program used | `tick_probe.py` | yes |
+| `out/kbd_probe/` | the probe's programs, key files and proxy logs | `kbd_probe.py` | yes |
 | `PREFIX.in`, `PREFIX.out` | a session's protocol, both directions | `corelog.sh` | yes |
 | the `TRS80_SOUND_WAV` file | routines' audio | the core | yes |
 | `corpus` | a link to the local listing archive | you | yes; the corpus tools then refuse to run |
