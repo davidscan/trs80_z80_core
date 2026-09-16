@@ -771,9 +771,11 @@ FORMATS = ('bin', 'cmd', 'cas', 'bas')
 
 
 def parse_addr(s):
-    v = number(s.upper())
+    """A command-line address: decimal, 7D00H, or 0x7D00 as z80.disasm takes it."""
+    t = s.strip().upper()
+    v = int(t[2:], 16) if t.startswith('0X') and t[2:].isalnum() else number(t)
     if v is None:
-        raise argparse.ArgumentTypeError('not a number: %r (decimal, or hex with H)' % s)
+        raise argparse.ArgumentTypeError('not a number: %r (decimal, 7D00H or 0x7D00)' % s)
     return v
 
 

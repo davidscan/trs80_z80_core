@@ -99,6 +99,31 @@ file; with neither, the listing goes to stdout.
 | `--list FILE` | stdout when there is no `-o` | writes the listing (address, bytes, source) here; `-` for stdout | keeping the listing beside the object |
 | `--symbols` | off | prints the symbol table after the listing | finding an address to `PEEK` |
 
+### `python3 -m z80.run FILE`
+
+Runs a machine-language program in the core with no screen and no
+keyboard: a `.cmd` load module, a `.cas` SYSTEM tape, raw `.bin` bytes
+(with `--org`) or `.asm` source, assembled first. The program is called
+the way `USR` calls a routine, with the same three ROM entries served and
+`ERR rom` for any other. Keyboard reads see no key; video bytes land in
+memory and are printed afterwards as the 16 by 64 screen. It prints how
+the run ended, HL, the T-states and the seconds of Model I time they
+represent. Exit status 0 when the program returned or reached 0A9AH, 1 on
+an error, 2 when the T-state budget stopped it. **Writes:** nothing.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `FILE` | required | the program: `.cmd`, `.cas`, `.bin` or `.asm` | always |
+| `--org ADDR` | none | the load address of a `.bin` file, or of `.asm` source with no `ORG` | raw bytes |
+| `--entry ADDR` | the file's transfer address, else its first block | where execution starts | a routine whose entry is not its first byte |
+| `--arg N` | `0` | what `CALL 0A7FH` fetches into HL, as `USR(N)` would | routines that take an argument |
+| `--sp ADDR` | `0FF00H` | the stack pointer at entry | code that assumes a stack somewhere else |
+| `--cycles N` | `20000000` (about 11 s of the machine) | the T-state budget; a program still running then is stopped | programs that never return, or a shorter wait |
+| `--screen` / `--no-screen` | the screen prints if the program wrote to it | force or suppress the screen dump | checking a display routine; keeping output short |
+| `--regs` | off | prints AF BC DE HL IX IY SP PC at the end | debugging a routine |
+| `--dump ADDR,LEN` | none | hex-dumps that range at the end; repeatable | checking what a routine stored |
+| `--quiet` | off | prints nothing but the `--dump` ranges | scripting |
+
 ### `python3 -m unittest discover -s tests`
 
 The test suite. **Writes:** `out/oracle/`, a scratch build of the
