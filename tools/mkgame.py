@@ -110,6 +110,13 @@ class Asm:
                 self.fixups.append((len(self.out), 'rel', values[vi]))
                 vi += 1
                 self.out.append(0)
+            elif o.kind == 'idx':
+                d = values[vi] & 0xFF
+                vi += 1
+                if len(enc) == 3 and enc[1] == 0xCB:      # DD CB d op: the displacement
+                    self.out.insert(start + 2, d)         # sits before the last byte
+                else:
+                    self.out.append(d)
         if vi != len(values):
             raise ValueError('%s %s: %d values for %d operands needing one'
                              % (mnem, operands, len(values), vi))

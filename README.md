@@ -10,7 +10,8 @@ routines) actually runs. The routine works on the same memory `PEEK` and
 `POKE` see; its video writes appear while it runs, the keyboard is live,
 and its cassette-port sound can be played or saved to a WAV file. That is
 enough to run Dancing Demon, machine code and sound included. It also
-includes a standalone Z80 disassembler. It uses only the standard library,
+includes a standalone Z80 disassembler and an assembler that reads the
+Editor/Assembler syntax the period books print. It uses only the standard library,
 contains no ROM bytes, and writes no files except a WAV file you name.
 
 ## Quick start
@@ -72,6 +73,31 @@ Disassembles raw Z80 bytes. **Writes:** nothing; the listing goes to stdout.
 | `--base ADDR` | `0` | address of the first byte disassembled (after `--skip`), as decimal, `0x7D00` or `7D00H` | always, so the address column and `JP`/`CALL` targets match where the listing POKEs the code |
 | `--skip N` | `0` | bytes to skip at the start of the file | code that follows a header or data |
 | `--length N` | to the end | how many bytes to disassemble | stopping before data that follows the code |
+
+### `python3 -m z80.asm SOURCE`
+
+Assembles a Z80 source file written the way the period books print
+Editor/Assembler listings: an optional line number, a label (colon
+optional), the instruction, `;` comments; hex with a trailing `H` and a
+leading digit (`0FFH`), octal `Q`, binary `B`, `'A'` characters, `$` for
+the location counter; `+ - * /` and `.AND. .OR. .XOR. .NOT. .MOD. .SHL.
+.SHR.`; `ORG`, `EQU`, `DEFB`/`DB`, `DEFW`/`DW`, `DEFM`/`DM`, `DEFS`/`DS`,
+`END entry`. Every instruction comes from the same opcode table the core
+executes and the disassembler prints from, so a disassembly listing is
+valid source again. Errors are printed as `file:line: message`, all of
+them, and nothing is written. **Writes:** the `-o` file and the `--list`
+file; with neither, the listing goes to stdout.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `SOURCE` | required | the source file | always |
+| `-o OUT` | none | where the object goes; the extension picks the format: `.bin`, `.cmd`, `.cas`, `.bas` | producing something to load or run |
+| `--format {bin,cmd,cas,bas}` | from the extension, else `bin` | `bin` a raw image (gaps between `ORG` blocks zero-filled); `cmd` a TRS-80 load module; `cas` a Model I SYSTEM tape as a byte stream; `bas` a BASIC `DATA`/`POKE` loader with a checksum, `DEFUSR` and `PRINT USR(0)` on line 60 | an output name without a telling extension |
+| `--name NAME` | the source file's name | the six-character program name inside a `cmd` or `cas` file | matching what a listing expects |
+| `--org ADDR` | none | the load address when the source has no `ORG` (`32000` or `7D00H`) | a fragment without one |
+| `--entry ADDR` | the first `ORG` | the entry address when `END` names none | a routine whose entry is not its first byte |
+| `--list FILE` | stdout when there is no `-o` | writes the listing (address, bytes, source) here; `-` for stdout | keeping the listing beside the object |
+| `--symbols` | off | prints the symbol table after the listing | finding an address to `PEEK` |
 
 ### `python3 -m unittest discover -s tests`
 
@@ -299,6 +325,29 @@ python3 -m z80.disasm --hex "CD 7F 0A 29 C3 9A 0A" --base 7D00H
 
 It fetches the `USR` argument into HL (ROM entry 0A7FH), doubles it, and
 returns HL to BASIC as the result (0A9AH).
+
+The other direction starts from source. Save this as `double.asm`:
+
+```
+00100         ORG   7D00H
+00110 ARG     EQU   0A7FH        ;the USR argument into HL
+00120 RESULT  EQU   0A9AH        ;HL back to BASIC
+00130 DOUBLE  CALL  ARG
+00140         ADD   HL,HL
+00150         JP    RESULT
+00160         END   DOUBLE
+```
+
+```bash
+python3 -m z80.asm double.asm                  # the listing: addresses, bytes, source
+python3 -m z80.asm double.asm -o double.bas    # a DATA/POKE loader; edit line 60 to PRINT USR(21)
+python3 -m z80.asm double.asm -o double.cmd    # a load module, for later
+```
+
+The `.bas` file runs in the interpreter exactly like the hand-written
+listing above. Because the assembler, the disassembler and the core share
+one opcode table, the bytes it emits are the bytes the disassembler reads
+back and the core executes.
 
 ### Decision points
 

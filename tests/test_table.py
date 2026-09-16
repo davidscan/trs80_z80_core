@@ -49,7 +49,7 @@ MAIN = [
     ('0A', 'LD A,(BC)'),
     ('0B', 'DEC BC'),
     ('0F', 'RRCA'),
-    ('11CDAB', 'LD DE,ABCDH'),
+    ('11CDAB', 'LD DE,0ABCDH'),
     ('12', 'LD (DE),A'),
     ('17', 'RLA'),
     ('1A', 'LD A,(DE)'),
@@ -64,7 +64,7 @@ MAIN = [
     ('32003C', 'LD (3C00H),A'),
     ('34', 'INC (HL)'),
     ('35', 'DEC (HL)'),
-    ('36FF', 'LD (HL),FFH'),
+    ('36FF', 'LD (HL),0FFH'),
     ('37', 'SCF'),
     ('39', 'ADD HL,SP'),
     ('3A0038', 'LD A,(3800H)'),
@@ -99,10 +99,10 @@ MAIN = [
     ('C9', 'RET'),
     ('CD7F0A', 'CALL 0A7FH'),          # USR argument-fetch trap
     ('CD9A0A', 'CALL 0A9AH'),          # USR return-value trap
-    ('D3FF', 'OUT (FFH),A'),           # the cassette-port sound trick
+    ('D3FF', 'OUT (0FFH),A'),           # the cassette-port sound trick
     ('D603', 'SUB 03H'),
     ('D9', 'EXX'),
-    ('DBFF', 'IN A,(FFH)'),
+    ('DBFF', 'IN A,(0FFH)'),
     ('E603', 'AND 03H'),
     ('E3', 'EX (SP),HL'),
     ('E9', 'JP (HL)'),
@@ -171,7 +171,7 @@ ED = [
     ('ED5F', 'LD A,R'),
     ('ED67', 'RRD'),
     ('ED6F', 'RLD'),
-    ('ED73FFFF', 'LD (FFFFH),SP'),
+    ('ED73FFFF', 'LD (0FFFFH),SP'),
     ('ED7B0040', 'LD SP,(4000H)'),
     ('EDA0', 'LDI'),
     ('EDA1', 'CPI'),
@@ -195,7 +195,7 @@ INDEX = [
     ('DD2B', 'DEC IX'),
     ('DD3405', 'INC (IX+05H)'),
     ('DD3505', 'DEC (IX+05H)'),
-    ('DD3605FF', 'LD (IX+05H),FFH'),
+    ('DD3605FF', 'LD (IX+05H),0FFH'),
     ('DD4605', 'LD B,(IX+05H)'),
     ('DD6605', 'LD H,(IX+05H)'),      # H, NOT IXH -- (IX+d) suppresses it
     ('DD7005', 'LD (IX+05H),B'),
@@ -222,9 +222,9 @@ INDEX = [
     ('DD24', 'INC IXH'),              # undocumented index-half
     ('DD7C', 'LD A,IXH'),             # undocumented index-half
     ('DD6F', 'LD IXL,A'),             # undocumented index-half
-    ('FD21DDB0', 'LD IY,B0DDH'),      # endgame: 253,33,221,176
-    ('DD2A4BB7', 'LD IX,(B74BH)'),    # endgame: 221,42,75,183
-    ('DD22D9B0', 'LD (B0D9H),IX'),    # endgame: 221,34,217,176
+    ('FD21DDB0', 'LD IY,0B0DDH'),      # endgame: 253,33,221,176
+    ('DD2A4BB7', 'LD IX,(0B74BH)'),    # endgame: 221,42,75,183
+    ('DD22D9B0', 'LD (0B0D9H),IX'),    # endgame: 221,34,217,176
     ('DD7700', 'LD (IX+00H),A'),      # endgame: 221,119,0
     ('DD23', 'INC IX'),
     ('DD2B', 'DEC IX'),

@@ -56,6 +56,12 @@ from typing import Optional
 #   'imm_fixed' literal operand baked into the opcode   value=int/str
 #               (IM 0/1/2, OUT (C),0, RST n handled by 'rst')
 
+def _hex(v, width):
+    """Hex with a trailing H and a leading digit: 0FFH, 0ABCDH, 3C00H."""
+    t = '%0*X' % (width, v)
+    return ('0' + t if t[0] in 'ABCDEF' else t) + 'H'
+
+
 @dataclass(frozen=True)
 class Operand:
     kind: str
@@ -64,7 +70,9 @@ class Operand:
     width: int = 0
 
     def text(self, imm=None, disp=None, addr=None):
-        """Render this operand. imm/disp/addr supplied by the decoder."""
+        """Render this operand. imm/disp/addr supplied by the decoder.
+        Hex is Zilog/EDTASM form, a leading digit always (0B0H, 0ABCDH),
+        so the disassembler's text assembles back (z80.asm)."""
         k = self.kind
         if k == 'reg':
             return self.value
@@ -73,19 +81,19 @@ class Operand:
         if k == 'idx':
             d = 0 if disp is None else disp
             sign = '+' if d >= 0 else '-'
-            return '(%s%s%02XH)' % (self.value, sign, abs(d))
+            return '(%s%s%s)' % (self.value, sign, _hex(abs(d), 2))
         if k == 'imm8':
-            return '%02XH' % (imm & 0xFF) if imm is not None else 'n'
+            return _hex(imm & 0xFF, 2) if imm is not None else 'n'
         if k == 'imm16':
-            return '%04XH' % (imm & 0xFFFF) if imm is not None else 'nn'
+            return _hex(imm & 0xFFFF, 4) if imm is not None else 'nn'
         if k == 'aimm16':
-            return '(%04XH)' % (imm & 0xFFFF) if imm is not None else '(nn)'
+            return '(%s)' % _hex(imm & 0xFFFF, 4) if imm is not None else '(nn)'
         if k == 'port_imm':
-            return '(%02XH)' % (imm & 0xFF) if imm is not None else '(n)'
+            return '(%s)' % _hex(imm & 0xFF, 2) if imm is not None else '(n)'
         if k == 'port_c':
             return '(C)'
         if k == 'rel':
-            return '%04XH' % (addr & 0xFFFF) if addr is not None else 'd'
+            return _hex(addr & 0xFFFF, 4) if addr is not None else 'd'
         if k == 'cond':
             return self.value
         if k == 'bit':
