@@ -238,6 +238,13 @@ class Machine:
         if pc == 0x0A9A:
             self.result = 1
             raise EndCall()
+        if pc == 0x1A19:
+            # the ROM's "READY" entry (022EH is EI / JP 1A19H, and a period
+            # program ends with JP 1A19H to hand the machine back to BASIC):
+            # the call ends like a RET, with no result.  The interpreter's
+            # SYSTEM `/` runs whole programs this way.  0000H (reset) stays
+            # `ERR rom`: it is the conformance suite's canonical no-ROM call.
+            raise EndCall()
         if pc == 0x01C9:
             for a in range(VIDEO_LO, VIDEO_HI):
                 self.write(a, 0x20)

@@ -87,6 +87,16 @@ class TestCalls(unittest.TestCase):
         m.run(0x7000, 0, 0xF000)
         self.assertEqual(sc.ret()['hl'], '3')
 
+    def test_ready_entry_ends_the_call_like_a_ret(self):
+        """JP 1A19H (the ROM's READY) hands the machine back to BASIC: the
+        call ends with no result, as a RET would.  The interpreter's
+        SYSTEM runs whole programs this way.  (0000H stays ERR rom: the
+        tests below and the interpreter's z80.sh pin it as the no-ROM call.)"""
+        m, sc = machine(bytes.fromhex('3E09' '32407E' 'C3191A'))
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(sc.ret()['result'], '0')
+        self.assertEqual(m.ram[0x7E40], 9)
+
     def test_cls_trap_paints_and_homes(self):
         # CALL 01C9H / RET, with a byte on screen and the cursor elsewhere
         m, sc = machine(bytes.fromhex('CDC901' 'C9'))
