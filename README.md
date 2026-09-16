@@ -134,6 +134,27 @@ from `script`) into the grid a person would have seen. **Writes:** nothing.
 |---|---|---|---|
 | `CAPTURE` | required | the captured terminal bytes | telling a display bug in the interpreter from one in the routine's video |
 
+### `python3 tools/mkgame.py`
+
+Writes CATCH, a machine-language reflex game, as a BASIC listing with a
+DATA loader and a checksum: a block falls, the arrow keys slide a paddle
+along the bottom row, catching it speeds the next one up, three misses
+end it, and the score comes back through `USR`. Every byte is assembled
+from the opcode table's inverse index and the frame delay from its cycle
+column, so the listing is generated, never hand-counted. Set a clock
+first -- `speed 1.77` at the prompt -- or the frame delay runs as fast as
+the host can. **Writes:** `demo/catch.bas`.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--out PATH` | `demo/catch.bas` | where the listing goes | keeping a variant |
+| `--org N` | `32000` | where the routine is POKEd | leaving room for other code |
+| `--fps N` | `30` | frames a second, which sets the frame delay | a faster or slower game |
+| `--scan N` | `0` | extra keyboard reads a frame | stressing the interactive path |
+| `--disasm` | off | prints the routine instead of writing it | checking the generated code |
+| `--selftest` | off | plays it in the core with a bot at the keyboard | checking the game logic |
+| `--frames N` | `400` | frames for `--selftest` | a longer self-test |
+
 ### Corpus measurement tools
 
 The next four read a local archive of period listings that is not
@@ -375,6 +396,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 | `out/usr_pty_sweep/` | `results.json` and per-listing logs | `usr_pty_sweep.py` | yes |
 | `out/tick_probe.json`, `.json.bas` | the latest tick timings and the program used | `tick_probe.py` | yes |
 | `out/kbd_probe/` | the probe's programs, key files and proxy logs | `kbd_probe.py` | yes |
+| `demo/catch.bas` | the CATCH listing, ready to CLOAD | `mkgame.py` | yes; regenerate it |
 | `PREFIX.in`, `PREFIX.out` | a session's protocol, both directions | `corelog.sh` | yes |
 | the `TRS80_SOUND_WAV` file | routines' audio | the core | yes |
 | `corpus` | a link to the local listing archive | you | yes; the corpus tools then refuse to run |
