@@ -8,11 +8,14 @@
 
 At a terminal, trs80basic answers a keyboard read that finds no byte
 queued -- the core's `K` line, a BASIC PEEK of 3800H-38FFH, an INKEY$ --
-by running `dd if=/dev/tty | od` through the shell (src/p30_kbd.awk,
-kb_fill).  In batch mode the same read takes a byte from stdin and starts
-nothing.  Without --listing this measures both, unpaced (TRS80_MHZ=0):
+by reading the tty itself (src/p30_kbd.awk, kb_fill_tty; until
+2026-09-16 it ran `dd if=/dev/tty | od` through the shell on every such
+read, which this tool was written to measure).  In batch mode the same
+read takes a byte from stdin.  Without --listing this measures both,
+unpaced (TRS80_MHZ=0):
 
-  0. the pipeline alone, run from inside a pseudo-terminal;
+  0. the old pipeline alone, run from inside a pseudo-terminal (the
+     reference the 2026-09-16 change is measured against);
   1. the core alone: a 12-byte routine reading 38FFH in a loop (LD BC,n /
      LD A,(38FFH) / DEC BC / LD A,B / OR C / JR NZ / RET) with a stub
      transport;
@@ -60,7 +63,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 MHZ = 1.77408
-PIPELINE = 'dd if=/dev/tty bs=256 count=1 2>/dev/null | od -A n -t u1 -v'   # kb_fill's command
+PIPELINE = 'dd if=/dev/tty bs=256 count=1 2>/dev/null | od -A n -t u1 -v'   # kb_fill's command until 2026-09-16
 ENTRY = 32000
 
 

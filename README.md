@@ -225,8 +225,9 @@ interpreter in batch mode, and through a pseudo-terminal. **Writes:**
 
 #### `python3 tools/kbd_probe.py`
 
-Times what one keyboard read costs through the interpreter: the pipeline
-it starts at a terminal when no key is queued, the core alone, batch mode,
+Times what one keyboard read costs through the interpreter: the `dd | od`
+pipeline it started at a terminal until 2026-09-16 (kept as the
+reference), the core alone, batch mode,
 a pseudo-terminal with no key and with a key held, and BASIC's own `PEEK`
 and `INKEY$` loops. With `--listing` it measures a program whose routine
 keeps running instead, four ways: speed, keyboard reads and ticks a
