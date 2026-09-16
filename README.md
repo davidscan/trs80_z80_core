@@ -206,6 +206,37 @@ the host can. **Writes:** `demo/catch.bas`.
 | `--selftest` | off | plays it in the core with a bot at the keyboard | checking the game logic |
 | `--frames N` | `400` | frames for `--selftest` | a longer self-test |
 
+### `python3 tools/hexcheck.py FILE`
+
+Reads a scanned assembly listing back by making its three columns check
+each other. A period assembler printed the address column, the object
+(hex) column and the source column from one source file, so the three
+agree by construction: the source assembles to the hex, and each address
+is the one before it plus the bytes on that line. Scanning breaks that
+agreement, and each disagreement it leaves is damage in one column,
+which makes the other two a check on it and usually a repair. **Writes:**
+nothing without `--out`; the report goes to stdout.
+
+It finds the listings in a file that is mostly prose, splits each line
+into its columns, chains the addresses, assembles every source line on
+its own at its own address with `z80.asm`, and reconciles. Each line
+comes out **clean** (the columns agree), **repaired** (one column was
+damaged and the other two say how), **read off the object column alone**
+(the source was destroyed, so the bytes are a reading of one column and
+the report names every such line), or **unresolved** (both columns are
+damaged past agreement -- reported with what the hex decodes to, never
+guessed at). Finally it assembles the source it recovered and requires
+the bytes back; exit status is 1 if any line is unresolved or that
+re-assembly disagrees, 2 if the file holds no listing.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `FILE` | none | the text holding the listing; prose around it is skipped | a page of OCR, or a listing typed in by hand |
+| `--out DIR` | off | writes each listing's recovered source as `DIR/blockNN.asm` | assembling the result: `python3 -m z80.asm DIR/block01.asm -o x.cmd` |
+| `--block N` | all | check only the Nth listing in the file | working through one listing at a time |
+| `--min-lines N` | `4` | the shortest run of listing-shaped lines taken for a listing | a short fragment, or less noise from tables |
+| `-v` | off | name every repair, not just the lines needing a human | seeing what it changed and why |
+
 ### Corpus measurement tools
 
 The next four read a local archive of period listings that is not
