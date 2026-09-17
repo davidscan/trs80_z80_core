@@ -415,6 +415,190 @@ class HexCheck(unittest.TestCase):
         self.assertEqual([r.fargs for r in b.recs if r.fop == 'END'], ['START'])
         self.assertEqual(b.verify(), [])
 
+    # -- yield on ruined pages, round two -----------------------------------
+    MESSAGE = """\
+        ORG     9286H
+        DEFB    'E'
+        DEFB    'T'
+        DEFB    '*'
+        DEFB    ' '
+        DEFB    0
+        DEFB    13
+        DEFB    ','
+MSG     DEFM    'READY'
+        DEFW    MSG
+        END
+"""
+
+    def test_a_quoted_character_between_the_shapes_of_its_quotes(self):
+        """The Encyclopedia prints a message one DEFB 'x' a line, and the
+        scan makes ‘Et, wT and Nt of the quotes: the character between two
+        quote shapes is that character, read as printed, so the hex agreeing
+        is two witnesses.  A token garbled past that (tee for '*') is the
+        object column's reading alone -- until the DATA agrees."""
+        res = asm.assemble(self.MESSAGE)
+        self.assertEqual(res.errors, [])
+        page = render(res)
+        for printed, scanned in (("'E'", '‘Et'), ("'T'", 'wT'), ("'*'", 'tee'),
+                                 ("' '", 'an'), ('DEFB    0\n', 'DEFB    oO\n'), ("','", '‘,'),
+                                 ("'READY'", '‘READY’')):
+            self.assertEqual(page.count(printed), 1, printed)
+            page = page.replace(printed, scanned)
+        (b,) = check(page)
+        by = {r.addr: r for r in b.recs if r.bytes}
+        self.assertEqual((by[0x9286].status, by[0x9286].fargs), ('clean', "'E'"))
+        self.assertEqual((by[0x9287].status, by[0x9287].fargs), ('clean', "'T'"))
+        self.assertEqual((by[0x9288].status, by[0x9288].fargs), ('hexonly', "'*'"))
+        self.assertEqual((by[0x9289].status, by[0x9289].fargs), ('hexonly', "' '"))
+        self.assertEqual((by[0x928A].status, by[0x928A].bytes), ('clean', b'\x00'))
+        self.assertEqual((by[0x928C].status, by[0x928C].fargs), ('clean', "','"))
+        self.assertEqual((by[0x928D].status, by[0x928D].fargs), ('clean', "'READY'"))
+        self.assertEqual(b.verify(), [])
+        # The loader beside it promotes the garbled ones.
+        (b,) = check(page + '\n' + render_data(res))
+        by = {r.addr: r for r in b.recs if r.bytes}
+        self.assertEqual((by[0x9288].status, by[0x9289].status), ('data', 'data'))
+        self.assertEqual(self.statuses([b]).get('unresolved', 0), 0)
+
+    def test_a_quoted_character_the_object_column_does_not_meet_is_not_believed(self):
+        """wT read as 'T' is 54H; a hex field 57 is one slip from it under
+        the ordinary allowance, but a garbled token re-read as a character
+        has to be met exactly or by shape, so the line is the object
+        column's alone -- and its bytes are the column's, 57."""
+        res = asm.assemble(self.MESSAGE)
+        page = render(res).replace("9287 54 00120 DEFB    'T'", "9287 57 00120 DEFB    wT")
+        self.assertIn('57', page, 'the fixture moved')
+        (b,) = check(page)
+        (r,) = [r for r in b.recs if r.addr == 0x9287]
+        self.assertEqual((r.status, r.bytes), ('hexonly', b'\x57'))
+
+    def test_a_name_that_is_the_whole_encoding_is_one_witness(self):
+        """DEFB WT: nothing defines WT, and fitting it from the object code
+        would make a two-witness line of one column under a symbol the scan
+        invented.  The line is read off the object column and marked."""
+        res = asm.assemble(self.MESSAGE)
+        page = render(res).replace("DEFB    'T'", 'DEFB    WT')
+        (b,) = check(page)
+        (r,) = [r for r in b.recs if r.addr == 0x9287]
+        self.assertEqual((r.status, r.bytes, r.fargs), ('hexonly', b'\x54', "'T'"))
+        self.assertNotIn('WT', b.symbols)
+        self.assertEqual(b.verify(), [])
+
+    TABLE = """\
+KBWAIT  EQU     0049H
+        ORG     704EH
+T44     DEFW    0846H
+        DEFW    0A18FH
+        DEFW    0AAA7H
+        DEFW    0AF91H
+        DEFW    0BEB8H
+        DEFB    0FFH
+        DEFW    6A59H
+        DEFW    KBWAIT
+        END
+"""
+
+    def test_a_table_of_defw_entries_with_the_directive_one_slip_off(self):
+        """A DEFW table's bytes decode as no instruction, so the disassembly
+        gave the mnemonic repair nothing to work from; the printed directive
+        does.  DEFH and DEF for DEFW, DEFS for DEFB, the column rule as ©
+        between the fields, a dash where the rule was, a leading zero the
+        scan lost, a literal parted by a space, QU for EQU after a label."""
+        res = asm.assemble(self.TABLE)
+        self.assertEqual(res.errors, [])
+        page = render(res)
+        edits = [('T44     DEFW    0846H', 't44 DEF = 0846H'),
+                 ('DEFW    0A18FH', 'DEFW © OAL8FH'),
+                 ('DEFW    0AAA7H', 'DEFH © OAAA7H'),
+                 ('DEFW    0AF91H', 'DEFW © -OAF9IH'),
+                 ('DEFW    0BEB8H', 'DEFW © BEB8H'),
+                 ('DEFB    0FFH', 'DEFS © OFFH'),
+                 ('DEFW    6A59H', 'DEFW 6 A59H'),
+                 ('KBWAIT  EQU     0049H', 'KBWAIT QU 0049H')]
+        for printed, scanned in edits:
+            self.assertEqual(page.count(printed), 1, printed)
+            page = page.replace(printed, scanned)
+        (b,) = check(page)
+        self.assertEqual(self.statuses([b]).get('unresolved', 0), 0, [
+            (r.raw, r.note) for r in b.recs if r.status == 'unresolved'])
+        by = {r.addr: r for r in b.recs if r.bytes}
+        self.assertEqual((by[0x704E].status, by[0x704E].fop, by[0x704E].label), ('source', 'DEFW', 'T44'))
+        self.assertEqual((by[0x7050].status, by[0x7050].fargs), ('clean', '0A18FH'))
+        self.assertEqual((by[0x7052].status, by[0x7052].fop), ('source', 'DEFW'))
+        self.assertEqual((by[0x7054].status, by[0x7054].fargs), ('clean', '0AF91H'))
+        self.assertEqual((by[0x7056].status, by[0x7056].fargs), ('clean', '0BEB8H'))
+        self.assertEqual((by[0x7058].status, by[0x7058].fop, by[0x7058].bytes), ('source', 'DEFB', b'\xff'))
+        self.assertEqual((by[0x7059].status, by[0x7059].bytes), ('clean', b'\x59\x6a'))
+        self.assertEqual(b.symbols.get('KBWAIT'), 0x49)
+        self.assertEqual(by[0x705B].fargs, 'KBWAIT')
+        self.assertEqual(b.verify(), [])
+
+    def test_a_loader_printed_in_hex_pairs(self):
+        """The books also print a loader as DATA 99,AD,B5,... for a program
+        that reads VAL("&H"+X$).  It is the same bytes in the object
+        column's alphabet, so it aligns and witnesses -- but a printed hex
+        digit reads as ITSELF: the second readings the object column gets
+        (D as 0) are not the loader's, or two columns read in one alphabet
+        would agree on the same wrong byte."""
+        res = asm.assemble(self.TABLE)
+        image = b''.join(data for _, data in res.segments)
+        loader = '\n'.join('%d DATA %s' % (1000 + 10 * i, ','.join('%02X' % c for c in image[k:k + 8]))
+                           for i, k in enumerate(range(0, len(image), 8))) + '\n'
+        (s,) = hexcheck.find_data(loader)
+        self.assertTrue(all(t.hex for t in s))
+        self.assertEqual([t.cands for t in s][:4], [[0x46], [0x08], [0x8F], [0xA1]])
+        shapes = hexcheck.find_data(loader.replace('A1', 'Al').replace('BE', 'B£'))[0]
+        self.assertEqual((shapes[3].text, shapes[3].cands, shapes[9].text, shapes[9].cands),
+                         ('Al', [0xA1], 'B£', [0xBE]))
+        (b,) = check(render(res) + '\n' + loader)
+        self.assertIsNotNone(b.stream)
+        self.assertEqual(b.tally['lines the DATA statements witness'], 8)
+        self.assertNotIn('DATA statements disagree', b.tally)
+        # A destroyed source line and a hex field 8F0F where the loader says
+        # 8F,A1: one column against the other, not two agreeing on 8F0F.
+        page = render(res).replace('7050 8FA1 00130 DEFW    0A18FH', '7050 8F0F 00130 OEXX QAlBFH')
+        self.assertIn('8F0F', page, 'the fixture moved')
+        (b,) = check(page + '\n' + loader)
+        (r,) = [r for r in b.recs if r.addr == 0x7050]
+        self.assertEqual(r.status, 'unresolved')
+        self.assertIn('8FA1', r.note)
+
+    def test_a_defm_whose_object_column_shows_its_first_byte_only(self):
+        """EDTASM prints one byte of a DEFM string.  Nothing checks the rest
+        of the string, so the line stays unresolved -- and the chain does
+        not take that one byte for the line's length and 'repair' the next
+        address on the strength of it."""
+        page = ('7004 49 00250 RDMSG   DEFM    \'INSERT \'\n'
+                '700B 45 00260 EDNAME  DEFM    \'EDTASM FOR READ\'\n'
+                '701A 0D 00270         DEFB    0DH\n'
+                '701B C9 00280         RET\n'
+                '701C 00 00290         NOP\n')
+        (b,) = check(page)
+        by = {r.n: r for r in b.recs}
+        self.assertEqual((by[1].status, by[2].status), ('unresolved', 'unresolved'))
+        self.assertEqual((by[2].addr, by[3].addr, by[3].status), (0x700B, 0x701A, 'clean'))
+        self.assertNotIn('->', by[2].anote + by[3].anote)
+
+    def test_a_data_value_that_lost_a_digit_contradicts_nothing(self):
+        """20 for 201 is a plausible scan of the value: the two-witness RET
+        is not marked as conflicting with it, and the token is named."""
+        loader = render_data(self.res).replace('201,', '20,', 1)
+        self.assertNotEqual(loader, render_data(self.res), 'the fixture moved')
+        (b,) = check(self.listing + '\n' + loader)
+        self.assertFalse(any(r.conflict for r in b.recs))
+        self.assertTrue(any("'20': the listing says 201" in t for t, _ in b.data_damage()))
+
+    def test_the_shapes_that_round_two_added_stay_in_their_place(self):
+        self.assertEqual(hexcheck.as_hex('92k0'), '92A0')
+        self.assertIsNone(hexcheck.as_hex('POKE'))
+        self.assertIsNone(hexcheck.lineno_token('32703,62'))
+        self.assertEqual(hexcheck.lineno_token('01240,'), 1240)
+        self.assertIsNone(hexcheck.parse_line('500 POKE 32703,62 E224', None, None))
+        self.assertEqual(hexcheck.split_source('MSGB =~ DEFB tee')[:3], ('MSGB', 'DEFB', 'tee'))
+        self.assertEqual(hexcheck.split_source('VMSG © DEFM © \'WRONG\'')[:3], ('VMSG', 'DEFM', "'WRONG'"))
+        self.assertEqual(hexcheck.split_source('SETO CALL «=OATFH ;GET')[:3], ('SETO', 'CALL', 'OATFH'))
+        self.assertEqual(hexcheck.split_source('csIN —-EQu 0235H')[:3], ('CSIN', 'EQU', '0235H'))
+
     def test_a_clean_listing_reads_as_clean(self):
         blocks = check(self.listing)
         self.assertEqual(len(blocks), 1)

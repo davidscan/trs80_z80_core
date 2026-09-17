@@ -250,7 +250,23 @@ is named with the byte it should be, and a comma the scan lost (two
 values welded into one) is located. What the DATA cannot do is settle a
 line by itself: a hex field that reads cleanly as another instruction
 is not outvoted by a decimal token, since a token that lost a digit is
-still a valid number; and a loader printed in hex strings is not read.
+still a valid number. A loader printed in hex pairs (`DATA 99,AD,B5,...`
+for a program that reads `VAL("&H"+X$)`) is read the same way, with one
+difference: a printed hex digit reads as itself, never as the other digit
+it resembles, because the object column is read in that same alphabet and
+two columns agreeing on the same second reading is not two witnesses.
+
+Tables and messages get their own readings. A `DEFB 'x'` line whose
+quotes the scan turned into `‘Et` or `wT` is read as the character between
+the quote shapes, and the hex has to meet it exactly or by shape; a garbled
+one (`tee` for `'*'`) is the object column's reading alone until the DATA
+agrees. A DEFW table's entries decode as no instruction, so a directive
+one slip off (`DEFH`, `DEF`, `DEFS` for `DEFB`) is repaired from the printed
+operand, and the column rule the scan read as `©`, `=` or `—` between the
+fields is not an operand. A `DEFM` whose object column shows only the
+string's first byte stays unresolved: nothing checks the rest. What the
+tool does not reach is a page the scanner split into columns, each
+printed as its own run of lines: those pages hold no line to read.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|

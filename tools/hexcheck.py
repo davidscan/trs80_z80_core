@@ -82,7 +82,29 @@ WHAT IT DOES
      stream by one from there on, and the offset may change between two
      settled lines that agree on the new one -- and a line takes its DATA
      bytes only from between settled neighbours that agree, so a shifted
-     stream never becomes a false witness.
+     stream never becomes a false witness.  A loader printed in HEX PAIRS
+     (DATA 99,AD,B5,... for a program that reads VAL("&H"+X$)) is read
+     the same way, but a printed hex digit reads as ITSELF -- the shapes
+     of the alphabet resolve (O for 0, £ for E), the second readings the
+     object column gets (D as 0) do not, because the object column is read
+     in that same alphabet and two columns agreeing on the same second
+     reading is not two witnesses.
+  7. Reads tables and messages in the alphabets THEY are printed in.  A
+     DEF directive's operand holds no register, so a short token is a
+     number or a quoted character: the character between the shapes of two
+     quote marks (‘Et, wT, Nt) is that character as printed, and the hex
+     has to meet it exactly or by shape -- a garbled token re-read as a
+     character is not owed the ordinary allowance; a token of digit shapes
+     (oO) is those digits.  A DEFW table's entries decode as no
+     instruction, so the disassembly gives the mnemonic repair nothing to
+     work from; the printed directive does: a mnemonic one slip from a DEF
+     directive (DEFH, DEF, OEFW, DEFS for DEFB) is repaired from the
+     printed operand, or, the operand destroyed, the entry is read off the
+     object column as that directive (one column, marked).  A name that
+     nothing defines and that IS the whole encoding (DEFB WT) is never
+     fitted from the object code: that would make two witnesses of one
+     column under a symbol the scan invented.  The column rule the scan
+     read as '©', '=', '—' between the fields is a mark, not an operand.
 
 WHAT IT DOES NOT DO
   Comments carry no bytes, so nothing can check them; they are passed
@@ -95,8 +117,13 @@ WHAT IT DOES NOT DO
   column says 3820, another says 3E20, the source says nothing, and the
   tool prints both rather than choosing.  A decimal digit scanned as
   another digit (a 6 read as an 8) is invisible inside its token, so the
-  DATA is never a witness on its own either; and a loader printed in hex
-  strings rather than decimal is not read.
+  DATA is never a witness on its own either.  A DEFM whose object column
+  shows the string's first byte only (EDTASM prints one) stays
+  unresolved: the chain knows the length, the hex knows one byte, and
+  nothing checks the letters between.  A page the scanner split into
+  columns -- the address column as one run of lines, the object bytes as
+  another, the mnemonics as a third, in an order of its own -- holds no
+  line to read; those pages need scanning again, not a parser.
 """
 import argparse
 import itertools
@@ -121,7 +148,8 @@ HEXFIX = {
     'G': '6', 'g': '9', 'q': '9', 'T': '7', '?': '7', 'Y': '7',
     'P': 'F', 'R': '8', 'H': '4', 'M': 'M', 'N': 'M',
     '¢': 'C', '(': 'C', 'c': 'C', '{': 'C', '©': 'C',
-    'x': 'X', '°': '0', '‘': '1', '“': '4',
+    'x': 'X', '°': '0', '‘': '1', '“': '4', '£': 'E',
+    'k': 'A', 'K': 'A',     # 92k0 for 92A0, six lines of one listing; 58k for 58A
 }
 # The line-number column is decimal only.  A-F are left out on purpose: they
 # are hex digits, so allowing them would read an object field as a line number.
@@ -241,6 +269,8 @@ def fix_field(tok, table):
 
 
 def as_hex(tok):
+    if re.search('[kK]', tok) and 2 * sum(c.isdigit() for c in tok) < len(tok):
+        return None                     # k is A among digits (92k0), not in a word (POKE)
     v = fix_field(tok, HEXFIX)
     return v if v and all(c in HEXDIGITS for c in v) else None
 
@@ -290,8 +320,8 @@ def lineno_token(tok):
         # Only a MARK may be cut off: the digits up to the first character
         # that is neither letter nor digit.  A hex field's last letter is
         # not a mark (1403C is not line 1403).
-        m = re.match(r'^[^0-9A-Za-z]*([^\W_]{4,}?)[^0-9A-Za-z]', tok)
-        if m:
+        m = re.match(r'^[^0-9A-Za-z]*([^\W_]{4,}?)[^0-9A-Za-z]+[^\W_]?$', tok)
+        if m:                           # and past the mark at most one stray letter («S), not 32703,62
             v = as_lineno(m.group(1))
     return v
 
@@ -329,6 +359,32 @@ class Tok:
     def __init__(self, n, k, text):
         self.n, self.k, self.text = n, k, text        # file line, position in it
         self.cands = dec_readings(text)
+        self.hex = False                              # printed as a hex pair
+
+    def reread_hex(self):
+        """A printed hex digit reads as ITSELF, as a printed decimal digit
+        does: the alphabet's shapes (O for 0, £ for E) resolve, but no
+        second reading (D as 0) -- the object column is read in the same
+        alphabet with the same second readings, and two columns agreeing
+        on the same wrong one is not two witnesses."""
+        self.hex = True
+        h = as_hex(self.text)
+        self.cands = [int(h, 16)] if h and len(h) == 2 else []
+
+    def lit(self, v):
+        """The value as this loader prints it, for naming a correction."""
+        return '%02X' % v if self.hex else str(v)
+
+
+def hex_pairs(toks):
+    """Is this loader printed in hex pairs rather than decimal?  Every value
+    is then two characters wide, and a third of the hex digits are letters,
+    where a decimal loader has none but the scan's shapes."""
+    if len(toks) < 8:
+        return False
+    short = sum(1 for t in toks if len(t.text) <= 2)
+    letters = sum(1 for t in toks if re.search(r'[A-Fa-f£]', t.text))
+    return short >= 0.9 * len(toks) and letters >= 0.25 * len(toks)
 
 
 DATA_SEP = re.compile(r"[\s,.;:+/]+")
@@ -369,7 +425,7 @@ def find_data(text, gap_lines=8):
         payload = payload.split("'")[0]
         vals = [t for t in DATA_SEP.split(payload) if t]
         # A run of words at the end is the prose that followed on the page.
-        while vals and not any(c.isdigit() or c in DECFIX for c in vals[-1]):
+        while vals and not any(c.isdigit() or c in DECFIX or c in 'CEFcef£' for c in vals[-1]):
             vals.pop()
         if not vals:
             gap += 1
@@ -385,7 +441,15 @@ def find_data(text, gap_lines=8):
         gap, wrap = 0, True
     if cur:
         streams.append(cur)
-    return [s for s in streams if len(s) >= 4]
+    streams = [s for s in streams if len(s) >= 4]
+    for s in streams:
+        if hex_pairs(s):
+            # A loader printed in hex pairs (DATA 99,AD,B5,...), for a BASIC
+            # program that reads them back with VAL("&H"+X$): the same bytes
+            # in the hex alphabet, so the object column's readings apply.
+            for t in s:
+                t.reread_hex()
+    return streams
 
 
 # ---- one line of a listing ---------------------------------------------------
@@ -414,6 +478,10 @@ class Rec:
         self.lost = 0               # lines of the page before this one that would not parse
 
 
+HEXRUN = re.compile(r'^[0-9A-Fa-f%s]{1,4}$' % re.escape(''.join(HEXFIX)))
+HEXLIT = re.compile(r'^[0-9A-Fa-f%s]{1,4}[Hh]$' % re.escape(''.join(HEXFIX)))
+
+
 def split_operand(text):
     """(operand, comment) -- the operand field ends at the first token that
     cannot continue an expression.  OCR loses the ';' more often than not."""
@@ -425,8 +493,9 @@ def split_operand(text):
         if not tok:
             continue
         if out and depth == 0 and not quote and not re.search(
-                r'([,+\-*/(]|\.[A-Z]+\.)$', out[-1]):
-            break
+                r'([,+\-*/(]|\.[A-Z]+\.)$', out[-1]) \
+                and not (HEXRUN.match(out[-1]) and HEXLIT.match(tok)):
+            break                       # (6 A59H is one literal the scan parted)
         for ch in tok:
             if quote:
                 quote = ch != "'"
@@ -696,9 +765,23 @@ class Block:
             t = self.stream[r.dpos + k]
             if v in t.cands:
                 continue
+            if t.hex:
+                return False            # a hex pair reads as itself or not at all
             cost += min(shape_cost(t.text, str(v)),
                         ocr_distance(t.text, str(v)) if loose else 9.0)
         return cost <= 1.0
+
+    @staticmethod
+    def lost_digit(t, v):
+        """Is this decimal token the value with one digit dropped (20 for
+        201)?  Such a token is a plausible scan of the value, so it neither
+        vouches for it nor contradicts it."""
+        if t.hex:
+            return False
+        d = fix_field(t.text, DECFIX)
+        s = str(v)
+        return d is not None and len(d) == len(s) - 1 \
+            and any(s[:i] + s[i + 1:] == d for i in range(len(s)))
 
     def data_damage(self):
         """What the listing says about the DATA statements: every token that
@@ -728,20 +811,20 @@ class Block:
                 out.append(('DATA %s %s: %d values for %d bytes; the listing says %s'
                             % (where, ' '.join(repr(t.text) for t in toks) or '(none)',
                                len(toks), want,
-                               ','.join(str(b) for b in says) if len(says) == want
+                               ','.join(at.lit(b) for b in says) if len(says) == want
                                else '%d bytes, not all settled' % want), True))
             last = r
             for k, b in enumerate(r.bytes):
                 t = self.stream[r.dpos + k]
                 if not t.cands:
-                    out.append(('DATA line %d value %d %r cannot be read: the listing says %d'
-                                % (t.n, t.k + 1, t.text, b), True))
+                    out.append(('DATA line %d value %d %r cannot be read: the listing says %s'
+                                % (t.n, t.k + 1, t.text, t.lit(b)), True))
                 elif b not in t.cands:
-                    out.append(('DATA line %d value %d %r: the listing says %d'
-                                % (t.n, t.k + 1, t.text, b), True))
-                elif t.text != str(b):
-                    out.append(('DATA line %d value %d %r read as %d'
-                                % (t.n, t.k + 1, t.text, b), False))
+                    out.append(('DATA line %d value %d %r: the listing says %s'
+                                % (t.n, t.k + 1, t.text, t.lit(b)), True))
+                elif t.text.upper() != t.lit(b):
+                    out.append(('DATA line %d value %d %r read as %s'
+                                % (t.n, t.k + 1, t.text, t.lit(b)), False))
         return out
 
     # -- 1. the address chain ---------------------------------------------
@@ -755,6 +838,8 @@ class Block:
         fixed, pc = 0, None
         for i, r in enumerate(recs):
             r.gap = False
+            if r.op in ('EQU', 'DEFL'):
+                continue                # the value column, not a place: the counter stands
             if r.addr is None:
                 if r.hexs and pc is not None:
                     r.addr, r.anote = pc, 'address %04X from the chain' % pc
@@ -779,6 +864,8 @@ class Block:
                     r.anote = 'address %04X->%04X' % (r.addr, pc)
                     r.addr = pc
                     fixed += 1
+            if r.addr is None and not r.hexs:
+                continue                # a comment, or a line number alone: no bytes, no address
             if r.addr is None:
                 pc = None
             elif lens[i] is not None:
@@ -817,6 +904,8 @@ class Block:
         """How many bytes this line holds, as well as it is known."""
         if r.bytes is not None and r.status not in ('unresolved', 'text'):
             return len(r.bytes)
+        if r.op in ('DEFM', 'DM') and r.hexs and defm_len(r.args) > len(r.hexs) // 2:
+            return None                 # the object column printed the string's first bytes only
         if r.hexs and len(r.hexs) % 2 == 0:
             return len(r.hexs) // 2
         if not r.hexs and r.addr is not None:
@@ -896,7 +985,13 @@ class Block:
         """A line that emits no object bytes says so by leaving the hex column
         empty, and an ORG's operand is the address column itself -- so these
         need no third witness, only the shape of the line."""
-        if r.hexs or r.addr is None or not r.op:
+        if r.hexs or not r.op:
+            return False
+        if r.addr is None:
+            # An END the assembler printed without an address (2990 END).
+            if r.op == 'END' or (ocr_distance(r.op, 'END') <= 1.0 and not r.args):
+                r.status, r.bytes, r.fop, r.fargs = 'clean', b'', 'END', ''
+                return True
             return False
         if r.op in ('ORG', 'END'):
             r.status, r.bytes = 'clean', b''
@@ -942,6 +1037,11 @@ class Block:
             [d for d in dwants if d not in hwants and (not hwants or near_hex(r.rawhex, d))]
         hnear = [h for h in hwants if h not in dwants and (not dwants or self.near_dec(r, h))]
         wants = both + dnear + hnear + [h for h in hwants if h not in both and h not in hnear]
+        if both:
+            # Two object columns, scanned apart, agreeing exactly: no second
+            # reading of the hex and no near-miss of the source outranks
+            # that (SESBH for 5E58H, the hex 585E read as 5B5E to suit it).
+            wants = both
         want = hwants[0] if hwants else (dwants[0] if dwants else None)
         plain = {w for w in (wants[:1] + hwants[:1] + dwants[:1]) if w in wants}
         r.conflict = False
@@ -963,8 +1063,14 @@ class Block:
                 why = why or err
                 continue
             printed = printed or b
-            if not (b in wants or near_hex(r.rawhex, b)
-                    or (not wants and clen == len(b))):
+            if re.fullmatch(r"'.'", args or '') and norm(args) != norm(unquote(r.args or '')):
+                # The operand is a garbled token read as a quoted character
+                # (‘Et, wT): the object column has to meet it exactly or by
+                # shape, or the line is that column's reading alone.
+                if not (b in wants or (not both and plausible_hex(r.rawhex, b))):
+                    continue
+            elif not (b in wants or (not both and near_hex(r.rawhex, b))
+                      or (not wants and clen == len(b))):
                 continue
             self.accept(r, op, args, b, 'clean' if b == want else 'hex')
             self.settle_data(r, hwants, dwants)
@@ -980,7 +1086,7 @@ class Block:
                     continue
                 if tier == 2 and want not in plain:
                     continue        # one reading a column: nothing else vouches for it
-                hint = from_hex(want, r.addr, self.symbols)
+                hint = def_hint(r.op, r.args, want) or from_hex(want, r.addr, self.symbols)
                 for op, args, t in self.relabeled(source_candidates(r.op, r.args, hint)):
                     if t != tier:
                         continue
@@ -1029,6 +1135,10 @@ class Block:
                 r.status = 'data'
                 r.note = join(r.note, 'the DATA statements agree')
             return
+        if r.dpos is not None and all(
+                v in self.stream[r.dpos + k].cands or self.lost_digit(self.stream[r.dpos + k], v)
+                for k, v in enumerate(r.bytes)):
+            return          # a token that lost a digit (20 for 201) contradicts nothing; data_damage names it
         self.tally['DATA statements disagree'] = self.tally.get('DATA statements disagree', 0) + 1
         said = dwants[0].hex().upper()
         if r.status == 'hexonly':
@@ -1139,6 +1249,13 @@ class Block:
             return None
         pos = [i for i in range(len(a)) if a[i] != b[i]]
         if not pos or len(pos) > 2 or pos != list(range(pos[0], pos[0] + len(pos))):
+            return None
+        if len(pos) == len(a):
+            # DEFB NAME, DEFW NAME: the name IS the whole encoding, so the
+            # source witnessed nothing but the length, and the bytes would be
+            # the object column's alone under a symbol the scan may well have
+            # invented (DEFB wT).  One object column is what such a line is,
+            # and the DEF hint reads it as that.
             return None
         base = int.from_bytes(bytes(a[i] for i in pos), 'little')
         got = int.from_bytes(bytes(want[i] for i in pos), 'little')
@@ -1269,6 +1386,39 @@ def referenced(recs):
     return names
 
 
+# A token that is nothing but marks -- the column rule or a tab stop the scan
+# read as '=', '©', '—', '«', '~=—' -- between two fields of the source.  What
+# can begin an operand (a letter, a digit, a quote, a parenthesis, a sign, $)
+# is never a mark.
+MARKTOK = re.compile(r"""^[^\w'"‘’“”`´(+$-]+$""")
+
+
+def unmarked(text):
+    """The text with the mark tokens at its front taken off."""
+    toks = text.split(None, 1)
+    while toks and MARKTOK.match(toks[0]):
+        text = toks[1] if len(toks) > 1 else ''
+        toks = text.split(None, 1)
+    return text
+
+
+def as_op(tok, labelled=False):
+    """The mnemonic a scanned field token is, or None.  Marks stuck to its
+    front (—-EQu) come off.  After a label the token has no other place to
+    be a mnemonic in, so one slip from a directive is taken as printed for
+    the check to repair (t44 DEF 0846H), and one slip from EQU is EQU,
+    because the address column holds the equate's value and checks it."""
+    t = re.sub(r"^[^\w]+", '', tok).upper().rstrip(':,.')
+    if t in asm.MNEMONICS or t in asm.DIRECTIVES:
+        return t
+    if labelled and t:
+        if ocr_distance(t, 'EQU') <= 1.0:
+            return 'EQU'
+        if any(ocr_distance(t, d) <= 1.0 for d in ('DEFB', 'DEFW', 'DEFM', 'DEFS')):
+            return t
+    return None
+
+
 def split_source(src):
     """(label, op, operand, comment) from a scanned source column."""
     s = src.strip()
@@ -1277,20 +1427,27 @@ def split_source(src):
     parts = s.split(None, 1)
     first, rest = parts[0], (parts[1] if len(parts) > 1 else '')
     label = None
-    if first.upper().rstrip(':') not in asm.MNEMONICS | asm.DIRECTIVES and rest:
+    if as_op(first) is None and rest:
         label = re.sub(r'[^A-Z0-9_@?$]', '', first.upper().rstrip(':'))
-        nxt = rest.split(None, 1)
-        if nxt and nxt[0].upper() in asm.MNEMONICS | asm.DIRECTIVES:
+        nxt = unmarked(rest).split(None, 1)
+        if nxt and as_op(nxt[0], labelled=True) is not None:
             first, rest = nxt[0], (nxt[1] if len(nxt) > 1 else '')
+            op = as_op(first, labelled=True)
         else:
             label = None
             first, rest = parts[0], (parts[1] if len(parts) > 1 else '')
-    op = first.upper().rstrip(':,.')
-    rest = rest.lstrip()
-    if rest.startswith('='):
-        rest = rest[1:].lstrip()            # OCR of the listing's column rule
+            op = first.upper().rstrip(':,.')
+    else:
+        op = as_op(first) or first.upper().rstrip(':,.')
+    rest = unmarked(rest.lstrip())
+    # The column rule glued to the operand ('=OATFH', '«=OATFH'): marks that
+    # cannot begin an operand come off its front.
+    rest = re.sub(r"""^[^\w'"‘’“”`´(+$-]+""", '', rest)
     args, comment = split_operand(rest)
-    return label, op, args.strip().rstrip(',.'), comment
+    args = args.strip()
+    if not re.fullmatch(r'''['"‘’`][,.]['"‘’`!t]?''', args):
+        args = args.rstrip(',.')            # a quoted comma is the operand, not a stray mark
+    return label, op, args, comment
 
 
 def assemble_one(op, args, pc, symbols):
@@ -1322,6 +1479,63 @@ class _Args:
         self.args = args
 
 
+def quoted_len(args):
+    """How many characters the string a DEFM operand holds runs to, as
+    scanned -- to the closing quote, or to the end where the scan lost it."""
+    m = re.search(r'''['"‘’`](.*?)(?:['"‘’`]|$)''', unquote(args or ''))
+    return len(m.group(1)) if m else 0
+
+
+def defm_len(args):
+    """The fewest bytes a DEFM's printed operand claims: the quoted string's
+    length, or, where the scan lost the opening quote (= INSERT '), the
+    letters and digits it holds."""
+    return max(quoted_len(args), len(re.findall(r'[A-Za-z0-9]', args or '')))
+
+
+def byte_lit(c):
+    """A byte as a DEFB operand: the character when it prints, else hex."""
+    if 0x20 <= c < 0x7F and c != 0x27:
+        return "'%s'" % chr(c)
+    return '%s%02XH' % ('0' if c >= 0xA0 else '', c)
+
+
+def def_hint(op, args, want):
+    """(op, operand) for the bytes of a line whose printed mnemonic is a DEF
+    directive or one slip from it (DEFH, DEFS for DEFB, DEF, OEFW): the
+    directive that emits this many bytes, with the value read off the object
+    column.  A disassembly says nothing useful about a table entry -- 8FA1
+    is not ADC A,A then POP AF -- but the printed directive does.  Not for
+    a DEFM whose printed string runs past the bytes the object column
+    shows: the assembler printed a string's first bytes only, and nothing
+    checks the rest."""
+    if not op or not want:
+        return None
+    near = {d for d in ('DEFB', 'DEFW', 'DEFM', 'DEFS') if ocr_distance(op, d) <= 1.0}
+    if not near:
+        return None
+    exact = op if op in near else None
+    claimed = defm_len(args)
+    if (exact == 'DEFM' and claimed > len(want)) or \
+            (exact is None and re.search(r'''['"‘’`]''', args or '') and claimed > max(len(want), 3)):
+        return None                     # a string longer than the bytes shown: a prefix
+
+    prints = all(0x20 <= c < 0x7F and c != 0x27 for c in want)
+    if len(want) == 1:
+        return (exact if exact in ('DEFB', 'DEFM') else 'DEFB'), byte_lit(want[0])
+    if exact == 'DEFM':
+        # The page says a string; bytes that do not print as one are the
+        # object column's damage, not a string of control codes.
+        return ('DEFM', "'%s'" % want.decode('ascii')) if prints else None
+    if len(want) == 2 and 'DEFW' in near:
+        return 'DEFW', hexlit(int.from_bytes(want, 'little'))
+    if 'DEFM' in near and prints:
+        return 'DEFM', "'%s'" % want.decode('ascii')
+    if 'DEFB' in near or 'DEFS' in near:
+        return 'DEFB', ','.join(byte_lit(c) for c in want)
+    return None
+
+
 def from_hex(want, addr, symbols):
     """(op, operand) for bytes that decode as exactly one instruction, with a
     label put back where the listing names that address."""
@@ -1347,26 +1561,47 @@ HEXTOKEN = re.compile(r'(?<![A-Z0-9])([0-9A-F%s][0-9A-F%s]*)H\b'
 NAMED = sorted(asm.REGS | asm.CONDS, key=len)
 
 
+DEFDIRS = ('DEFB', 'DB', 'DEFM', 'DM', 'DEFW', 'DW', 'DEFS', 'DS')
+# What the scan makes of a quote mark: the typographic quotes the OCR prefers,
+# and the shapes an apostrophe takes on a poor page -- a '!' or a 't' after
+# the character (‘Et, Nt, ‘s!), a 'w' before it (wT).
+OPENQ = "'\"‘’`´w"
+CLOSEQ = "'\"‘’`´!t"
+QUOTED = re.compile(r'^[%s]?(.)[%s]?$' % (re.escape(OPENQ), re.escape(CLOSEQ)))
+
+
+def unquote(a):
+    """Typographic quotes back to the ones an assembler reads."""
+    return a.replace('‘', "'").replace('’', "'").replace('`', "'").replace('´', "'") \
+            .replace('“', '"').replace('”', '"')
+
+
 def mechanical(args, op=None):
     """The operand field read again in the alphabets it is printed in: a hex
     literal holds hex digits, a register field holds a register name, a dash
-    is a dash, and an instruction that takes no operand never had one -- the
-    scan swallowed the comment's semicolon.  Each of these alphabets is a
-    handful of symbols wide, so reading the scan back into one of them is
-    still the source column as printed, not a guess about what it meant."""
+    is a dash, a quote is a quote, and an instruction that takes no operand
+    never had one -- the scan swallowed the comment's semicolon.  Each of
+    these alphabets is a handful of symbols wide, so reading the scan back
+    into one of them is still the source column as printed, not a guess
+    about what it meant."""
     out = [args]
     if op is not None and () in asm.BY_MNEMONIC.get(op, []) and args:
         out.append('')
     if not args:
         return out
-    a = args.replace('~', '-').replace('—', '-').replace('–', '-')
+    q = unquote(args)
+    if q != args:
+        out.append(q)
+    a = q.replace('~', '-').replace('—', '-').replace('–', '-')
     a = HEXTOKEN.sub(lambda m: (as_hex(m.group(1)) or m.group(1)) + 'H', a)
     a = re.sub(r'\s+', '', a)
     a = re.sub(r'(?<=[A-Z0-9)])[.;](?=[A-Z0-9(])', ',', a)      # the comma
-    if a != args:
+    if a != args and a not in out:
         out.append(a)
     if len(a) == 1 and a in HEXFIX and HEXFIX[a] in HEXDIGITS:
         out.append(HEXFIX[a])                   # a bit or mode number
+    if op in DEFDIRS:
+        out += defined(a)
     pieces = a.split(',')
     for i, p in enumerate(pieces):
         for alt in as_named(p):
@@ -1375,6 +1610,34 @@ def mechanical(args, op=None):
     if b.startswith('C') and b.endswith(')') and '(' not in b:
         out.append('(' + b[1:])                 # (HL) scanned as CHL)
     return out[:8]
+
+
+def defined(a):
+    """A DEF directive's operand, read again in the alphabets IT is printed
+    in.  No register or condition can stand there, so a short token is a
+    number or a quoted character: a character between the shapes of two
+    quote marks is that character (‘Et is 'E'); a token of digit shapes is
+    those digits (OO is 0); a token of hex digits with a letter among them
+    and its H lost is that hex literal (OFF is 0FFH); a mark stuck to the
+    front -- a paren that never closes, a dash where the column rule was --
+    comes off.  The object column has to agree with the reading, as with
+    every other, so a quote that was really a letter costs nothing but a
+    line left to the one-column rule."""
+    out = []
+    m = QUOTED.match(a)
+    if m and len(a) >= 2 and m.group(1) not in OPENQ + CLOSEQ:
+        out.append("'%s'" % m.group(1))
+    if a and not a.startswith("'"):
+        d = fix_field(a, DIGFIX)
+        if d and d.isdigit() and d != a:
+            out.append(d)
+        if re.fullmatch(r'[A-F][0-9A-F]{1,3}H', a):
+            out.append('0' + a)         # BEB8H: the leading zero the scan lost
+        # NOT a hex literal that lost its H: `ao` for a garbled ' ' reads as
+        # 0A0H that way, and the object column's 20 is one slip from A0.
+    if a[:1] in '(-' and a[1:] and (a[0] == '-' or ')' not in a):
+        out += [a[1:]] + defined(a[1:])
+    return out
 
 
 def as_named(piece):
@@ -1413,18 +1676,23 @@ def source_candidates(op, args, hint=None):
     out = []
     for a in mechanical(args, op):
         out += give(op, a, 0)
-    if hint is None:
-        return out
-    hop, hargs = hint
-    for a in mechanical(args, hop):
-        out += give(hop, a, 1)
+    if hint is not None:
+        hop, hargs = hint
+        for a in mechanical(args, hop):
+            out += give(hop, a, 1)
     if op:
+        # A mnemonic one slip from the printed one, with the operand as
+        # printed.  The bytes it makes are checked against the object
+        # column whether or not those bytes decode as an instruction: a
+        # DEFW table's entries do not, and DEFH for DEFW is the commonest
+        # slip on such a page.
         for m in MNEMONICS:
-            if ocr_distance(op, m) <= 1.0:
+            if m != op and ocr_distance(op, m) <= 1.0:
                 for a in mechanical(args, m):
                     out += give(m, a, 1)
-    out += give(op, hargs, 2)
-    out += give(hop, hargs, 2)
+    if hint is not None:
+        out += give(op, hargs, 2)
+        out += give(hop, hargs, 2)
     return out
 
 
@@ -1476,8 +1744,9 @@ def report(block, verbose, out=sys.stdout):
         if v:
             out.write('  %-34s %4d\n' % (k, v))
     if block.stream is not None:
-        out.write('  DATA statements at lines %d-%d; their first value is address %04X\n'
+        out.write('  DATA statements at lines %d-%d%s; their first value is address %04X\n'
                   % (block.stream[0].n, block.stream[-1].n,
+                     ' (hex pairs)' if block.stream[0].hex else '',
                      (block.dbase - block.doff) & 0xFFFF))
     conflicts = 0
     for r in block.recs:
