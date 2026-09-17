@@ -217,17 +217,39 @@ agreement, and each disagreement it leaves is damage in one column,
 which makes the other two a check on it and usually a repair. **Writes:**
 nothing without `--out`; the report goes to stdout.
 
-It finds the listings in a file that is mostly prose, splits each line
-into its columns, chains the addresses, assembles every source line on
-its own at its own address with `z80.asm`, and reconciles. Each line
-comes out **clean** (the columns agree), **repaired** (one column was
-damaged and the other two say how), **read off the object column alone**
-(the source was destroyed, so the bytes are a reading of one column and
-the report names every such line), or **unresolved** (both columns are
-damaged past agreement -- reported with what the hex decodes to, never
-guessed at). Finally it assembles the source it recovered and requires
-the bytes back; exit status is 1 if any line is unresolved or that
-re-assembly disagrees, 2 if the file holds no listing.
+It finds the listings in a file that is mostly prose (a listing parted
+by a page break is joined back where its addresses carry on), splits
+each line into its columns, chains the addresses, assembles every source
+line on its own at its own address with `z80.asm`, and reconciles. Each
+line comes out **clean** (the columns agree), **repaired** (one column
+was damaged and the other two say how), **read off one object column
+alone** (the source was destroyed, so the bytes are a reading of one
+column and the report names every such line), or **unresolved** (the
+columns are damaged past agreement -- reported with what each decodes
+to, never guessed at). Finally it assembles the source it recovered and
+requires the bytes back; exit status is 1 if any line is unresolved or
+that re-assembly disagrees, 2 if the file holds no listing.
+
+The books usually print a routine twice, the listing and then a BASIC
+loader whose DATA statements hold the same bytes in decimal, and the
+tool reads those statements as a **third witness**. The DATA lines in
+the file are read in the decimal alphabet into a stream of byte values,
+the stream is aligned against the lines already settled on two
+witnesses (three lines and six bytes must agree at one offset), and
+then the decimal bytes are one more reading of every line's object
+field. A source line read as printed that assembles to what the DATA
+says is accepted where the hex column reads as something else; a line
+read off the object column alone becomes a two-witness line when the
+DATA agrees with the hex, and is unresolved when the DATA contradicts
+it; a two-witness line the DATA contradicts is kept but marked `#`,
+because either the loader was scanned wrong or the book printed two
+versions, and the exit status says a human must look. The DATA block is
+checked in return: every value the listing contradicts or cannot read
+is named with the byte it should be, and a comma the scan lost (two
+values welded into one) is located. What the DATA cannot do is settle a
+line by itself: a hex field that reads cleanly as another instruction
+is not outvoted by a decimal token, since a token that lost a digit is
+still a valid number; and a loader printed in hex strings is not read.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
@@ -235,7 +257,7 @@ re-assembly disagrees, 2 if the file holds no listing.
 | `--out DIR` | off | writes each listing's recovered source as `DIR/blockNN.asm` | assembling the result: `python3 -m z80.asm DIR/block01.asm -o x.cmd` |
 | `--block N` | all | check only the Nth listing in the file | working through one listing at a time |
 | `--min-lines N` | `4` | the shortest run of listing-shaped lines taken for a listing | a short fragment, or less noise from tables |
-| `-v` | off | name every repair, not just the lines needing a human | seeing what it changed and why |
+| `-v` | off | name every repair, not just the lines needing a human; and every DATA value read through a shape | seeing what it changed and why |
 
 ### Corpus measurement tools
 

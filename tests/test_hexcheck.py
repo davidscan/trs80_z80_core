@@ -13,6 +13,14 @@ single mismatch and only warns about how many were left unresolved.
 
 THE OTHER: it has to actually resolve most of them, or it is an expensive
 way to print the scan back.  The floor is a regression bar, not a claim.
+
+The same round trip covers the third witness: the program is also printed
+as the BASIC loader the books put beside a listing, DATA statements of the
+same bytes in decimal, and that loader is damaged by the same scanner.
+The first assertion holds with the DATA counted as a witness, and the
+lines that were a reading of the object column alone mostly stop being
+so.  What the DATA may never do is settle a line by itself, and there are
+cases for that too.
 """
 import io
 import os
@@ -69,6 +77,31 @@ MSG     DEFM    'READY'
         END     START
 """
 
+def manual_page(res, listing):
+    """A page in the shape the reference manuals print: the listing, the
+    prose that introduces the loader, the loader with the page's own line
+    numbers and its READ/POKE loop spread over a page break, and the DATA
+    statement at the end -- plus the manual's habit of losing the space in
+    'END START'."""
+    image = b''.join(data for _, data in res.segments)
+    listing = listing.replace('END     START', 'ENDSTART')
+    return '\n'.join([
+        'Listed below is an assembled program that clears a line of the',
+        'display and counts the calls.', '', listing,
+        'This routine can be POKEd into RAM and accessed as a USR routine,',
+        'as follows.', '',
+        '100 \' PROGRAM: USR', '110 \' POKE THE MACHINE PROGRAM INTO MEMORY',
+        '150 POKE 16526,0: POKE 16527,125',
+        '160 FOR X=32000 TO %d' % (32000 + len(image) - 1), '', '', '8-10', '',
+        '## Page 105', '',
+        '170     READ A', '180     POKE X,A', '190 NEXT X',
+        '270 X=USR (0)', '300 \'',
+        '310 \' ******* DATA IS DECIMAL CODE FOR HEX PROGRAM *******',
+        '330 DATA %s' % ','.join(str(b) for b in image), '',
+        'RUN the program.  An equivalent BASIC routine takes a long time',
+        'by comparison!', ''])
+
+
 # What a scanner does to a page, as the books show it: the shapes that
 # collide, and the character it drops now and then.
 CONFUSIONS = {
@@ -122,9 +155,22 @@ def truth(res):
     return {s.pc & 0xFFFF: s.bytes for s in res.stmts if s.bytes}
 
 
-def check(text):
+def render_data(res, per_line=8, first=1000):
+    """The same bytes as the books print them a second time: a BASIC loader
+    whose DATA statements hold the image in decimal."""
+    image = b''.join(data for _, data in res.segments)
+    out = ['10 FOR I=0 TO %d: READ A: POKE 32000+I,A: NEXT' % (len(image) - 1),
+           '20 X=USR(0)']
+    for i in range(0, len(image), per_line):
+        out.append('%d DATA %s' % (first + 10 * (i // per_line),
+                                   ','.join(str(b) for b in image[i:i + per_line])))
+    return '\n'.join(out) + '\n'
+
+
+def check(text, data=True):
     blocks = hexcheck.find_blocks(text)
-    return [hexcheck.Block(b, 'test').run() for b in blocks]
+    streams = hexcheck.find_data(text) if data else []
+    return [hexcheck.Block(b, 'test', streams).run() for b in blocks]
 
 
 class HexCheck(unittest.TestCase):
@@ -152,6 +198,166 @@ class HexCheck(unittest.TestCase):
                     else:
                         wrong += 1
         return right, wrong, unresolved
+
+    def statuses(self, blocks):
+        out = {}
+        for b in blocks:
+            for r in b.recs:
+                out[r.status] = out.get(r.status, 0) + 1
+        return out
+
+    # -- the DATA statements as a third witness ------------------------------
+    def test_the_data_statements_are_a_third_witness(self):
+        """Both the listing and its loader scanned badly.  Nothing accepted on
+        two witnesses may be wrong, the DATA now being one of them; and the
+        lines that were a reading of the object column alone mostly become
+        two-witness lines, because the decimal column vouches for them."""
+        wrong_all = alone_with = alone_without = 0
+        came = [0, 0]
+        for seed in range(12):
+            page = damage(self.listing + '\n' + render_data(self.res), 0.10, seed)
+            with_data = check(page)
+            without = check(page, data=False)
+            right, wrong, unresolved = self.resolved(with_data, checked_only=True)
+            wrong_all += wrong
+            came[0] += right
+            came[1] += right + unresolved
+            alone_with += self.statuses(with_data).get('hexonly', 0)
+            alone_without += self.statuses(without).get('hexonly', 0)
+            for b in with_data:
+                self.assertIsNotNone(b.stream, 'seed %d: the loader was not aligned' % seed)
+        self.assertEqual(wrong_all, 0, 'a two-witness line had the wrong bytes')
+        self.assertGreater(alone_without, 10, 'the fixture stopped exercising this')
+        self.assertLess(alone_with, 0.5 * alone_without,
+                        'the DATA left %d of %d object-column readings unvouched'
+                        % (alone_with, alone_without))
+        self.assertGreater(came[0] / float(came[1]), 0.80)
+
+    def test_the_data_settles_a_hex_field_scanned_into_another_instruction(self):
+        """3E20 scanned as 3820 -- a valid JR C -- with the source lightly
+        damaged and the DATA printed.  Without the loader the line has one
+        column against a source that cannot assemble; with it, the source as
+        the page printed it agrees with the decimal bytes, and the hex column
+        is what gets repaired."""
+        line = "7D0E 3E20 00190 LD      A,' '"
+        self.assertIn(line, self.listing, 'the fixture moved')
+        listing = self.listing.replace(line, "7D0E 3820 00190         Lb      A,' '")
+        (b,) = check(listing + '\n' + render_data(self.res))
+        (r,) = [r for r in b.recs if r.addr == 0x7D0E]
+        self.assertEqual(r.bytes, b'\x3e\x20')
+        self.assertIn(r.status, ('hex', 'source'))
+        self.assertEqual(b.verify(), [])
+
+    def test_the_data_alone_cannot_settle_a_line_the_source_says_nothing_about(self):
+        """Source destroyed, hex 3820, DATA 62,32: one column against another
+        and no third.  The line is reported with both readings, not chosen."""
+        (b,) = check(self.wrecked() + '\n' + render_data(self.res))
+        (r,) = [r for r in b.recs if r.addr == 0x7D0E]
+        self.assertEqual(r.status, 'unresolved')
+        self.assertIn('3E20', r.note)
+        self.assertIn('3820', r.note)
+
+    def test_a_loader_that_disagrees_with_a_settled_line_is_reported_not_believed(self):
+        """A clean listing whose DATA says something else at one byte: the
+        two-witness line stands, the report marks it, and the command fails."""
+        loader = render_data(self.res).replace('62,32', '62,42')
+        self.assertNotEqual(loader, render_data(self.res), 'the fixture moved')
+        (b,) = check(self.listing + '\n' + loader)
+        (r,) = [r for r in b.recs if r.addr == 0x7D0E]
+        self.assertEqual((r.status, r.bytes, r.conflict), ('clean', b'\x3e\x20', True))
+        out = io.StringIO()
+        counts, conflicts = hexcheck.report(b, False, out)
+        self.assertEqual(conflicts, 1)
+        self.assertIn('# 7D0E', out.getvalue())
+        self.assertIn('the listing says 32', out.getvalue())
+        import contextlib
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
+            f.write(self.listing + '\n' + loader)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(hexcheck.main([f.name]), 1)
+        finally:
+            os.unlink(f.name)
+
+    def test_a_comma_the_scan_lost_shifts_the_stream_but_not_the_witness(self):
+        """Two DATA values welded into one token: the lines after it take
+        their bytes one position on, from between settled neighbours that
+        agree on the new offset, and the welded token is named."""
+        loader = render_data(self.res).replace('62,32', '6232')
+        self.assertIn('6232', loader)
+        (b,) = check(self.listing + '\n' + loader)
+        after = [r for r in b.recs if r.addr is not None and r.addr > 0x7D10 and r.bytes]
+        self.assertTrue(after)
+        self.assertTrue(all(r.data for r in after),
+                        'lines after the welded token lost their witness')
+        self.assertTrue(all(r.bytes in r.data for r in after))
+        out = io.StringIO()
+        hexcheck.report(b, False, out)
+        self.assertIn("'6232'", out.getvalue())
+        self.assertIn("6 values for 7 bytes; the listing says 33,192,63,62,32,6,64",
+                      out.getvalue())
+
+    def test_an_unreadable_data_value_is_named_with_what_the_listing_says(self):
+        loader = render_data(self.res).replace('237,176', '237,1%6')
+        (b,) = check(self.listing + '\n' + loader)
+        names = [t for t, matters in b.data_damage() if matters]
+        self.assertEqual(len(names), 1, names)
+        self.assertIn("'1%6' cannot be read: the listing says 176", names[0])
+
+    def test_a_basic_data_line_is_not_a_listing_line(self):
+        """`DATA` is four hex-shaped letters, and a BASIC line number is a
+        line number: a loader must never be taken for a listing."""
+        for raw in ('1260 DATA 20136 140172 583+109+-1', '145@ DATA 23925 958:59',
+                    render_data(self.res, per_line=14, first=330).splitlines()[2]):
+            self.assertIsNone(hexcheck.parse_line(raw, 1250, None), raw)
+        self.assertEqual(hexcheck.find_blocks(render_data(self.res)), [])
+
+    def test_a_data_statement_wrapped_on_the_page_is_read_whole(self):
+        """A long DATA statement wraps in the scan, and the wrapped part has
+        no line number and no keyword.  The values under the values belong
+        to it; a page number under it does not."""
+        loader = render_data(self.res, per_line=16)
+        first = loader.splitlines()[2]
+        parts = first.rsplit(',', 6)
+        wrapped = loader.replace(first, parts[0] + ',\n' + ','.join(parts[1:]))
+        (s,) = hexcheck.find_data(wrapped)
+        self.assertEqual([t.text for t in s], [t.text for t in hexcheck.find_data(loader)[0]])
+        (b,) = check(self.listing + '\n' + wrapped)
+        self.assertEqual(b.tally['lines the DATA statements witness'],
+                         check(self.listing + '\n' + loader)[0].tally['lines the DATA statements witness'])
+        (s,) = hexcheck.find_data(loader + '181\n')
+        self.assertEqual(len(s), len(hexcheck.find_data(loader)[0]))
+
+    def test_a_page_break_does_not_part_a_listing(self):
+        """A page number, a running head and 'Program continued' fall in
+        the middle of a listing; the addresses carry on across them, so it
+        is one block, and one loader witnesses all of it."""
+        lines = self.listing.splitlines()
+        cut = next(i for i, l in enumerate(lines) if l.startswith('7D10'))
+        page = '\n'.join(lines[:cut] + ['', 'Program continued', '', '181', '',
+                                        '## Page 191', '', 'utility', '']
+                         + lines[cut:]) + '\n'
+        blocks = check(page + '\n' + render_data(self.res))
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(self.resolved(blocks)[1:], (0, 0))
+        self.assertIsNotNone(blocks[0].stream)
+        self.assertEqual(blocks[0].verify(), [])
+
+    def test_a_page_in_the_manuals_shape(self):
+        """Listing, prose, a loader whose loop crosses a page break, and the
+        DATA statement at the end: every byte-bearing line witnessed, the
+        alignment holding across the prose between, and ENDSTART read as
+        END START."""
+        (b,) = check(manual_page(self.res, self.listing))
+        self.assertEqual(self.statuses([b]).get('unresolved', 0), 0)
+        self.assertIsNotNone(b.stream)
+        n = len(self.truth)
+        self.assertEqual(b.tally['lines the DATA statements witness'], n)
+        self.assertEqual(b.tally['DATA statements agree'], n)
+        self.assertNotIn('DATA statements disagree', b.tally)
+        self.assertEqual([r.fargs for r in b.recs if r.fop == 'END'], ['START'])
+        self.assertEqual(b.verify(), [])
 
     def test_a_clean_listing_reads_as_clean(self):
         blocks = check(self.listing)

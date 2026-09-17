@@ -29,7 +29,9 @@ WHAT IT DOES
   1. Splits every line into address / hex / line-number / source.  In the
      address, hex and line-number fields the alphabet is digits (and
      A-F), so O->0, l/I->1, S->5, G->6, Z->2, @->0 and their friends
-     resolve mechanically.
+     resolve mechanically.  A listing parted by a page break -- the page
+     number, the running head, 'Program continued' -- is joined back where
+     its addresses or line numbers carry on across the break.
   2. Chains the addresses: each line's address is the previous one plus
      its length, so a damaged address is repaired from its neighbours and
      a damaged hex field's LENGTH is known independently.
@@ -40,27 +42,58 @@ WHAT IT DOES
        clean       the columns agree as printed;
        repaired    one column was damaged and the other two say how -- the
                    bytes rest on two witnesses, as a clean line does;
-       object      the source column was destroyed, so the bytes are a
-       column      READING OF ONE COLUMN.  It is usually right and worth
-       alone       having, but nothing checks it, so the report names
-                   every such line and the recovered source marks it;
-       unresolved  both columns are damaged past agreement.  What the hex
+       one object  the source column was destroyed, so the bytes are a
+       column      READING OF ONE COLUMN, the hex or the DATA.  It is
+       alone       usually right and worth having, but nothing checks it,
+                   so the report names every such line and the recovered
+                   source marks it;
+       unresolved  the columns are damaged past agreement.  What each
                    decodes to is printed for a human to judge; nothing is
                    guessed at.
   5. Re-assembles the recovered source as a whole and requires it to
      produce the reconciled bytes.  Exit status is 1 if any line is
      unresolved or that re-assembly disagrees, so a listing is never
      accepted silently.
+  6. Reads the BASIC DATA statements printed near the listing as a THIRD
+     WITNESS.  The books print a routine twice -- the assembly listing,
+     and a DATA/POKE loader of the same bytes in decimal -- and the
+     decimal column was printed from the same bytes.  The DATA lines in
+     the file are read in the decimal alphabet (O->0, l->1, S->5, U->4
+     ...) into a stream of byte values, the stream is aligned against the
+     lines already settled on two witnesses (three lines and six bytes
+     must agree at one offset, which chance does not supply), and then
+     the decimal bytes of every line are one more reading of its object
+     field.  So a source line read as printed that assembles to what the
+     DATA says is accepted even where the hex column reads as something
+     else; a line read off the object column alone becomes a two-witness
+     line when the DATA agrees, and is UNRESOLVED when it does not; and a
+     line settled on two witnesses that the DATA contradicts is kept but
+     marked '#', because either the loader was scanned wrong or the book
+     printed two versions, and only a human can say which.  The DATA
+     block gets checked in return: every decimal token the listing's
+     bytes contradict or cannot read is named, with the byte it should be.
+     The alignment is piecewise -- a comma the scan lost shifts the
+     stream by one from there on, and the offset may change between two
+     settled lines that agree on the new one -- and a line takes its DATA
+     bytes only from between settled neighbours that agree, so a shifted
+     stream never becomes a false witness.
 
 WHAT IT DOES NOT DO
   Comments carry no bytes, so nothing can check them; they are passed
   through as scanned.  An object field damaged into a DIFFERENT VALID
   INSTRUCTION of the same length, on a line whose source is also gone,
-  cannot be caught by any of this -- the columns agree on the wrong
-  answer.  That is the residue, and it is why a listing printed beside
-  its DATA statements is worth more than either alone.
+  cannot be caught by the listing alone -- the columns agree on the
+  wrong answer.  The DATA statements catch it, when the book printed
+  them: the decimal bytes disagree, and the line is reported instead of
+  accepted.  What the DATA cannot do is settle that line by itself: one
+  column says 3820, another says 3E20, the source says nothing, and the
+  tool prints both rather than choosing.  A decimal digit scanned as
+  another digit (a 6 read as an 8) is invisible inside its token, so the
+  DATA is never a witness on its own either; and a loader printed in hex
+  strings rather than decimal is not read.
 """
 import argparse
+import itertools
 import os
 import re
 import sys
@@ -92,6 +125,15 @@ DIGFIX = {
     'Z': '2', 'z': '2', 'J': '3', 'S': '5', 's': '5', '$': '5',
     'G': '6', 'T': '7', '?': '7', 'R': '8', 'g': '9', 'q': '9',
 }
+
+# A DATA statement's values are decimal too, but there the letters A-F are
+# not hex digits and can only be shapes: a B is an 8, an A a 4.
+DECFIX = dict(DIGFIX, A='4', B='8', b='6', D='0', d='0', h='4', H='4')
+# Shapes with a second decimal digit behind them, tried one at a time.  A
+# printed digit reads as itself: a 6 scanned as an 8 is invisible inside its
+# token, and that is a reason the DATA column is never a witness alone.
+DECALT = {'U': '4', 'u': '4', 'S': '3', 's': '3', 'l': '7', 'I': '7', 'i': '7',
+          'T': '1', 'g': '6', 'q': '4', 'Z': '7'}
 
 MNEMONICS = sorted(asm.MNEMONICS | asm.DIRECTIVES)
 # Characters OCR confuses for one another, for scoring a repair.  Case is
@@ -151,6 +193,22 @@ def near_hex(scan, b):
     return ocr_distance(scan.upper(), b.hex().upper()) < max(1.5, 0.2 * len(scan))
 
 
+def shape_cost(scan, want):
+    """The cost of reading `scan` as `want` when only shapes may differ: half
+    a slip per look-alike, and no way at all for anything else."""
+    if len(scan) != len(want):
+        return 9.0
+    return sum(0 if a == c else (0.5 if same_shape(a, c) else 9.0)
+               for a, c in zip(scan, want))
+
+
+def plausible_hex(scan, b):
+    """Is the scanned object field these bytes with nothing worse than shape
+    slips -- the strict form of near_hex, for one object column to vouch
+    for the other's reading."""
+    return bool(scan) and shape_cost(scan.upper(), b.hex().upper()) <= 1.0
+
+
 def hexlit(v):
     """A hex literal the assembler will read: it must start with a digit."""
     s = '%04X' % (v & 0xFFFF)
@@ -164,7 +222,7 @@ def fix_field(tok, table):
         u = ch.upper()
         if u in HEXDIGITS and table is HEXFIX:
             out.append(u)
-        elif table is DIGFIX and ch.isdigit():
+        elif table is not HEXFIX and ch.isdigit():
             out.append(ch)
         elif ch in table:
             out.append(table[ch])
@@ -216,6 +274,98 @@ def as_lineno(tok):
     return int(v) if v and v.isdigit() else None
 
 
+def is_data_word(tok):
+    """Is this token the BASIC keyword DATA, allowing the scan one slip of
+    shape (OATA, DA7A)?  Nothing an assembler prints is four letters from it."""
+    return len(tok) == 4 and ocr_distance(tok.upper(), 'DATA') <= 0.5
+
+
+def dec_readings(tok):
+    """Every byte value a scanned DATA token can be, commonest reading
+    first.  An empty set means the token is not readable as a byte at all:
+    a character outside the alphabet, or a value past 255 (a comma the scan
+    lost welds two values into one token, which the alignment then steps
+    over)."""
+    first = fix_field(tok, DECFIX)
+    if first is None:
+        return []
+    outs = [first]
+    for i, ch in enumerate(tok):
+        alt = DECALT.get(ch)
+        if alt and alt != first[i]:
+            outs.append(first[:i] + alt + first[i + 1:])
+    seen = []
+    for v in outs:
+        if v.isdigit() and int(v) <= 255 and int(v) not in seen:
+            seen.append(int(v))
+    return seen
+
+
+class Tok:
+    """One value of a DATA statement, as scanned."""
+
+    def __init__(self, n, k, text):
+        self.n, self.k, self.text = n, k, text        # file line, position in it
+        self.cands = dec_readings(text)
+
+
+DATA_SEP = re.compile(r"[\s,.;:+/]+")
+
+
+def find_data(text, gap_lines=8):
+    """The DATA statements in a file, as streams of scanned byte tokens.  A
+    stream is a run of DATA lines in line-number order; a page break may
+    fall inside it, so up to `gap_lines` other lines are allowed between
+    two of its statements, but a line number that goes backwards starts
+    another loader and another stream."""
+    streams, cur, last_ln, gap, wrap = [], [], None, 0, False
+    for n, raw in enumerate(text.splitlines(), 1):
+        toks = raw.split()
+        if not toks:
+            gap += 1
+            wrap = False
+            continue
+        word = None
+        if is_data_word(toks[0]):
+            word, lineno = 0, None
+        elif len(toks) > 1 and len(toks[0]) <= 5 and is_data_word(toks[1]):
+            word = 1
+            v = fix_field(toks[0], DIGFIX)
+            lineno = int(v) if v and v.isdigit() else None
+        elif wrap and re.search(r'[,.;:]', raw) and re.match(r'^[\s\d,.;:+/A-Za-z@|!$?-]+$', raw) \
+                and len(DATA_SEP.split(raw.strip())) >= 2 \
+                and all(dec_readings(t) for t in DATA_SEP.split(raw.strip()) if t):
+            # A DATA statement too long for the page wraps, and the wrapped
+            # part has no line number and no keyword: values under values.
+            word, lineno = -1, None
+        if word is None:
+            gap += 1
+            wrap = False
+            continue
+        payload = raw if word < 0 else \
+            (raw.split(None, word + 1)[word + 1] if len(toks) > word + 1 else '')
+        payload = payload.split("'")[0]
+        vals = [t for t in DATA_SEP.split(payload) if t]
+        # A run of words at the end is the prose that followed on the page.
+        while vals and not any(c.isdigit() or c in DECFIX for c in vals[-1]):
+            vals.pop()
+        if not vals:
+            gap += 1
+            wrap = False
+            continue
+        if cur and (gap > gap_lines
+                    or (lineno is not None and last_ln is not None and lineno <= last_ln)):
+            streams.append(cur)
+            cur = []
+        cur += [Tok(n, k, t) for k, t in enumerate(vals)]
+        if lineno is not None:
+            last_ln = lineno
+        gap, wrap = 0, True
+    if cur:
+        streams.append(cur)
+    return [s for s in streams if len(s) >= 4]
+
+
 # ---- one line of a listing ---------------------------------------------------
 class Rec:
     """One scanned listing line, and what the three columns make of it."""
@@ -236,6 +386,9 @@ class Rec:
         self.anote = ''             # what the address chain did
         self.note = ''              # what reconciling did, this round
         self.fixed = ''             # the recovered source line
+        self.data = []              # readings of this line from the DATA statements
+        self.dpos = None            # where in the DATA stream those start
+        self.conflict = False       # settled on two witnesses, and the DATA disagrees
 
 
 def split_operand(text):
@@ -279,6 +432,8 @@ def parse_line(raw, prev_lineno, prev_addr):
     toks = raw.split()
     if not toks:
         return None
+    if any(is_data_word(t) for t in toks[:2]):
+        return None                     # a BASIC DATA statement, not a listing line
     last = None
     for i, t in enumerate(toks[:4]):
         if 4 <= len(t) <= 6 and as_lineno(t) is not None:
@@ -342,6 +497,8 @@ def find_blocks(text, min_lines=4):
         r = Rec(n, raw)
         r.addr = int(addr, 16) if addr else None
         r.hexs, r.rawhex, r.dirty, r.lineno, r.src = hexs, rawhex, dirty, lineno, src
+        if not cur and blocks and continues(blocks[-1], r, lines[blocks[-1][-1].n:n - 1]):
+            cur = blocks.pop()           # the same listing, across a page break
         cur.append(r)
         if lineno is not None:
             prev_ln = lineno
@@ -355,28 +512,209 @@ def find_blocks(text, min_lines=4):
     return [b for b in blocks if len(b) >= min_lines and sum(1 for r in b if r.hexs) >= 2]
 
 
+def continues(block, r, skipped, page_lines=12, reach=64):
+    """Does this line carry on the listing that ended a page break ago?  The
+    page number, the running head and the 'Program continued' are what part
+    a listing, and the address column joins it back: the line's address lies
+    just past the last address of the block, or its editor line number just
+    past the block's last, and the block did not END.  What was skipped must
+    be a page break -- the page marker among a dozen lines at most -- or a
+    line or three the scan ruined; paragraphs of commentary between two
+    fragments of a disassembly are not a break in one listing."""
+    last = block[-1]
+    if len(skipped) > page_lines or re.match(r'^\s*(END|ENO|EMD)\b', last.src.upper()):
+        return False
+    if sum(1 for l in skipped if l.strip()) > 3 \
+            and not any(re.match(r'^## Page\b', l) for l in skipped):
+        return False
+    tail = [x for x in block if x.addr is not None]
+    if r.addr is not None and tail and 0 < r.addr - tail[-1].addr <= reach:
+        return True
+    lns = [x.lineno for x in block if x.lineno is not None]
+    return r.lineno is not None and lns and 0 < r.lineno - lns[-1] <= 100 and r.addr is None
+
+
 # ---- the check ---------------------------------------------------------------
+CONFIDENT = ('clean', 'hex', 'source', 'data')     # the bytes rest on two witnesses
+
+
 class Block:
-    def __init__(self, recs, source_name='listing'):
+    def __init__(self, recs, source_name='listing', streams=None):
         self.recs = recs
         self.name = source_name
+        self.streams = streams or []    # the file's DATA statements, find_data()
+        self.stream = None              # the one this block aligned with
+        self.doff = None                # its offset: token = doff + (addr - dbase)
+        self.dbase = None
         self.symbols = {}
         self.inferred = {}          # names the object code gave a value to
         self.org = None
         self.tally = {}
 
-    def run(self, rounds=3):
+    def run(self, rounds=5):
         """Settle the block.  A line reconciled in one round gives the address
-        chain its true length, which can resolve a neighbour in the next."""
+        chain its true length, which can resolve a neighbour in the next; and
+        the lines settled on two witnesses are what the DATA statements are
+        aligned against, so their bytes reach the other lines a round later."""
         self.parse_sources()
         for _ in range(rounds):
-            before = [(r.addr, r.bytes) for r in self.recs]
+            before = [(r.addr, r.bytes, r.status) for r in self.recs]
             self.chain_addresses()
             self.collect_symbols()
+            self.align_data()
             self.reconcile()
-            if before == [(r.addr, r.bytes) for r in self.recs]:
+            if before == [(r.addr, r.bytes, r.status) for r in self.recs]:
                 break
         return self
+
+    # -- 6. the DATA statements ---------------------------------------------
+    def align_data(self):
+        """Give every line its reading from the DATA statements, if the
+        stream can be placed against this block.  The lines already settled
+        on two witnesses are the anchors: the stream is placed where the most
+        of them match (three lines and six bytes at least), and each other
+        line takes its bytes from the offset its settled neighbours on both
+        sides agree on -- which is the global one, or, past a comma the scan
+        lost, the one both neighbours moved to.  A line with a disagreeing
+        neighbour gets nothing: a shifted stream is not a witness."""
+        for r in self.recs:
+            r.data, r.dpos = [], None
+        self.stream = self.doff = self.dbase = None
+        anchors = [r for r in self.recs
+                   if r.status in CONFIDENT and r.bytes and r.addr is not None]
+        if len(anchors) < 3 or not self.streams:
+            return
+        base = anchors[0].addr
+        best = None
+        for s in self.streams:
+            cands = [t.cands for t in s]
+            offs, count, nbytes = {}, {}, {}
+            for r in anchors:
+                offs[id(r)] = set()
+                for p in range(len(s) - len(r.bytes) + 1):
+                    if all(r.bytes[k] in cands[p + k] for k in range(len(r.bytes))):
+                        o = p - (r.addr - base)
+                        offs[id(r)].add(o)
+                        count[o] = count.get(o, 0) + 1
+                        nbytes[o] = nbytes.get(o, 0) + len(r.bytes)
+            # Scored by bytes, not lines: a listing of one-byte lines matches
+            # a stream in many places, and a three-byte line is worth three.
+            for o, c in count.items():
+                if c >= 3 and nbytes[o] >= 6 and (best is None or (nbytes[o], c) > best[:2]):
+                    best = (nbytes[o], c, s, o, offs)
+        if best is None:
+            return
+        _, _, s, off, offs = best
+        self.stream, self.doff, self.dbase = s, off, base
+        cands = [t.cands for t in s]
+        pos = {id(r): i for i, r in enumerate(self.recs)}
+        order = sorted(anchors, key=lambda r: pos[id(r)])
+        witnessed = 0
+        for i, r in enumerate(self.recs):
+            if r.addr is None:
+                continue
+            n = self.length_of(r) or self.chain_length(r)
+            if not n:
+                continue
+            prev = [a for a in order if pos[id(a)] < i]
+            nxt = [a for a in order if pos[id(a)] > i]
+            if prev and nxt:
+                cand = offs[id(prev[-1])] & offs[id(nxt[0])]
+                weight = len(prev[-1].bytes) + len(nxt[0].bytes)
+            elif prev or nxt:
+                cand = offs[id((prev or nxt)[-1 if prev else 0])] & {off}
+                weight = 0
+            else:
+                continue
+            # A comma the scan lost, or a mark it invented, moves the stream
+            # by a value or two; anything further is a repeat of the same
+            # bytes elsewhere in the loader, which is not a shift at all.
+            if off in cand:
+                o = off
+            elif len(cand) == 1 and weight >= 4 and abs(min(cand) - off) <= 2:
+                o = cand.pop()
+            else:
+                continue
+            p = o + (r.addr - base)
+            if p < 0 or p + n > len(s):
+                continue
+            # The position comes from this line's own address, which may be
+            # the one thing about it the chain could not repair: it has to
+            # fall between the neighbours that placed it.
+            if prev and p < o + (prev[-1].addr - base) + len(prev[-1].bytes):
+                continue
+            if nxt and p + n > o + (nxt[0].addr - base):
+                continue
+            r.dpos = p                  # known even where a token is unreadable
+            if all(cands[p + k] for k in range(n)):
+                r.data = [bytes(t) for t in itertools.islice(
+                    itertools.product(*[cands[p + k] for k in range(n)]), 8)]
+                witnessed += 1
+        self.tally['lines the DATA statements witness'] = witnessed
+
+    def near_dec(self, r, b, loose=False):
+        """Are the DATA tokens under this line these bytes, scanned badly?
+        For one object column to vouch for the other the allowance is
+        strict: a token may differ from the value only by shapes (S for 5),
+        two of them across the line at most.  A digit for another digit is
+        not a slip the scan makes, and a token that lost a digit (12 for 125)
+        is a plausible scan of twenty values, which is to say it vouches for
+        none of them -- though `loose` counts that lost digit, for asking
+        whether the DATA can be read as these bytes at all."""
+        if r.dpos is None or not b or self.stream is None:
+            return False
+        cost = 0.0
+        for k, v in enumerate(b):
+            t = self.stream[r.dpos + k]
+            if v in t.cands:
+                continue
+            cost += min(shape_cost(t.text, str(v)),
+                        ocr_distance(t.text, str(v)) if loose else 9.0)
+        return cost <= 1.0
+
+    def data_damage(self):
+        """What the listing says about the DATA statements: every token that
+        an accepted line's bytes contradict or that cannot be read as a byte,
+        with the value it should be.  (text, corrected) pairs."""
+        out = []
+        if self.stream is None:
+            return out
+        last = None
+        for r in self.recs:
+            if r.dpos is None or not r.bytes or r.status not in CONFIDENT:
+                continue
+            if last is not None and r.dpos - last.dpos != r.addr - last.addr:
+                # The stream shifted between two witnessed lines: a comma the
+                # scan lost welded two values, or a stray mark became one.
+                toks = self.stream[last.dpos + len(last.bytes):r.dpos]
+                between = [x for x in self.recs if x.addr is not None and x.bytes
+                           and last.addr < x.addr < r.addr]
+                want = r.addr - last.addr - len(last.bytes)
+                says = b''.join(x.bytes for x in between)
+                at, to = (toks[0], toks[-1]) if toks else (self.stream[last.dpos],) * 2
+                where = 'line %d value %d' % (at.n, at.k + 1)
+                if to.n != at.n:
+                    where += ' to line %d value %d' % (to.n, to.k + 1)
+                elif to.k != at.k:
+                    where += '-%d' % (to.k + 1)
+                out.append(('DATA %s %s: %d values for %d bytes; the listing says %s'
+                            % (where, ' '.join(repr(t.text) for t in toks) or '(none)',
+                               len(toks), want,
+                               ','.join(str(b) for b in says) if len(says) == want
+                               else '%d bytes, not all settled' % want), True))
+            last = r
+            for k, b in enumerate(r.bytes):
+                t = self.stream[r.dpos + k]
+                if not t.cands:
+                    out.append(('DATA line %d value %d %r cannot be read: the listing says %d'
+                                % (t.n, t.k + 1, t.text, b), True))
+                elif b not in t.cands:
+                    out.append(('DATA line %d value %d %r: the listing says %d'
+                                % (t.n, t.k + 1, t.text, b), True))
+                elif t.text != str(b):
+                    out.append(('DATA line %d value %d %r read as %d'
+                                % (t.n, t.k + 1, t.text, b), False))
+        return out
 
     # -- 1. the address chain ---------------------------------------------
     def chain_addresses(self):
@@ -473,6 +811,8 @@ class Block:
         hex alphabet is still as printed); once a word has to be replaced the
         repair is the hex column speaking, and the source is only a check on
         it."""
+        for k in ('DATA statements agree', 'DATA statements disagree'):
+            self.tally.pop(k, None)     # this round's count, not a running one
         for r in self.recs:
             r.note = ''
             if r.op in ('EQU', 'DEFL') or (r.op is None and r.label is None) \
@@ -503,21 +843,46 @@ class Block:
                 r.status = 'clean' if r.op == word else 'source'
                 r.bytes, r.fop, r.fargs = b'', word, args
                 return True
+        # END with its entry label, the space between them lost: ENDZAP.
+        if r.op.startswith('END') and not r.args and r.op[3:] in self.symbols:
+            r.note = join(r.note, 'source %r->%r' % (r.op, 'END ' + r.op[3:]))
+            r.status, r.bytes, r.fop, r.fargs = 'source', b'', 'END', r.op[3:]
+            return True
         return False
 
     def reconcile_one(self, r, clen):
         reads = [h for h in hex_readings(r.rawhex) if len(h) % 2 == 0]
-        wants = [bytes.fromhex(h) for h in reads]
-        want = wants[0] if wants else None
+        hwants = [bytes.fromhex(h) for h in reads]
+        # The DATA statements are one more reading of the object field, from
+        # a column the scan damaged independently.  But a decimal token that
+        # lost a digit is still a valid number, where a hex field that lost
+        # one is not, so the DATA may speak for the object side only where the
+        # hex column is unreadable or is these bytes scanned badly: a hex
+        # field that reads cleanly as something else is not outvoted.  The
+        # readings are tried best-supported first: what both columns say,
+        # then what one says exactly and the other is a bad scan of, then
+        # what the hex says against the DATA.
+        dwants = [d for d in r.data if clen is None or clen == len(d)]
+        both = [h for h in hwants if h in dwants]
+        # The DATA may speak against a readable hex field only where it
+        # cannot be read as what that field says, even allowing a digit lost
+        # (a 6 where 64 is printed does not contradict 64), and where the
+        # hex field is a bad scan of what the DATA says.
+        consistent = both or any(self.near_dec(r, h, loose=True) for h in hwants)
+        dnear = [] if hwants and consistent else \
+            [d for d in dwants if d not in hwants and (not hwants or near_hex(r.rawhex, d))]
+        hnear = [h for h in hwants if h not in dwants and (not dwants or self.near_dec(r, h))]
+        wants = both + dnear + hnear + [h for h in hwants if h not in both and h not in hnear]
+        want = hwants[0] if hwants else (dwants[0] if dwants else None)
+        plain = {w for w in (wants[:1] + hwants[:1] + dwants[:1]) if w in wants}
+        r.conflict = False
 
         # (a) the source as printed.  It is a witness in its own right, so one
-        # other column agreeing with it is enough.
-        # (a) the source as printed.  It is a witness in its own right, so one
         # other column agreeing with it is enough: a reading of the object
-        # field that IS these bytes, or one that is these bytes scanned badly.
-        # The address chain agrees only about the LENGTH, which says nothing
-        # about the content, so it carries a line only where the object field
-        # is unreadable and says nothing either.
+        # field that IS these bytes, or one that is these bytes scanned badly,
+        # or the DATA statements.  The address chain agrees only about the
+        # LENGTH, which says nothing about the content, so it carries a line
+        # only where the object field is unreadable and says nothing either.
         why, printed = None, None
         for op, args, tier in source_candidates(r.op, r.args):
             if tier:
@@ -533,6 +898,7 @@ class Block:
                     or (not wants and clen == len(b))):
                 continue
             self.accept(r, op, args, b, 'clean' if b == want else 'hex')
+            self.settle_data(r, hwants, dwants)
             return
         # (b) the object column speaks, one reading at a time and the plainest
         # first.  A repair that keeps the operand the page printed has to make
@@ -543,8 +909,8 @@ class Block:
             for want in wants:
                 if clen is not None and clen != len(want):
                     continue
-                if tier == 2 and want is not wants[0]:
-                    continue        # one reading only: nothing else vouches for it
+                if tier == 2 and want not in plain:
+                    continue        # one reading a column: nothing else vouches for it
                 hint = from_hex(want, r.addr, self.symbols)
                 for op, args, t in source_candidates(r.op, r.args, hint):
                     if t != tier:
@@ -558,15 +924,52 @@ class Block:
                     if b != want:
                         continue
                     self.accept(r, op, args, b, 'source' if tier == 1 else 'hexonly')
-                    if want != wants[0]:
+                    if want not in hwants:
+                        r.note = join(r.note, 'the bytes are the DATA statements\' reading'
+                                      + ('' if not hwants else
+                                         ', the hex %s scanned badly' % r.rawhex))
+                    elif want != hwants[0]:
                         r.note = join(r.note, 'object field read as %s'
                                       % want.hex().upper())
+                    self.settle_data(r, hwants, dwants)
                     return
         r.status, r.bytes = 'unresolved', None
         r.note = join(r.note, why or 'the source and the hex column disagree')
-        hint = from_hex(wants[0], r.addr, self.symbols) if wants else None
-        if hint:
-            r.note = join(r.note, 'the hex reads %r' % fieldtext(*hint))
+        for name, ws in (('the hex reads', hwants), ('the DATA statements read', dwants)):
+            if ws:
+                hint = from_hex(ws[0], r.addr, self.symbols)
+                r.note = join(r.note, '%s %s%s' % (name, ws[0].hex().upper(),
+                                                  (' = %r' % fieldtext(*hint)) if hint else ''))
+
+    def settle_data(self, r, hwants, dwants):
+        """The line is accepted; what do the DATA statements say about it?
+        Agreeing with the hex column, they are the second witness to a line
+        the object column alone had carried.  Disagreeing with a one-witness
+        line they unsettle it -- one column against another, and the source
+        says nothing.  Disagreeing with a two-witness line they cannot
+        overturn it, but a human has to look: the loader was scanned wrong,
+        or the book printed two versions."""
+        if not dwants:
+            return
+        if r.bytes in dwants or self.near_dec(r, r.bytes):
+            self.tally['DATA statements agree'] = self.tally.get('DATA statements agree', 0) + 1
+            # Both object columns say so, one of them perhaps scanned badly:
+            # that is two witnesses, as a hex field the source confirms is.
+            if r.status == 'hexonly' and hwants \
+                    and (r.bytes in hwants or plausible_hex(r.rawhex, r.bytes)):
+                r.status = 'data'
+                r.note = join(r.note, 'the DATA statements agree')
+            return
+        self.tally['DATA statements disagree'] = self.tally.get('DATA statements disagree', 0) + 1
+        said = dwants[0].hex().upper()
+        if r.status == 'hexonly':
+            r.note = join(r.note, 'the object column reads %s but the DATA statements read %s'
+                          % (r.bytes.hex().upper(), said))
+            r.status, r.bytes = 'unresolved', None
+            return
+        r.conflict = True
+        r.note = join(r.note, 'settled as %s but the DATA statements read %s'
+                      % (r.bytes.hex().upper(), said))
 
     def accept(self, r, op, args, b, status):
         """Record the reading.  The SCANNED fields are never overwritten: a
@@ -673,6 +1076,12 @@ class Block:
     # -- 5. the recovered source, and the proof ----------------------------
     def recovered(self):
         out = ['; recovered by hexcheck from %s' % self.name]
+
+        def stmt(label, op, args='', comment=''):
+            """A source line; a label eight characters long still gets its space."""
+            head = (label or '').ljust(8) if len(label or '') < 8 else label + ' '
+            return (head + '%-8s%-16s%s' % (op, args, comment)).rstrip()
+
         defined = {r.label for r in self.recs
                    if r.label and r.status not in ('unresolved', 'text')}
         free = sorted(n for n in referenced(self.recs) if n not in defined)
@@ -682,7 +1091,7 @@ class Block:
                 out.append('; UNRESOLVED %s' % r.raw.strip())
                 continue
             if r.op in ('EQU', 'DEFL') and r.label:
-                out.append('%-8s%-8s%s' % (r.label, 'EQU', r.fargs or r.args))
+                out.append(stmt(r.label, 'EQU', r.fargs or r.args))
                 continue
             if r.status == 'text':
                 if r.src.strip():
@@ -691,26 +1100,24 @@ class Block:
             if r.fop == 'END':
                 continue
             if r.addr is not None and r.addr != pc and r.fop != 'ORG':
-                out.append('%-8s%-8s%s' % ('', 'ORG', hexlit(r.addr)))
+                out.append(stmt('', 'ORG', hexlit(r.addr)))
                 pc = r.addr
             if r.fop == 'ORG':
                 pc = r.addr
-                out.append('%-8s%-8s%s' % (r.label or '', 'ORG', hexlit(r.addr)))
+                out.append(stmt(r.label, 'ORG', hexlit(r.addr)))
                 continue
             c = comment_of(r)
             if r.status == 'hexonly':
-                c = (c + '  ' if c else ';') + '?? the object column alone'
-            out.append(('%-8s%-8s%-16s%s'
-                        % (r.label or '', r.fop, r.fargs, c)).rstrip())
+                c = (c + '  ' if c else ';') + '?? one object column alone'
+            out.append(stmt(r.label, r.fop, r.fargs, c))
             pc = (pc or 0) + len(r.bytes or b'')
         if free:
-            out[1:1] = ['%-8s%-8s%-9s%s'
-                        % (n, 'EQU', hexlit(self.symbols[n]) if n in self.symbols else '0',
-                           ';from the object code' if n in self.inferred else
-                           ';defined where this listing does not' if n in self.symbols
-                           else ';UNKNOWN -- the listing never says')
+            out[1:1] = [stmt(n, 'EQU', hexlit(self.symbols[n]) if n in self.symbols else '0',
+                             ';from the object code' if n in self.inferred else
+                             ';defined where this listing does not' if n in self.symbols
+                             else ';UNKNOWN -- the listing never says')
                         for n in free]
-        out.append('%-8s%-8s' % ('', 'END'))
+        out.append(stmt('', 'END'))
         return '\n'.join(out) + '\n'
 
     def verify(self):
@@ -754,8 +1161,8 @@ def referenced(recs):
     hex literal (the C00H of 3C00H) from reading as a symbol."""
     names = set()
     for r in recs:
-        if getattr(r, 'status', None) == 'unresolved':
-            continue
+        if getattr(r, 'status', None) in ('unresolved', 'text'):
+            continue                    # a comment's words are not symbols
         text = r.fargs if getattr(r, 'fargs', None) is not None else r.args
         for m in SYMBOL.finditer((text or '').upper()):
             n = m.group(0)
@@ -943,16 +1350,21 @@ def join(note, more):
 
 
 # ---- report ------------------------------------------------------------------
-ORDER = ['clean', 'hex', 'source', 'hexonly', 'text', 'unresolved']
+ORDER = ['clean', 'hex', 'source', 'data', 'hexonly', 'text', 'unresolved']
 LABEL = {'clean': 'clean',
          'hex': 'repaired the hex from the source',
          'source': 'repaired the source from the hex',
-         'hexonly': 'READ FROM THE OBJECT COLUMN ALONE',
+         'data': 'object column, and the DATA agrees',
+         'hexonly': 'READ FROM ONE OBJECT COLUMN ALONE',
          'text': 'no object bytes',
          'unresolved': 'UNRESOLVED'}
+MARK = {'unresolved': '!', 'hexonly': '?'}
 
 
 def report(block, verbose, out=sys.stdout):
+    """Write the block's report; returns (counts by status, problems), where
+    the problems are what a human must look at beyond the unresolved lines:
+    two-witness lines the DATA contradicts."""
     counts = {k: 0 for k in ORDER}
     for r in block.recs:
         counts[r.status] = counts.get(r.status, 0) + 1
@@ -965,15 +1377,24 @@ def report(block, verbose, out=sys.stdout):
     for k, v in sorted(block.tally.items()):
         if v:
             out.write('  %-34s %4d\n' % (k, v))
+    if block.stream is not None:
+        out.write('  DATA statements at lines %d-%d; their first value is address %04X\n'
+                  % (block.stream[0].n, block.stream[-1].n,
+                     (block.dbase - block.doff) & 0xFFFF))
+    conflicts = 0
     for r in block.recs:
         note = join(r.anote, r.note)
-        if r.status in ('unresolved', 'hexonly') or (verbose and note):
-            out.write('  %s %-5s %s\n' % ({'unresolved': '!', 'hexonly': '?'}.get(r.status, ' '),
+        conflicts += r.conflict
+        if r.status in MARK or r.conflict or (verbose and note):
+            out.write('  %s %-5s %s\n' % ('#' if r.conflict else MARK.get(r.status, ' '),
                                           '%04X' % r.addr if r.addr is not None else '----',
                                           note or r.raw.strip()))
             if r.status == 'unresolved':
                 out.write('        scanned: %s\n' % r.raw.strip())
-    return counts
+    for text, matters in block.data_damage():
+        if matters or verbose:
+            out.write('  %s %s\n' % ('#' if matters else ' ', text))
+    return counts, conflicts
 
 
 def main(argv=None):
@@ -994,6 +1415,7 @@ def main(argv=None):
     if not blocks:
         sys.stderr.write('%s: no listing found\n' % a.file)
         return 2
+    streams = find_data(text)
     if a.out:
         os.makedirs(a.out, exist_ok=True)
     total = {k: 0 for k in ORDER}
@@ -1002,12 +1424,12 @@ def main(argv=None):
         if a.block and i != a.block:
             continue
         b = Block(recs, '%s block %d (lines %d-%d)'
-                  % (os.path.basename(a.file), i, recs[0].n, recs[-1].n))
+                  % (os.path.basename(a.file), i, recs[0].n, recs[-1].n), streams)
         b.run()
-        counts = report(b, a.verbose)
+        counts, conflicts = report(b, a.verbose, sys.stdout)
         for k in ORDER:
             total[k] += counts.get(k, 0)
-        bad += counts.get('unresolved', 0)
+        bad += counts.get('unresolved', 0) + conflicts
         problems = b.verify()
         for p in problems:
             sys.stdout.write('  ! re-assembly: %s\n' % p)
@@ -1019,7 +1441,8 @@ def main(argv=None):
             sys.stdout.write('  -> %s\n' % path)
     seen = sum(total.values())
     sys.stdout.write('%d lines: %d clean, %d repaired, %d unresolved\n'
-                     % (seen, total['clean'], total['hex'] + total['source'],
+                     % (seen, total['clean'],
+                        total['hex'] + total['source'] + total['data'],
                         total['unresolved']))
     return 1 if bad else 0
 
