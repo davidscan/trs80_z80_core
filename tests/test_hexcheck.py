@@ -344,6 +344,62 @@ class HexCheck(unittest.TestCase):
         self.assertIsNotNone(blocks[0].stream)
         self.assertEqual(blocks[0].verify(), [])
 
+    # -- yield on ruined pages ---------------------------------------------
+    def test_a_label_whose_first_letter_became_a_digit(self):
+        """8UFFER is BUFFER: the symbol reader wants a letter first, so the
+        name is invisible to it, and the line assembled to nothing."""
+        line = '7D27 DD21427D 00320 LD      IX,BUFFER'
+        self.assertIn(line, self.listing, 'the fixture moved')
+        (b,) = check(self.listing.replace(line, line.replace('BUFFER', '8UFFER')))
+        (r,) = [r for r in b.recs if r.addr == 0x7D27]
+        self.assertEqual((r.status, r.bytes, r.fargs), ('clean', b'\xdd\x21\x42\x7d', 'IX,BUFFER'))
+        self.assertEqual(b.verify(), [])
+
+    def test_lines_the_scan_lost_do_not_move_the_line_after_them(self):
+        """A two-byte line ruined past parsing, and the next line's address
+        scanned right, two bytes on -- which is one slip from where the
+        last parsed line ended, so the chain used to 'repair' it back.  The
+        ruined line on the page and the editor's line numbers skipping one
+        say the gap is the page's, not the scan's."""
+        lines = self.listing.splitlines()
+        i = next(k for k, l in enumerate(lines) if l.startswith('7D10'))
+        self.assertTrue(lines[i + 1].startswith('7D12') and lines[i + 2].startswith('7D13')
+                        and lines[i + 3].startswith('7D14') and lines[i + 4].startswith('7D16'),
+                        'the fixture moved')
+        lines[i] = '?!;: ruined'
+        lines[i + 2] = '&*() ruined'           # and two after, so nothing follows
+        lines[i + 3] = '<>{} ruined'           # to confirm the address either
+        (b,) = check('\n'.join(lines) + '\n')
+        (r,) = [r for r in b.recs if r.lineno == 210]
+        self.assertEqual(r.addr, 0x7D12)
+        self.assertIn('lost before it', r.anote)
+        (r,) = [r for r in b.recs if r.lineno == 240]
+        self.assertEqual((r.addr, r.status), (0x7D16, 'clean'))
+        self.assertEqual(self.resolved([b])[1], 0)
+        self.assertEqual(b.verify(), [])
+
+    def test_a_b_scanned_as_an_e_is_a_shape(self):
+        """DEFE for DEFB, 31 times in the reference library: B and E look
+        alike to the scan, so a hex field E7 is B7 with one slip, and the
+        DATA saying 183 makes the object column a two-witness line."""
+        self.assertTrue(hexcheck.plausible_hex('E7', b'\xb7'))
+        line = '7D1E B7 00270 OR      A'
+        self.assertIn(line, self.listing, 'the fixture moved')
+        page = self.listing.replace(line, '7D1E E7 00270 OB      Q')
+        (b,) = check(page + '\n' + render_data(self.res))
+        (r,) = [r for r in b.recs if r.addr == 0x7D1E]
+        self.assertEqual((r.status, r.bytes), ('data', b'\xb7'))
+
+    def test_a_column_rule_stuck_to_a_line_number(self):
+        cases = [('TFDF E601 00210» AND o1H', ('7FDF', 'E601', 210, 'AND o1H')),
+                 ('TFE1 FEO —-00220«S CP o1H', ('7FE1', 'FE0', 220, 'CP o1H')),
+                 ('7FE6 3EOA = 00240. LD A,OAH', ('7FE6', '3E0A', 240, 'LD A,OAH'))]
+        for raw, want in cases:
+            got = hexcheck.parse_line(raw, 200, None)
+            self.assertIsNotNone(got, raw)
+            addr, hexs, _, _, lineno, src = got
+            self.assertEqual((addr, hexs, lineno, src), want, raw)
+
     def test_a_page_in_the_manuals_shape(self):
         """Listing, prose, a loader whose loop crosses a page break, and the
         DATA statement at the end: every byte-bearing line witnessed, the

@@ -219,8 +219,9 @@ nothing without `--out`; the report goes to stdout.
 
 It finds the listings in a file that is mostly prose (a listing parted
 by a page break is joined back where its addresses carry on), splits
-each line into its columns, chains the addresses, assembles every source
-line on its own at its own address with `z80.asm`, and reconciles. Each
+each line into its columns, chains the addresses (keeping a scanned
+address that sits a few bytes past lines the page lost), assembles every
+source line on its own at its own address with `z80.asm`, and reconciles. Each
 line comes out **clean** (the columns agree), **repaired** (one column
 was damaged and the other two say how), **read off one object column
 alone** (the source was destroyed, so the bytes are a reading of one

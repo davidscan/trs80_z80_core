@@ -29,15 +29,21 @@ WHAT IT DOES
   1. Splits every line into address / hex / line-number / source.  In the
      address, hex and line-number fields the alphabet is digits (and
      A-F), so O->0, l/I->1, S->5, G->6, Z->2, @->0 and their friends
-     resolve mechanically.  A listing parted by a page break -- the page
-     number, the running head, 'Program continued' -- is joined back where
-     its addresses or line numbers carry on across the break.
+     resolve mechanically, and a column rule the scan stuck to a line
+     number (00210», 00240.) is cut off it.  A listing parted by a page
+     break -- the page number, the running head, 'Program continued' --
+     is joined back where its addresses or line numbers carry on across
+     the break.
   2. Chains the addresses: each line's address is the previous one plus
      its length, so a damaged address is repaired from its neighbours and
-     a damaged hex field's LENGTH is known independently.
+     a damaged hex field's LENGTH is known independently.  Where the page
+     lost lines -- lines that would not parse at all, or the editor's
+     line numbers skipping -- a scanned address a few bytes ahead of the
+     chain is the address of the line after them, and is kept.
   3. Takes the labels the listing itself defines (a label's value is its
      own line's address) and assembles each source line alone at its own
-     address with z80.asm.
+     address with z80.asm.  A name one slip from exactly one of those
+     labels is that label, even when the slip put a digit first (8UFFER).
   4. Reconciles, line by line, into one of four outcomes:
        clean       the columns agree as printed;
        repaired    one column was damaged and the other two say how -- the
@@ -144,7 +150,8 @@ SHAPES = [set('O0Qo@DU'), set('1lI|!i'), set('2Zz'), set('5S$s'), set('6Gb'),
           set('ce'), set('tf'), set('uv'), set('il'), set('Jj)'), set('yv'),
           set('aou'), set('sS5'), set('LI1'), set('DO0'), set('Xx'), set('Zz'),
           set('IJ'), set('aJ'), set('uL'), set('pD'), set('rP'), set('4H'),
-          set('4u'), set('ED'), set('CO'), set('bD'), set('tE'), set('oe')]
+          set('4u'), set('ED'), set('CO'), set('bD'), set('tE'), set('oe'),
+          set('BE')]     # DEFE for DEFB 31 times in the reference library
 
 
 SHAPE_OF = {}
@@ -274,6 +281,21 @@ def as_lineno(tok):
     return int(v) if v and v.isdigit() else None
 
 
+def lineno_token(tok):
+    """The line number a token holds, allowing for the column rule the scan
+    stuck to it (00210», —-00220«S, 00240.): read as printed first, and only
+    if that fails with the marks stripped off the ends."""
+    v = as_lineno(tok)
+    if v is None:
+        # Only a MARK may be cut off: the digits up to the first character
+        # that is neither letter nor digit.  A hex field's last letter is
+        # not a mark (1403C is not line 1403).
+        m = re.match(r'^[^0-9A-Za-z]*([^\W_]{4,}?)[^0-9A-Za-z]', tok)
+        if m:
+            v = as_lineno(m.group(1))
+    return v
+
+
 def is_data_word(tok):
     """Is this token the BASIC keyword DATA, allowing the scan one slip of
     shape (OATA, DA7A)?  Nothing an assembler prints is four letters from it."""
@@ -389,6 +411,7 @@ class Rec:
         self.data = []              # readings of this line from the DATA statements
         self.dpos = None            # where in the DATA stream those start
         self.conflict = False       # settled on two witnesses, and the DATA disagrees
+        self.lost = 0               # lines of the page before this one that would not parse
 
 
 def split_operand(text):
@@ -436,15 +459,15 @@ def parse_line(raw, prev_lineno, prev_addr):
         return None                     # a BASIC DATA statement, not a listing line
     last = None
     for i, t in enumerate(toks[:4]):
-        if 4 <= len(t) <= 6 and as_lineno(t) is not None:
+        if 4 <= len(t) <= 10 and lineno_token(t) is not None:
             last = i
     if last == 0:
         # Nothing before it: a line number only when the line reads as one.
-        ln = as_lineno(toks[0])
+        ln = lineno_token(toks[0])
         if not ((len(toks) > 1 and toks[1][:1] in ';*')
                 or (prev_lineno is not None and 0 < ln - prev_lineno <= 20)):
             last = None
-    lineno = as_lineno(toks[last]) if last is not None else None
+    lineno = lineno_token(toks[last]) if last is not None else None
     if last is None:
         # No line number: the columns run while the tokens are hex, and what
         # is left must be a statement or nothing, or this is not a listing.
@@ -456,7 +479,9 @@ def parse_line(raw, prev_lineno, prev_addr):
             return None
         src = ' '.join(rest)
     else:
-        cols = toks[:last]
+        # A column rule the scan read as a mark of its own ('=', '»') is not
+        # a column.
+        cols = [t for t in toks[:last] if any(c.isalnum() for c in t)]
         src = ' '.join(toks[last + 1:])
     addr = None
     if cols and 3 <= len(cols[0]) <= 5 and as_hex(cols[0]) is not None:
@@ -483,11 +508,12 @@ def find_blocks(text, min_lines=4):
     ends at two lines that are not listing-shaped, or at an END statement; the
     line-number column is too badly scanned to mark a boundary with."""
     lines = text.splitlines()
-    blocks, cur, prev_ln, prev_addr, gap = [], [], None, None, 0
+    blocks, cur, prev_ln, prev_addr, gap, lost = [], [], None, None, 0, 0
     for n, raw in enumerate(lines, 1):
         p = parse_line(raw, prev_ln, prev_addr)
         if p is None:
             gap += 1
+            lost += bool(raw.strip())
             if gap > 1 and cur:
                 blocks.append(cur)
                 cur, prev_ln, prev_addr = [], None, None
@@ -499,6 +525,8 @@ def find_blocks(text, min_lines=4):
         r.hexs, r.rawhex, r.dirty, r.lineno, r.src = hexs, rawhex, dirty, lineno, src
         if not cur and blocks and continues(blocks[-1], r, lines[blocks[-1][-1].n:n - 1]):
             cur = blocks.pop()           # the same listing, across a page break
+        r.lost = lost if cur else 0
+        lost = 0
         cur.append(r)
         if lineno is not None:
             prev_ln = lineno
@@ -723,17 +751,34 @@ class Block:
         character, says independently how long the line must be."""
         recs = self.recs
         lens = [self.length_of(r) for r in recs]
+        step = self.lineno_step()
         fixed, pc = 0, None
         for i, r in enumerate(recs):
+            r.gap = False
             if r.addr is None:
                 if r.hexs and pc is not None:
                     r.addr, r.anote = pc, 'address %04X from the chain' % pc
             elif pc is not None and r.addr != pc \
                     and not self.fits_forward(recs, lens, i) \
                     and ocr_distance('%04X' % r.addr, '%04X' % pc) <= 1.5:
-                r.anote = 'address %04X->%04X' % (r.addr, pc)
-                r.addr = pc
-                fixed += 1
+                # A scanned address ahead of the chain, where the page has
+                # lines that would not parse or the editor's line numbers
+                # skip, is the address of a line after ones the scan lost:
+                # the chain closes a gap the page made, and must not.
+                # At most eight bytes a lost line: further ahead than that,
+                # the scanned address is the damage (a 3 read as a 5 in the
+                # address column reads the same way in the hex column, and
+                # the chain is what breaks the two columns' agreement).
+                lost = self.lost_before(recs, i, step)
+                ahead = (r.addr - pc) & 0xFFFF
+                if lost and 0 < ahead <= 8 * lost:
+                    r.anote = ('address %04X kept: %d line%s lost before it'
+                               % (r.addr, lost, '' if lost == 1 else 's'))
+                    r.gap = True        # the chain's length claim does not cross this
+                else:
+                    r.anote = 'address %04X->%04X' % (r.addr, pc)
+                    r.addr = pc
+                    fixed += 1
             if r.addr is None:
                 pc = None
             elif lens[i] is not None:
@@ -743,6 +788,30 @@ class Block:
             else:
                 pc = None               # a damaged object field breaks the chain
         self.tally['addresses repaired'] = fixed
+
+    def lineno_step(self):
+        """The editor's usual increment between consecutive line numbers."""
+        steps = {}
+        lns = [r.lineno for r in self.recs if r.lineno is not None]
+        for a, b in zip(lns, lns[1:]):
+            if 0 < b - a <= 100:
+                steps[b - a] = steps.get(b - a, 0) + 1
+        return max(steps, key=steps.get) if steps else None
+
+    def lost_before(self, recs, i, step):
+        """How many lines the page lost before this one, on two signals: the
+        lines between it and the one before that would not parse at all,
+        and the editor's line numbers skipping more than their step."""
+        lost = recs[i].lost
+        prev = [x.lineno for x in recs[:i] if x.lineno is not None]
+        if step and recs[i].lineno is not None and prev:
+            # Against the highest number so far: line numbers only rise, so
+            # a scanned one that fell (390 read as 30) is the damage, not a
+            # gap of thirty-six lines before the next.
+            skipped = (recs[i].lineno - max(prev)) // step - 1
+            if 0 < skipped <= 10:       # past ten it is the line number that is wrong (92690 for 02690)
+                lost = max(lost, skipped)
+        return lost
 
     def length_of(self, r):
         """How many bytes this line holds, as well as it is known."""
@@ -884,7 +953,7 @@ class Block:
         # LENGTH, which says nothing about the content, so it carries a line
         # only where the object field is unreadable and says nothing either.
         why, printed = None, None
-        for op, args, tier in source_candidates(r.op, r.args):
+        for op, args, tier in self.relabeled(source_candidates(r.op, r.args)):
             if tier:
                 break
             b, err, missing = assemble_one(op, args, r.addr, self.symbols)
@@ -912,7 +981,7 @@ class Block:
                 if tier == 2 and want not in plain:
                     continue        # one reading a column: nothing else vouches for it
                 hint = from_hex(want, r.addr, self.symbols)
-                for op, args, t in source_candidates(r.op, r.args, hint):
+                for op, args, t in self.relabeled(source_candidates(r.op, r.args, hint)):
                     if t != tier:
                         continue
                     if tier == 2 and not supported(r, op, args):
@@ -982,6 +1051,33 @@ class Block:
             r.note = join(r.note, '%s %r->%r'
                           % ('source' if status == 'source' else 'read',
                              fieldtext(r.op, r.args), fieldtext(op, args)))
+
+    DIGITLED = re.compile(r'(?<![A-Z0-9])[0-9][A-Z0-9_@?$]*[A-Z_@?][A-Z0-9_@?$]*')
+
+    def relabeled(self, cands):
+        """The candidates, and after each one the same with an operand token
+        that begins with a digit yet is no number read as the listing's label
+        it is one slip from: 8UFFER is BUFFER.  A name whose first letter the
+        scan turned into a digit is invisible to the symbol reader, which
+        wants a letter first; this is resolve_name's rule (a scanned name
+        close to exactly one label the listing defines is that label) for
+        the tokens resolve_name never sees."""
+        for op, args, tier in cands:
+            yield op, args, tier
+            if not args:
+                continue
+            fixed = args
+            for m in self.DIGITLED.finditer(args.upper()):
+                tok = m.group(0)
+                if asm.number(tok) is not None or (tok.endswith('H') and as_hex(tok[:-1])):
+                    continue
+                near = sorted((ocr_distance(tok, n), n) for n in self.symbols
+                              if n not in self.inferred and close_enough(tok, n, 0.35))
+                if len(near) == 1 or (len(near) > 1 and near[0][0] < near[1][0]):
+                    fixed = re.sub(r'(?<![A-Z0-9])%s(?![A-Z0-9])' % re.escape(tok),
+                                   near[0][1], fixed, flags=re.I)
+            if fixed != args:
+                yield op, fixed, tier
 
     def resolve_name(self, r, op, args, name, wants, clen):
         """A name the line uses that nothing defines.  It is first read against
@@ -1069,6 +1165,8 @@ class Block:
         recs = [x for x in self.recs if x.addr is not None and (x.hexs or x.op == 'ORG')]
         for i, x in enumerate(recs):
             if x is r and i + 1 < len(recs):
+                if getattr(recs[i + 1], 'gap', False):
+                    return None         # lines the page lost lie between
                 d = (recs[i + 1].addr - r.addr) & 0xFFFF
                 return d if 0 < d <= 8 else None
         return None
