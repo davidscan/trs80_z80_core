@@ -51,6 +51,10 @@ PROTO = '1'
 NAME = 'trs80_z80_core'
 SENTINEL = 0x2FFD
 ROM_TOP = 0x3000
+# The ROM entry points rom_entry() serves as traps (the sentinel apart):
+# the USR argument and result exchange, CLS, and READY.  tools/romcalls.py
+# reads this to say which of a library's ROM calls the core answers.
+SERVED = (0x0A7F, 0x0A9A, 0x01C9, 0x1A19)
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
 KBD_LO, KBD_HI = 0x3800, 0x3900
 TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz

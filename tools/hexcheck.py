@@ -105,6 +105,11 @@ WHAT IT DOES
      fitted from the object code: that would make two witnesses of one
      column under a symbol the scan invented.  The column rule the scan
      read as '©', '=', '—' between the fields is a mark, not an operand.
+     An EQU whose value column and operand disagree by one slip (0A7EH
+     against 0A7FH) is DISPUTED: one witness each, so a source line that
+     assembles only through that name cannot repair the hex with it, and
+     a use in the code whose bytes hold the operand's value settles the
+     equate that way.
 
 WHAT IT DOES NOT DO
   Comments carry no bytes, so nothing can check them; they are passed
@@ -225,7 +230,11 @@ def near_hex(scan, b):
     grows with the field, but one slip in two bytes is already a lot."""
     if not scan:
         return False
-    return ocr_distance(scan.upper(), b.hex().upper()) < max(1.5, 0.2 * len(scan))
+    # Compared in the field's own alphabet: a '(' for C or an O for 0 is
+    # a mechanical reading, not a slip to pay for ((D3308 against CD3300
+    # is the one slip 8 for 0, not two).
+    scan = as_hex(scan) or scan.upper()
+    return ocr_distance(scan, b.hex().upper()) < max(1.5, 0.2 * len(scan))
 
 
 def shape_cost(scan, want):
@@ -241,7 +250,7 @@ def plausible_hex(scan, b):
     """Is the scanned object field these bytes with nothing worse than shape
     slips -- the strict form of near_hex, for one object column to vouch
     for the other's reading."""
-    return bool(scan) and shape_cost(scan.upper(), b.hex().upper()) <= 1.0
+    return bool(scan) and shape_cost(as_hex(scan) or scan.upper(), b.hex().upper()) <= 1.0
 
 
 def hexlit(v):
@@ -645,6 +654,7 @@ class Block:
         self.dbase = None
         self.symbols = {}
         self.inferred = {}          # names the object code gave a value to
+        self.disputed = {}          # equates whose value column and operand disagree by a slip
         self.org = None
         self.tally = {}
 
@@ -654,13 +664,17 @@ class Block:
         the lines settled on two witnesses are what the DATA statements are
         aligned against, so their bytes reach the other lines a round later."""
         self.parse_sources()
+
+        def state():
+            return [(r.addr, r.bytes, r.status, getattr(r, 'equ_value', None)) for r in self.recs]
         for _ in range(rounds):
-            before = [(r.addr, r.bytes, r.status) for r in self.recs]
+            before = state()
             self.chain_addresses()
             self.collect_symbols()
             self.align_data()
             self.reconcile()
-            if before == [(r.addr, r.bytes, r.status) for r in self.recs]:
+            self.settle_equates()
+            if before == state():
                 break
         return self
 
@@ -937,7 +951,7 @@ class Block:
         """A label's value is its own line's address -- the listing defines its
         own symbol table, in the column that is hardest to misread.  It is
         rebuilt from scratch each round, because the addresses move."""
-        self.symbols, self.inferred = {}, {}
+        self.symbols, self.inferred, self.disputed = {}, {}, {}
         for r in self.recs:
             if r.label and r.addr is not None and r.label not in self.symbols:
                 self.symbols[r.label] = r.addr
@@ -946,6 +960,11 @@ class Block:
         for r in self.recs:
             if r.op not in ('EQU', 'DEFL') or not r.label:
                 continue
+            if getattr(r, 'equ_value', None) is not None:
+                self.symbols[r.label] = r.equ_value    # settled by a use, an earlier round
+                r.fargs = hexlit(r.equ_value)
+                continue
+            vals = []
             for args in mechanical(r.args):
                 try:
                     v = asm.Expr(args, r.n).eval(self.symbols, r.addr or 0)
@@ -955,12 +974,47 @@ class Block:
                     self.symbols[r.label] = v
                     r.fargs = args
                     break
+                vals.append(v & 0xFFFF)
             else:
                 v = self.symbols.get(r.label)
                 r.fargs = hexlit(v) if v is not None else r.args
                 if v is not None and r.args != r.fargs:
                     r.note = join(r.note, 'equate %r->%s from the value column'
                                   % (r.args, r.fargs))
+                near = [p for p in vals if v is not None
+                        and ocr_distance('%04X' % p, '%04X' % v) <= 1.0]
+                if near:
+                    # The value column says 0A7EH, the operand 0A7FH: one
+                    # witness each.  The value column stands for now, but
+                    # DISPUTED: a source line that assembles only through
+                    # this name cannot repair the hex with it, and a use in
+                    # the code whose bytes hold the operand's value settles
+                    # the equate that way (settle_equates).
+                    self.disputed[r.label] = (r, near[0])
+                    r.note = join(r.note, 'disputed: the operand reads %s' % hexlit(near[0]))
+
+    def uses_disputed(self, args):
+        return any(re.search(r'(?<![A-Z0-9_])%s(?![A-Z0-9_])' % re.escape(n), (args or '').upper())
+                   for n in self.disputed)
+
+    def settle_equates(self):
+        """A disputed equate is settled by a line that names it and whose
+        bytes, settled on the object column, hold the operand's value."""
+        for r in self.recs:
+            if getattr(r, 'equ_value', None) is not None:     # reconcile() wiped this round's notes
+                r.note = join(r.note, 'equate settled as %s by its use in the code, against the value column'
+                              % hexlit(r.equ_value))
+        for name, (r, p) in list(self.disputed.items()):
+            word = bytes((p & 0xFF, p >> 8))
+            for x in self.recs:
+                if x is r or not x.bytes or x.status not in CONFIDENT + ('hexonly',):
+                    continue
+                if word in x.bytes and any(close_enough(tok, name, 0.35) for tok in
+                                           re.findall(r'[A-Z_@?][A-Z0-9_@?$]*', (x.args or '').upper())):
+                    r.equ_value = p
+                    r.note = join(r.note, 'settled as %s by its use at %04X' % (hexlit(p), x.addr))
+                    del self.disputed[name]
+                    break
 
     # -- 3/4. reconcile every line -----------------------------------------
     def reconcile(self):
@@ -1063,6 +1117,8 @@ class Block:
                 why = why or err
                 continue
             printed = printed or b
+            if self.uses_disputed(args) and b not in (both or [want]):
+                continue        # a disputed equate is no witness against the object column's first reading
             if re.fullmatch(r"'.'", args or '') and norm(args) != norm(unquote(r.args or '')):
                 # The operand is a garbled token read as a quoted character
                 # (‘Et, wT): the object column has to meet it exactly or by

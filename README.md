@@ -276,6 +276,33 @@ printed as its own run of lines: those pages hold no line to read.
 | `--min-lines N` | `4` | the shortest run of listing-shaped lines taken for a listing | a short fragment, or less noise from tables |
 | `-v` | off | name every repair, not just the lines needing a human; and every DATA value read through a shape | seeing what it changed and why |
 
+### `python3 tools/romcalls.py FILE...`
+
+The trap measurement: which ROM entry points do a library's listings
+call? The core holds no ROM, so a routine that calls into 0000H-2FFFH gets
+a trap that reimplements the documented entry point or `ERR rom`, and
+which entries earn a trap is a question of what period programs actually
+call. This runs `hexcheck` over every file given, takes each line it
+settled on two witnesses, disassembles the reconciled bytes and tallies
+every `CALL`, `JP`, `JR` and `RST` whose target lies in ROM. Lines read
+off one object column alone are counted apart and never decide the order;
+data lines (`DEFB`, `DEFW`) are not calls; a branch that lands inside the
+listing itself (relocatable code assembled at a low address) is not a ROM
+call. **Writes:** nothing; the table goes to stdout.
+
+Give it the programming books, not the ROM disassemblies. One row per
+entry point, most called first: the address, the name the period manuals
+give it (documentation names only), calls from two-witness lines, calls
+from one-column lines, files, and whether the core serves it today
+(`z80.coprocess.SERVED`). The last line gives the totals and the served
+share. Exit 0; 2 if no file held a listing.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `FILE...` | none | texts holding scanned listings | the pages of a book, or a whole library |
+| `--top N` | all | print the N most called entries only | the short list |
+| `-v` | off | every call on stderr with its scanned line, and one line per file | judging a reading, finding the page |
+
 ### Corpus measurement tools
 
 The next four read a local archive of period listings that is not
