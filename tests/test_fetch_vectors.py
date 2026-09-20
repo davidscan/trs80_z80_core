@@ -93,5 +93,81 @@ class TestUnpack(unittest.TestCase):
             self.assertEqual(os.listdir(os.path.join(d, 'v1')), [])
 
 
+class TestPresentMeansHashed(unittest.TestCase):
+    """A local file counts only if it hashes to the pin: names and sizes
+    survive a re-pin and an interrupted fetch, content does not."""
+
+    # the OLD pin's copy: the same names, the same sizes, other bytes
+    STALE = {'v1/00.json': b'[{"name": "XX"}]\n', 'v1/dd cb __ 06.json': b'[]\n'}
+
+    def seed(self, d, contents, stray=True):
+        os.makedirs(os.path.join(d, 'v1'))
+        for path, data in contents.items():
+            with open(os.path.join(d, path), 'wb') as f:
+                f.write(data)
+        if stray:
+            with open(os.path.join(d, 'v1', 'gone upstream.json'), 'wb') as f:
+                f.write(b'[]\n')
+
+    def test_local_state_tells_them_apart(self):
+        self.assertEqual(len(self.STALE['v1/00.json']), len(GOOD['v1/00.json']))
+        with tempfile.TemporaryDirectory() as d:
+            self.seed(d, {'v1/00.json': self.STALE['v1/00.json']})
+            good, bad, missing, strays = fv.local_state(manifest(), d)
+            self.assertEqual((good, bad, missing, strays),
+                             ([], ['v1/00.json'], ['v1/dd cb __ 06.json'],
+                              ['gone upstream.json']))
+
+    def test_fetch_all_refetches_another_pins_vectors(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.seed(d, self.STALE)
+            saved = (fv.DEST, fv.V1, fv.upstream_files, fv._download)
+            fetched = []
+
+            def download(url, dest, timeout=1800):
+                fetched.append(url)
+                tarball(dest, [('z80-abc/' + p, b) for p, b in GOOD.items()])
+            fv.DEST, fv.V1 = d, os.path.join(d, 'v1')
+            fv.upstream_files = lambda lock, refresh=False: manifest()
+            fv._download = download
+            try:
+                fv.fetch_all({'sha': 'abc'})
+                state = fv.local_state(manifest(), d)
+                fv.fetch_all({'sha': 'abc'})             # now it IS present
+            finally:
+                fv.DEST, fv.V1, fv.upstream_files, fv._download = saved
+            self.assertEqual(len(fetched), 1)
+            self.assertEqual(state, (sorted(GOOD), [], [], []))
+
+    def test_a_short_tarball_is_not_a_fetch(self):
+        with tempfile.TemporaryDirectory() as d:
+            saved = (fv.DEST, fv.V1, fv.upstream_files, fv._download)
+            fv.DEST, fv.V1 = d, os.path.join(d, 'v1')
+            fv.upstream_files = lambda lock, refresh=False: manifest()
+            fv._download = lambda url, dest, timeout=1800: tarball(
+                dest, [('z80-abc/v1/00.json', GOOD['v1/00.json'])])
+            try:
+                with self.assertRaises(SystemExit):
+                    fv.fetch_all({'sha': 'abc'})
+            finally:
+                fv.DEST, fv.V1, fv.upstream_files, fv._download = saved
+
+    def test_status_does_not_vouch_for_files_it_cannot_check(self):
+        """After --update-lock no list for the new pin is cached."""
+        with tempfile.TemporaryDirectory() as d:
+            self.seed(d, self.STALE, stray=False)
+            saved = (fv.DEST, fv.V1, fv.MANIFEST)
+            fv.DEST, fv.V1, fv.MANIFEST = d, os.path.join(d, 'v1'), os.path.join(d, '.manifest.json')
+            out = io.StringIO()
+            stdout, sys.stdout = sys.stdout, out
+            try:
+                fv.status(dict(fv.load_lock(), file_count=2))
+            finally:
+                sys.stdout = stdout
+                fv.DEST, fv.V1, fv.MANIFEST = saved
+            self.assertIn('NOT CHECKED against this pin', out.getvalue())
+            self.assertNotIn('2/2', out.getvalue())
+
+
 if __name__ == '__main__':
     unittest.main()

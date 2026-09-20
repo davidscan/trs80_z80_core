@@ -201,13 +201,9 @@ def check_manifest(lock, files, where):
 def upstream_files(lock, refresh=False):
     """[(path, size, blob sha), ...] for v1/, from the pinned tree, checked
     against the lock's v1_tree hash whether fetched or cached."""
-    if not refresh and os.path.exists(MANIFEST):
-        with open(MANIFEST) as f:
-            cached = json.load(f)
-        if cached.get('sha') == lock['sha'] and all(len(e) == 3 for e in cached['files']):
-            files = [tuple(e) for e in cached['files']]
-            check_manifest(lock, files, 'cached manifest')
-            return files
+    files = None if refresh else cached_files(lock)
+    if files is not None:
+        return files
 
     data = json.loads(_get('%s/git/trees/%s?recursive=1' % (API, lock['sha'])))
     if data.get('truncated'):
@@ -219,6 +215,57 @@ def upstream_files(lock, refresh=False):
     with open(MANIFEST, 'w') as f:
         json.dump({'sha': lock['sha'], 'files': files}, f)
     return files
+
+
+def cached_files(lock):
+    """The pinned file list from the cache alone (no network), or None when
+    no list for THIS pin is cached.  Checked against v1_tree like any other."""
+    if not os.path.exists(MANIFEST):
+        return None
+    with open(MANIFEST) as f:
+        cached = json.load(f)
+    if cached.get('sha') != lock['sha'] or not all(len(e) == 3 for e in cached['files']):
+        return None
+    files = [tuple(e) for e in cached['files']]
+    check_manifest(lock, files, 'cached manifest')
+    return files
+
+
+def local_state(files, dest_root=None):
+    """(good, bad, missing, strays) for the local copy against the pinned list.
+
+    PRESENT MEANS HASHED.  A name, or a name and a size, says nothing about
+    which pin a file came from: after --update-lock the old pin's vectors
+    are all still there under the same names, and an interrupted fetch
+    leaves files that exist.  So a local file counts only if its bytes hash
+    to its pinned blob SHA (1.3 GB hashes in about a second).  `strays` are
+    .json files in v1/ the pin does not name -- an older pin's leftovers,
+    which the test runner would execute with the rest."""
+    dest_root = DEST if dest_root is None else dest_root
+    good, bad, missing = [], [], []
+    for path, _size, sha in files:
+        dest = os.path.join(dest_root, path)
+        try:
+            with open(dest, 'rb') as f:
+                ok = blob_sha(f.read()) == sha
+        except OSError:
+            missing.append(path)
+            continue
+        (good if ok else bad).append(path)
+    v1 = os.path.join(dest_root, 'v1')
+    named = set(os.path.basename(path) for path, _, _ in files)
+    strays = sorted(n for n in (os.listdir(v1) if os.path.isdir(v1) else [])
+                    if n.endswith('.json') and n not in named)
+    return good, bad, missing, strays
+
+
+def drop_strays(strays, dest_root=None):
+    """Remove v1/*.json files the pin does not name (fetched data, never ours)."""
+    dest_root = DEST if dest_root is None else dest_root
+    for n in strays:
+        os.remove(os.path.join(dest_root, 'v1', n))
+    if strays:
+        print('  removed %d file(s) the pinned list does not name' % len(strays))
 
 
 # --------------------------------------------------------------------
@@ -280,12 +327,9 @@ def fetch_pages(lock, pages, limit=None, force=False):
         want = capped
 
     os.makedirs(V1, exist_ok=True)
-    todo = []
-    for path, size, sha in want:
-        dest = os.path.join(DEST, path)
-        if not force and os.path.exists(dest) and os.path.getsize(dest) == size:
-            continue
-        todo.append((path, size, sha, dest))
+    good = set() if force else set(local_state(want)[0])
+    todo = [(path, size, sha, os.path.join(DEST, path))
+            for path, size, sha in want if path not in good]
 
     have = len(want) - len(todo)
     if not todo:
@@ -325,11 +369,14 @@ def fetch_all(lock, force=False):
     """Full suite via one tarball -- 1604 files, 1.37 GB extracted."""
     files = upstream_files(lock)
     if not force and os.path.isdir(V1):
-        present = len([n for n in os.listdir(V1) if n.endswith('.json')])
-        if present >= len(files):
-            print('full suite already present (%d files); --force to refetch' % present)
-            return sorted(os.path.join(V1, n) for n in os.listdir(V1)
-                          if n.endswith('.json'))
+        good, bad, missing, strays = local_state(files)
+        if not bad and not missing:
+            drop_strays(strays)
+            print('full suite already present (%d files, each hashed against the pin); '
+                  '--force to refetch' % len(good))
+            return [os.path.join(DEST, path) for path in good]
+        print('local copy: %d file(s) match the pin, %d do not, %d missing'
+              % (len(good), len(bad), len(missing)))
 
     url = '%s/tar.gz/%s' % (CODELOAD, lock['sha'])
     os.makedirs(V1, exist_ok=True)
@@ -342,6 +389,10 @@ def fetch_all(lock, force=False):
 
     written = unpack(tarball, files)
     os.remove(tarball)
+    if len(written) != len(files):
+        sys.exit('the tarball held %d of the %d pinned files: the fetch is not complete'
+                 % (len(written), len(files)))
+    drop_strays(local_state(files)[3])
     return written
 
 
@@ -447,12 +498,23 @@ def status(lock):
         print('local   NOT FETCHED -- run with --all, or --pages main,cb')
         return
     names = [n for n in os.listdir(V1) if n.endswith('.json')]
-    size = sum(os.path.getsize(os.path.join(V1, n)) for n in names)
+    files = cached_files(lock)
+    if files is None:
+        # no file list for THIS pin here (a fresh --update-lock, or a copied
+        # tree): the names on disk say nothing about which pin they are from
+        print('local   %d file(s) on disk, NOT CHECKED against this pin -- '
+              'run with --all or --pages to fetch and check' % len(names))
+        return
+    good, bad, missing, strays = local_state(files)
+    size = sum(os.path.getsize(os.path.join(DEST, p)) for p in good)
     bypage = {}
-    for n in names:
-        k = page_of(n)
+    for p in good:
+        k = page_of(os.path.basename(p))
         bypage[k] = bypage.get(k, 0) + 1
-    print('local   %d/%d files, %s' % (len(names), lock['file_count'], _human(size)))
+    print('local   %d/%d files match the pin, %s' % (len(good), lock['file_count'], _human(size)))
+    if bad or strays:
+        print('        %d file(s) do NOT hash to the pin, %d are not named by it -- '
+              'run with --all' % (len(bad), len(strays)))
     for k in ('main', 'cb', 'ed', 'dd', 'fd', 'ddcb', 'fdcb'):
         if k in bypage:
             print('          %-5s %d' % (k, bypage[k]))
