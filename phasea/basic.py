@@ -236,37 +236,201 @@ ASSIGN_RE = re.compile(r'^\s*(?:LET\s+)?([A-Za-z][A-Za-z0-9]*[%!#]?)\s*=\s*(.+)$
                        re.S)
 
 
+NAME_RE = re.compile(r'([A-Za-z][A-Za-z0-9]*)([%!#$]?)')
+
+
+def var_key(name):
+    """The variable a name IS: Level II keeps two characters and the type.
+
+    ML, MLOAD and ML! are one variable; ML% and ML$ are others. A symbol
+    is constant only if nothing assigns to its variable under any name.
+    """
+    m = NAME_RE.match(name.strip())
+    if not m:
+        return None
+    suffix = m.group(2)
+    return m.group(1)[:2].upper() + ('' if suffix == '!' else suffix)
+
+
+def _split_top(text):
+    """Split on commas outside quotes and parentheses."""
+    out, cur, depth, in_q = [], [], 0, False
+    for c in text:
+        if c == '"':
+            in_q = not in_q
+        elif not in_q and c == '(':
+            depth += 1
+        elif not in_q and c == ')':
+            depth -= 1
+        elif not in_q and c == ',' and depth == 0:
+            out.append(''.join(cur))
+            cur = []
+            continue
+        cur.append(c)
+    out.append(''.join(cur))
+    return out
+
+
+def stored_names(stmt):
+    """Variables a statement stores into OTHER than by a plain assignment:
+    the targets of INPUT, LINE INPUT, INPUT#, READ and FOR. Array elements
+    are left out (they are never symbols)."""
+    s = stmt.strip()
+    up = s.upper()
+    m = re.match(r'FOR\s*([A-Z][A-Z0-9]*?[%!#]?)\s*=', up)
+    if m:
+        return [m.group(1)]
+    m = re.match(r'(?:LINE\s*)?INPUT|READ', up)
+    if not m:
+        return []
+    rest = s[m.end():].lstrip()
+    if rest.startswith('#'):                         # INPUT#n,
+        rest = rest.partition(',')[2]
+    rest = rest.lstrip()
+    if rest.startswith('"'):                         # INPUT "PROMPT";
+        end = rest.find('"', 1)
+        rest = rest[end + 1:] if end > 0 else ''
+        rest = rest.lstrip().lstrip(';,')
+    out = []
+    for item in _split_top(rest):
+        m = NAME_RE.match(item.strip())
+        if m and '(' not in item:
+            out.append(m.group(0))
+    return out
+
+
+# IF is reserved: no variable starts with it, so `IFA=1THEN...` is an IF.
+IF_RE = re.compile(r'^\s*IF', re.I)
+
+
+class Symbols(dict):
+    """constant_symbols' result: name -> value, plus WHERE a symbol stops
+    being one.
+
+    The dict itself holds only symbols that are constant everywhere.
+    `at(lineno)` is the view for a use on that line: it adds the symbols
+    that INPUT, READ, FOR or an IF branch store into only FURTHER DOWN the
+    listing. Loop and scratch names are reused all over a program
+    (meltdown.bas sets X=-1073, pokes its routine at X+I on the same line,
+    and runs FOR X= 250 lines later), so a store bans from its own line
+    on, in listing order, not everywhere.
+    """
+
+    def __init__(self, vals=(), later=None, events=None):
+        dict.__init__(self, vals)
+        self.later = later or {}
+        self.events = events or {}      # variable -> [(lineno, is_store)]
+
+    def at(self, lineno):
+        out = dict(self)
+        for k, v in self.later.items():
+            seen = [st for ln, st in self.events[var_key(k)] if ln <= lineno]
+            # the last thing the listing did to it, down to this line: a
+            # store bans it, the constant assigned again gives it back
+            # (compkorn.bas: Y=217, FOR Y= at 49, Y=217 again at 1010)
+            if seen and not seen[-1]:
+                out[k] = v
+        return out
+
+
+COND_RE = re.compile(r'^\s*IF(.+?)(<=|>=|=<|=>|<>|><|<|>|=)(.+?)(?:THEN|GOTO)',
+                     re.I | re.S)
+
+
+def _const_condition(st, symbols):
+    """True/False when an IF compares two constants, else None."""
+    m = COND_RE.match(st)
+    if not m:
+        return None
+    a, b = eval_const(m.group(1), symbols), eval_const(m.group(3), symbols)
+    if a is None or b is None:
+        return None
+    op = m.group(2)
+    return {'<': a < b, '>': a > b, '=': a == b, '<>': a != b, '><': a != b,
+            '<=': a <= b, '=<': a <= b, '>=': a >= b, '=>': a >= b}[op]
+
+
 def constant_symbols(prog, before_line=None):
-    """Symbols assigned an unambiguous integer constant.
+    """Symbols assigned an unambiguous integer constant -> Symbols.
 
     A symbol assigned more than one distinct constant, or assigned any
     non-constant expression, is dropped -- an ambiguous base is an
-    unresolved base.
+    unresolved base. One that INPUT, READ or FOR stores into, or that is
+    assigned behind an IF (the THEN and ELSE clauses, and every statement
+    after them on the line, run only sometimes), is dropped from that line
+    on (Symbols.at):
+        ML=32000:INPUT "LOAD ADDRESS";ML
+    is a base the user chooses, and extracting it at 32000 with high
+    confidence would be a guess. One IF is read through: a condition on
+    constants, the signed-address idiom
+        MS=65001:IF MS>32767 THEN MS=MS-65536
+    whose branch is known and whose two values are one address.
+    Identity is the two-character variable (var_key): MLOAD=5 unsettles ML.
     """
-    vals = {}
-    banned = set()
+    vals = {}                     # full name -> value
+    keyval = {}                   # variable -> the one constant seen
+    banned = set()                # variables, banned everywhere
+    events = {}                   # variable -> [(lineno, is_store)], in order
+
+    def stored(key, lineno):
+        events.setdefault(key, []).append((lineno, True))
+
+    def visible():
+        return {k: x for k, x in vals.items()
+                if var_key(k) not in banned
+                and not events[var_key(k)][-1][1]}
+
     for lineno, _body, stmts in prog:
         if before_line is not None and lineno >= before_line:
             break
+        conditional = False
         for st in stmts:
             if is_comment(st):
                 continue
-            m = ASSIGN_RE.match(st)
-            if not m:
-                continue
-            name = m.group(1).upper()
-            head = st.lstrip().upper()
-            if head.startswith(('IF', 'FOR', 'DEF', 'PRINT', 'INPUT')):
-                continue
-            v = eval_const(m.group(2), {k: x for k, x in vals.items()
-                                        if k not in banned})
-            if v is None:
-                banned.add(name)
-            elif name in vals and vals[name] != v:
-                banned.add(name)
-            else:
-                vals[name] = v
-    return {k: v for k, v in vals.items() if k not in banned}
+            clauses = [st]
+            same_address = False
+            if IF_RE.match(st):
+                m = re.search(r'THEN|GOTO', st, re.I)
+                clauses = re.split(r'ELSE', st[m.end():], flags=re.I) if m else []
+                known = None if conditional else _const_condition(st, visible())
+                if known is True and len(clauses) == 1:
+                    same_address = True           # the branch always runs
+                elif known is False and len(clauses) == 1:
+                    continue                      # and this one never does
+                else:
+                    conditional = True
+            for cl in clauses:
+                for name in stored_names(cl):
+                    stored(var_key(name), lineno)
+                m = ASSIGN_RE.match(cl)
+                if not m:
+                    continue
+                name = m.group(1).upper()
+                head = cl.lstrip().upper()
+                if head.startswith(('IF', 'FOR', 'DEF', 'PRINT', 'INPUT')):
+                    continue
+                key = var_key(name)
+                if conditional:
+                    stored(key, lineno)
+                    continue
+                v = eval_const(m.group(2), visible())
+                if v is None:
+                    banned.add(key)
+                elif key not in keyval:
+                    vals[name] = keyval[key] = v
+                elif keyval[key] == v or (same_address
+                                          and to_addr(keyval[key]) == to_addr(v)):
+                    vals.setdefault(name, keyval[key])
+                else:
+                    banned.add(key)
+                events.setdefault(key, []).append((lineno, False))
+    ok = {k: v for k, v in vals.items() if var_key(k) not in banned}
+
+    def ever_stored(k):
+        return any(st for _ln, st in events[var_key(k)])
+
+    return Symbols({k: v for k, v in ok.items() if not ever_stored(k)},
+                   {k: v for k, v in ok.items() if ever_stored(k)}, events)
 
 
 def to_addr(v):

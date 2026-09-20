@@ -148,6 +148,62 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertEqual(p.bytes, [1, 2, 3])
 
 
+class TestSymbolsThatStopBeingConstant(unittest.TestCase):
+    """A base is a constant only while nothing else can have stored into
+    it: flagged, never guessed."""
+
+    DATA = '90 DATA 62,1,211,201\n'
+
+    def test_a_base_the_user_is_asked_for_is_unresolved(self):
+        p = only(run('10 ML=32000:INPUT "LOAD ADDRESS";ML\n'
+                     '20 FOR I=0 TO 3:READ A:POKE ML+I,A:NEXT\n' + self.DATA))
+        self.assertEqual((p.kind, p.base), ('unextractable', None))
+        self.assertIn('poke-address-unresolved', p.flags)
+
+    def test_read_for_and_if_branches_unsettle_a_base_too(self):
+        for store in ('READ ML', 'FOR ML=1 TO 2:NEXT',
+                      'IF Q=1 THEN ML=28000', 'IF Q=1 THEN PRINT:ML=28000',
+                      'IFQ=1THEN50ELSEML=28000', 'LINEINPUT#1,ML',
+                      'INPUT MLOAD'):
+            p = only(run('10 ML=32000\n15 %s\n'
+                         '20 FOR I=0 TO 3:READ A:POKE ML+I,A:NEXT\n' % store
+                         + self.DATA), 'unextractable')
+            self.assertIsNone(p.base, store)
+
+    def test_a_bound_that_is_read_is_flagged_not_skipped(self):
+        """N=0 then READ N: the loop is not a zero-trip loop to pass over."""
+        p = only(run('10 N=0\n20 READ N\n'
+                     '30 FOR I=1 TO N:READ A:POKE 32000+I,A:NEXT\n'
+                     '90 DATA 4,62,1,211,201\n'), 'unextractable')
+        self.assertIn('loop-bounds-unresolved', p.flags)
+
+    def test_a_name_reused_further_down_still_resolves_above(self):
+        """meltdown.bas: X=-1073, the loader, and FOR X= 250 lines later."""
+        p = only(run('10 X=-1073:FOR I=1 TO 4:READ A:POKE X+I,A:NEXT\n'
+                     '500 FOR X=44 TO 46:SET(X,1):NEXT\n' + self.DATA),
+                 'candidate-ml')
+        self.assertEqual((p.base, p.confidence), (64464, 'high'))
+
+    def test_the_constant_assigned_again_gives_the_symbol_back(self):
+        """compkorn.bas: Y=217, FOR Y= in between, Y=217 before the loader."""
+        p = only(run('10 Y=32003\n49 FOR Y=0 TO 5:NEXT\n1010 Y=32003\n'
+                     '1020 FOR I=32000 TO Y:READ A:POKE I,A:NEXT\n'
+                     '9000 DATA 62,1,211,201\n'))
+        self.assertEqual((p.base, p.length), (32000, 4))
+
+    def test_the_signed_address_idiom_is_read_through(self):
+        """tty32drv.bas: the IF compares constants, and both values of MS
+        are one address."""
+        p = only(run('3 MS=48030\n6 IF MS>32767 THEN MS=MS-65536\n'
+                     '20 FOR I=0 TO 3:READ A:POKE MS+I,A:NEXT\n' + self.DATA))
+        self.assertEqual((p.base, p.confidence), (48030, 'high'))
+
+    def test_a_known_branch_to_another_address_is_not_a_constant(self):
+        p = only(run('3 MS=48030\n6 IF MS>32767 THEN MS=MS-1\n'
+                     '20 FOR I=0 TO 3:READ A:POKE MS+I,A:NEXT\n' + self.DATA))
+        self.assertEqual(p.kind, 'unextractable')
+
+
 class TestStringPacked(unittest.TestCase):
 
     def test_chr_concatenation_is_a_payload_at_varptr(self):

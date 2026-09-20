@@ -232,7 +232,15 @@ def classify_destination(base, count, fixed):
     return 'candidate-ml', None
 
 
-def find_loaders(path, prog, stream, symbols):
+def symbols_at(table, lineno):
+    """The constants a statement on `lineno` may rely on: a symbol that
+    INPUT, READ, FOR or an IF branch stores into is one only ABOVE that
+    store (phasea.basic.Symbols). A plain dict is taken as it is."""
+    at = getattr(table, 'at', None)
+    return at(lineno) if at else table
+
+
+def find_loaders(path, prog, stream, table):
     """FOR/READ/POKE loops and VARPTR-array loads."""
     payloads = []
     fname = os.path.basename(path)
@@ -243,6 +251,7 @@ def find_loaders(path, prog, stream, symbols):
     # None: no RESTORE; 0: a bare RESTORE, the program's first DATA.
     prev_restore = None
     for li, (lineno, _body, stmts) in enumerate(prog):
+        symbols = symbols_at(table, lineno)
         restore_target = prev_restore
         prev_restore = None
         for st in stmts:
@@ -503,7 +512,7 @@ def _string_term_bytes(term, symbols):
     return None
 
 
-def find_string_packed(path, prog, symbols, min_len=8):
+def find_string_packed(path, prog, table, min_len=8):
     """A$=CHR$(..)+CHR$(..)+STRING$(..)+"..." (and A$=A$+... continuations)
     with every term constant: the routine's bytes, at the symbolic base
     VARPTR(A$).  A term that cannot be resolved stops the string there
@@ -512,6 +521,7 @@ def find_string_packed(path, prog, symbols, min_len=8):
     packed_ok = varptr_strings(prog)
     acc = {}                      # var -> [bytes, first_line, flags]
     for lineno, _body, stmts in prog:
+        symbols = symbols_at(table, lineno)
         for st in stmts:
             if is_comment(st) or STR_APPEND_RE.match(st):
                 continue
@@ -616,11 +626,12 @@ def _unresolved(fname, idiom, lineno, flag, count=None):
 # Direct POKE sequences
 # --------------------------------------------------------------------
 
-def find_poke_sequences(path, prog, symbols, min_run=8):
+def find_poke_sequences(path, prog, table, min_run=8):
     """Runs of literal `POKE addr,val` at consecutive ascending addresses."""
     fname = os.path.basename(path)
     pokes = []
     for lineno, _body, stmts in prog:
+        symbols = symbols_at(table, lineno)
         for st in stmts:
             if is_comment(st):
                 continue
@@ -662,12 +673,13 @@ def find_poke_sequences(path, prog, symbols, min_run=8):
 # USR entry evidence
 # --------------------------------------------------------------------
 
-def find_usr_evidence(prog, symbols):
+def find_usr_evidence(prog, table):
     entries = []
     usr_calls = 0
     system_calls = 0
     pending_lo = {}
     for lineno, body, stmts in prog:
+        symbols = symbols_at(table, lineno)
         for st in stmts:
             if is_comment(st):
                 # a REM can still contain the text 'USR(' -- ignore it
