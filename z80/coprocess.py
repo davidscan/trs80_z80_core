@@ -277,9 +277,18 @@ class Machine:
             cpu.hl = int(self.arg) & 0xFFFF
         elif pc == 0x0A9A:
             # HL to the result, then the RET below: JP 0A9AH pops the
-            # sentinel and ends the call, CALL 0A9AH returns to the routine
+            # sentinel and ends the call, CALL 0A9AH returns to the routine.
+            # The ROM routine is LD (4121H),HL / LD A,2 / LD (40AFH),A / RET,
+            # so the routine that CALLed it finds the value in the
+            # accumulator, the integer type flag and A = 2; the stores are
+            # ordinary ones and come back in the write-set (both cells are
+            # plain RAM on the interpreter's side).
             self.result = 1
             self.result_hl = cpu.hl
+            self.write(0x4121, cpu.hl & 0xFF)
+            self.write(0x4122, cpu.hl >> 8)
+            cpu.a = 2
+            self.write(0x40AF, 2)
         else:
             text = 'called %04XH, no ROM here' % pc
             if not self.known[self.entry]:

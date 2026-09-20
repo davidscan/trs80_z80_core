@@ -92,6 +92,23 @@ class TestCalls(unittest.TestCase):
         self.assertEqual((sc.ret()['hl'], sc.ret()['result']), ('3', '1'))
         self.assertIn('28928:42', sc.writes())
 
+    def test_0a9a_makes_the_roms_stores(self):
+        """0A9AH is LD (4121H),HL / LD A,2 / LD (40AFH),A / RET: the value
+        goes into the accumulator, the type flag says integer, and A comes
+        back as 2.  A routine sees all three after a CALL: LD HL,1234H /
+        CALL 0A9AH / LD (7100H),A / LD HL,(4121H) / LD (7102H),HL /
+        LD A,(40AFH) / LD (7104H),A / RET.  The stores are stores like any
+        other, so they reach the interpreter in the write-set."""
+        m, sc = machine(bytes.fromhex('213412' 'CD9A0A' '320071' '2A2141' '220271'
+                                      '3AAF40' '320471' 'C9'))
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(int(sc.ret()['hl']), 0x1234)
+        self.assertEqual(m.ram[0x7100], 2, 'A on return')
+        self.assertEqual((m.ram[0x7102], m.ram[0x7103]), (0x34, 0x12), 'read back from 4121H')
+        self.assertEqual(m.ram[0x7104], 2, 'read back from 40AFH')
+        self.assertIn('%d:%d,%d' % (0x4121, 0x34, 0x12), sc.writes())
+        self.assertIn('%d:2' % 0x40AF, sc.writes())
+
     def test_0a9a_twice_keeps_the_last_value(self):
         m, sc = machine(bytes.fromhex('210300' 'CD9A0A' '210500' 'C39A0A'))
         m.run(0x7000, 0, 0xF000)
@@ -259,8 +276,10 @@ class TestTransport(unittest.TestCase):
         self.assertEqual(err, '')
         self.assertTrue(out[0].startswith('Z80 proto=1 name=trs80_z80_core pid='), out)
         self.assertTrue(out[1].startswith('RET hl=42 result=1 cycles='), out)
-        self.assertTrue(out[1].endswith(' break=0 writes=1'), out)
-        self.assertEqual(out[2], 'W 61436:3,112,253,47')   # CALL's return address, then the sentinel
+        self.assertTrue(out[1].endswith(' break=0 writes=3'), out)
+        # 0A9AH's own stores (type flag 40AFH, accumulator 4121H), then
+        # CALL's return address and the sentinel
+        self.assertEqual(out[2:5], ['W 16559:2', 'W 16673:42,0', 'W 61436:3,112,253,47'])
 
     def test_need_full_when_a_generation_is_missing(self):
         out, err, rc = self.talk([
