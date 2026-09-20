@@ -23,9 +23,12 @@ the RET the ROM routine would have.
     0A7FH  the USR argument as a 16-bit integer in HL (the number the
            frame carried in `arg=`, truncated toward zero exactly as the
            reference stub truncates it).
-    0A9AH  HL becomes the value of the USR expression (`result=1`) and
-           the call ends -- the ROM routine returns to BASIC, not to the
-           caller, so this is an exit however it is reached.
+    0A9AH  HL becomes the value of the USR expression (`result=1`), and
+           the trap RETs to its caller as the ROM routine does (it ends
+           in a plain RET; the ROM itself CALLs it).  The usual exit,
+           JP 0A9AH, ends the call because that RET pops the sentinel;
+           after a CALL 0A9AH the routine runs on, and the value stays
+           the HL it handed over -- the last one, if it calls twice.
 
 Port FFH reads 127 (the 64-character mode value the interpreter's INP
 returns) and every other port 255.  OUT (FFH) has two effects and the
@@ -111,7 +114,7 @@ class CoreError(Exception):
 
 
 class EndCall(Exception):
-    """PC reached the sentinel, or 0A9AH."""
+    """PC reached the sentinel (or the READY entry)."""
 
 
 class Machine:
@@ -242,9 +245,6 @@ class Machine:
         cpu = self.cpu
         if pc == SENTINEL:
             raise EndCall()
-        if pc == 0x0A9A:
-            self.result = 1
-            raise EndCall()
         if pc == 0x1A19:
             # the ROM's "READY" entry (022EH is EI / JP 1A19H, and a period
             # program ends with JP 1A19H to hand the machine back to BASIC):
@@ -275,6 +275,11 @@ class Machine:
             self.port_out(0xFF, flag)
         elif pc == 0x0A7F:
             cpu.hl = int(self.arg) & 0xFFFF
+        elif pc == 0x0A9A:
+            # HL to the result, then the RET below: JP 0A9AH pops the
+            # sentinel and ends the call, CALL 0A9AH returns to the routine
+            self.result = 1
+            self.result_hl = cpu.hl
         else:
             text = 'called %04XH, no ROM here' % pc
             if not self.known[self.entry]:
@@ -294,6 +299,7 @@ class Machine:
         self.arg = arg
         self.entry = entry
         self.result = 0
+        self.result_hl = 0
         self.dirty = {}
         self.video = {}
         self.cycles = 0
@@ -332,7 +338,8 @@ class Machine:
         self.flush_video()
         writes = self.runs(self.dirty)
         self.send('RET hl=%d result=%d cycles=%d break=%d writes=%d'
-                  % (cpu.hl, self.result, self.cycles, brk, len(writes)))
+                  % (self.result_hl if self.result else cpu.hl,
+                     self.result, self.cycles, brk, len(writes)))
         for w in writes:
             self.send('W ' + w)
 

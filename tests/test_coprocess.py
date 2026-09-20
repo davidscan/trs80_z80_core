@@ -82,10 +82,20 @@ class TestCalls(unittest.TestCase):
         m.run(0x7000, int(float('1.9')), 0xF000)
         self.assertEqual(int(sc.ret()['hl']), 1)
 
-    def test_0a9a_by_call_also_ends_the_frame(self):
-        m, sc = machine(bytes.fromhex('210300' 'CD9A0A' '76'))   # never reaches HALT
+    def test_0a9a_by_call_returns_to_the_routine(self):
+        """The ROM routine ends in a RET (the ROM CALLs it itself), so the
+        code after CALL 0A9AH runs: LD HL,3 / CALL 0A9AH / LD A,42 /
+        LD (7100H),A / LD HL,9 / RET.  The value is the HL handed over,
+        not the HL at the sentinel."""
+        m, sc = machine(bytes.fromhex('210300' 'CD9A0A' '3E2A' '320071' '210900' 'C9'))
         m.run(0x7000, 0, 0xF000)
-        self.assertEqual(sc.ret()['hl'], '3')
+        self.assertEqual((sc.ret()['hl'], sc.ret()['result']), ('3', '1'))
+        self.assertIn('28928:42', sc.writes())
+
+    def test_0a9a_twice_keeps_the_last_value(self):
+        m, sc = machine(bytes.fromhex('210300' 'CD9A0A' '210500' 'C39A0A'))
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual((sc.ret()['hl'], sc.ret()['result']), ('5', '1'))
 
     def test_ready_entry_ends_the_call_like_a_ret(self):
         """JP 1A19H (the ROM's READY) hands the machine back to BASIC: the
