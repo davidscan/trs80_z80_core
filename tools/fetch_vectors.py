@@ -29,6 +29,15 @@ and a silent upstream change indistinguishable from our own
 regression. The SHA lives in tools/vectors.lock, which IS committed --
 it is metadata about the data, not the data.
 
+CONTENT-VERIFIED (2026-09-20). The lock also pins `v1_tree`, the git
+tree SHA of upstream's v1/ directory at that commit. A git tree object
+is the list of its entries' names and blob SHAs, so the fetched file
+list is accepted only if it hashes to the pinned tree, and a fetched
+file only if it hashes to its blob SHA in that list: every byte is
+checked against a committed hash, and nothing rests on the transport.
+The tarball is unpacked by that same list -- a member it does not name
+is not written, so no member name can reach outside tests/vectors.
+
 Usage:
     python3 tools/fetch_vectors.py                  # status, no network
     python3 tools/fetch_vectors.py --all            # full suite (tarball)
@@ -39,6 +48,8 @@ Usage:
 """
 
 import argparse
+import binascii
+import hashlib
 import json
 import os
 import shutil
@@ -158,19 +169,52 @@ def page_of(name):
 # upstream file list (cached; one API call, pinned to the locked SHA)
 # --------------------------------------------------------------------
 
+def blob_sha(data):
+    """The git blob SHA-1 of a file's bytes."""
+    return hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
+
+
+def v1_tree_sha(files):
+    """The git tree SHA-1 of v1/ as `files` describes it: a tree object is
+    its entries, sorted by name, each `<mode> <name>\\0<20-byte blob SHA>`.
+    v1/ holds ordinary files only, so every mode is 100644."""
+    body = b''.join(b'100644 ' + name + b'\0' + binascii.unhexlify(sha)
+                    for name, sha in sorted((p[3:].encode(), h) for p, _, h in files))
+    return hashlib.sha1(b'tree %d\0' % len(body) + body).hexdigest()
+
+
+def check_manifest(lock, files, where):
+    """The file list is trusted only when it hashes to the pinned tree."""
+    for path, _, _ in files:
+        name = path[3:]
+        if not path.startswith('v1/') or not name or '/' in name or name in ('.', '..'):
+            sys.exit('%s: %r is not a plain file name under v1/' % (where, path))
+    if 'v1_tree' not in lock:
+        sys.exit('tools/vectors.lock has no v1_tree hash; run --update-lock '
+                 '(and commit the lock) before fetching')
+    got = v1_tree_sha(files)
+    if got != lock['v1_tree']:
+        sys.exit('%s: the v1/ file list hashes to %s, the lock pins %s -- refusing it'
+                 % (where, got, lock['v1_tree']))
+
+
 def upstream_files(lock, refresh=False):
-    """[(path, size), ...] for v1/, from the pinned tree. Cached."""
+    """[(path, size, blob sha), ...] for v1/, from the pinned tree, checked
+    against the lock's v1_tree hash whether fetched or cached."""
     if not refresh and os.path.exists(MANIFEST):
         with open(MANIFEST) as f:
             cached = json.load(f)
-        if cached.get('sha') == lock['sha']:
-            return [tuple(e) for e in cached['files']]
+        if cached.get('sha') == lock['sha'] and all(len(e) == 3 for e in cached['files']):
+            files = [tuple(e) for e in cached['files']]
+            check_manifest(lock, files, 'cached manifest')
+            return files
 
     data = json.loads(_get('%s/git/trees/%s?recursive=1' % (API, lock['sha'])))
     if data.get('truncated'):
         sys.exit('upstream tree came back truncated; refusing to guess at it')
-    files = sorted((e['path'], e['size']) for e in data['tree']
+    files = sorted((e['path'], e['size'], e['sha']) for e in data['tree']
                    if e['type'] == 'blob' and e['path'].startswith('v1/'))
+    check_manifest(lock, files, 'upstream tree')
     os.makedirs(DEST, exist_ok=True)
     with open(MANIFEST, 'w') as f:
         json.dump({'sha': lock['sha'], 'files': files}, f)
@@ -224,42 +268,44 @@ def fetch_pages(lock, pages, limit=None, force=False):
     cheaper door.
     """
     files = upstream_files(lock)
-    want = [(p, s) for (p, s) in files if page_of(os.path.basename(p)) in pages]
+    want = [f for f in files if page_of(os.path.basename(f[0])) in pages]
     if limit is not None:
         byp = {}
         capped = []
-        for p, s in want:
-            k = page_of(os.path.basename(p))
+        for f in want:
+            k = page_of(os.path.basename(f[0]))
             byp[k] = byp.get(k, 0) + 1
             if byp[k] <= limit:
-                capped.append((p, s))
+                capped.append(f)
         want = capped
 
     os.makedirs(V1, exist_ok=True)
     todo = []
-    for path, size in want:
+    for path, size, sha in want:
         dest = os.path.join(DEST, path)
         if not force and os.path.exists(dest) and os.path.getsize(dest) == size:
             continue
-        todo.append((path, size, dest))
+        todo.append((path, size, sha, dest))
 
     have = len(want) - len(todo)
     if not todo:
         print('all %d file(s) for %s already present' % (len(want), ','.join(sorted(pages))))
-        return [os.path.join(DEST, p) for p, _ in want]
+        return [os.path.join(DEST, f[0]) for f in want]
 
-    total = sum(s for _, s, _ in todo)
+    total = sum(t[1] for t in todo)
     print('fetching %d file(s) (%s), %d already present, sha %s'
           % (len(todo), _human(total), have, lock['sha'][:12]))
 
     done = [0]
 
     def one(item):
-        path, size, dest = item
+        path, size, sha, dest = item
         url = '%s/%s/%s' % (RAW, lock['sha'], urllib.parse.quote(path))
         blob = _get(url)
         if len(blob) != size:
             raise RuntimeError('%s: got %d bytes, expected %d' % (path, len(blob), size))
+        if blob_sha(blob) != sha:
+            raise RuntimeError('%s: content does not hash to the pinned blob %s' % (path, sha))
         tmp = dest + '.part'
         with open(tmp, 'wb') as f:
             f.write(blob)
@@ -272,7 +318,7 @@ def fetch_pages(lock, pages, limit=None, force=False):
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(one, todo))
 
-    return [os.path.join(DEST, p) for p, _ in want]
+    return [os.path.join(DEST, f[0]) for f in want]
 
 
 def fetch_all(lock, force=False):
@@ -294,6 +340,21 @@ def fetch_all(lock, force=False):
           % (_human(os.path.getsize(tarball)), len(files),
              os.path.relpath(V1, ROOT)))
 
+    written = unpack(tarball, files)
+    os.remove(tarball)
+    return written
+
+
+def unpack(tarball, files, dest_root=None):
+    """Write the tarball's v1/ members under dest_root (tests/vectors).
+
+    The pinned file list is the whitelist: a member it does not name is
+    not written, whatever its name says (`v1/../../x` went straight into
+    os.path.join before 2026-09-20), and a member whose bytes do not hash
+    to its pinned blob SHA stops the fetch.  check_manifest has already
+    established that every listed path is a plain name under v1/."""
+    dest_root = DEST if dest_root is None else dest_root
+    pinned = {path: sha for path, _, sha in files}
     written = []
     with tarfile.open(tarball, mode='r:gz') as tf:
         for member in tf:
@@ -301,17 +362,21 @@ def fetch_all(lock, force=False):
                 continue
             # strip the '<repo>-<sha>/' prefix github wraps the tree in
             rel = member.name.split('/', 1)[1] if '/' in member.name else member.name
-            if not rel.startswith('v1/'):
+            if rel not in pinned:
+                if rel.startswith('v1/'):
+                    print('  SKIPPED %r: not in the pinned file list' % member.name)
                 continue
-            dest = os.path.join(DEST, rel)
-            src = tf.extractfile(member)
-            with open(dest, 'wb') as f:
-                f.write(src.read())
+            blob = tf.extractfile(member).read()
+            if blob_sha(blob) != pinned[rel]:
+                sys.exit('%s: content does not hash to the pinned blob %s' % (rel, pinned[rel]))
+            dest = os.path.join(dest_root, rel)
+            with open(dest + '.part', 'wb') as f:
+                f.write(blob)
+            os.replace(dest + '.part', dest)
             written.append(dest)
             if len(written) % 200 == 0:
                 print('  %d/%d' % (len(written), len(files)))
     print('  %d/%d' % (len(written), len(files)))
-    os.remove(tarball)
     return written
 
 
@@ -331,7 +396,7 @@ def coverage(lock):
 
     files = upstream_files(lock)
     vec = set()
-    for path, _ in files:
+    for path, _, _ in files:
         try:
             vec.add(name_to_encoding(os.path.basename(path)))
         except ValueError:
@@ -411,6 +476,8 @@ def update_lock():
         'file_count': len(v1),
         'total_bytes': sum(e['size'] for e in v1),
         'cases_per_file': 1000,
+        # the git tree SHA of v1/: what every fetched list and file is checked against
+        'v1_tree': v1_tree_sha([(e['path'], e['size'], e['sha']) for e in v1]),
     }
     with open(LOCK, 'w') as f:
         json.dump(lock, f, indent=2)

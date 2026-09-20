@@ -143,7 +143,11 @@ ends in `OK (skipped=N)`.
 
 Fetches the third-party single-step CPU test vectors (SingleStepTests/z80,
 MIT), pinned to the commit in `tools/vectors.lock`. With no arguments it
-reports what is present and uses no network. **Writes:** `tests/vectors/`,
+reports what is present and uses no network. The lock also pins the git
+tree hash of the suite's directory: the fetched file list must hash to it
+and every fetched file to its entry in that list, and the tarball is
+unpacked by that list alone, so a substituted download is refused and
+nothing is written outside `tests/vectors/`. **Writes:** `tests/vectors/`,
 which is not committed; `--update-lock` rewrites `tools/vectors.lock`.
 
 | argument | default | what it does | when you'd use it |
