@@ -84,6 +84,40 @@ class TestCompareTiering(unittest.TestCase):
         got = bytes([2] * 40)
         self.assertEqual(oracle.compare(want, got, 0, 0), 'contradiction')
 
+    def test_a_tiny_payload_is_not_agreement_by_size(self):
+        """Four bytes, all different: the old floor of 4 called it patched."""
+        want = bytes([0xCD, 0x7F, 0x0A, 0xC9])          # CALL 0A7FH / RET
+        got = bytes([0x3E, 0x01, 0xD3, 0xFF])           # LD A,1 / OUT (FFH),A
+        self.assertEqual(oracle.compare(want, got, 0, 0), 'contradiction')
+
+    def test_changed_opcodes_in_a_short_routine_are_a_contradiction(self):
+        """Four wrong opcode bytes in 27: the size of the sound routines."""
+        want = bytes([0x3E, 0x01, 0xD3, 0xFF, 0x06, 0x20, 0x10, 0xFE] * 3
+                     + [0x00, 0x00, 0xC9])
+        got = bytearray(want)
+        for i in (0, 2, 4, 6):
+            got[i] ^= 0x40
+        self.assertEqual(oracle.compare(want, bytes(got), 0, 0),
+                         'contradiction')
+
+    def test_relocated_addresses_are_agreement(self):
+        """dskindex.bas: every (nn) high byte moved, no opcode touched."""
+        want = bytes([0x21, 0x00, 0xA2, 0x22, 0x10, 0xA2, 0xC3, 0x20, 0xA2])
+        got = bytes([0x21, 0x00, 0xE2, 0x22, 0x10, 0xE2, 0xC3, 0x20, 0xE2])
+        self.assertEqual(oracle.compare(want, got, 0, 0), 'patched')
+
+    def test_one_poked_opcode_in_a_long_routine_is_agreement(self):
+        """freqanal.bas pokes a RET over one LD A,(nn) in 193 bytes."""
+        want = bytes([0x3A, 0x00, 0x7F] * 64 + [0xC9])
+        got = bytearray(want)
+        got[126] = 0xC9
+        self.assertEqual(oracle.compare(want, bytes(got), 0, 0), 'patched')
+
+    def test_operand_offsets(self):
+        # LD A,n / LD HL,nn / JR e / BIT 0,(IX+d) / RET
+        code = bytes([0x3E, 1, 0x21, 2, 3, 0x18, 4, 0xDD, 0xCB, 5, 0x46, 0xC9])
+        self.assertEqual(oracle.operand_offsets(code), {1, 3, 4, 6, 9})
+
     def test_run_too_short_is_a_contradiction(self):
         self.assertEqual(oracle.compare(bytes(30), bytes(10), 0, 0),
                          'contradiction')

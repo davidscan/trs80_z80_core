@@ -70,6 +70,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from phasea.basic import is_comment, split_statements         # noqa: E402
 from phasea.extract import extract_file                        # noqa: E402
 from phasea.classify import classify                           # noqa: E402
+from z80.disasm import disassemble                             # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Two neighbours, not one. The interpreter moved to ../trs80basic on
@@ -468,14 +469,46 @@ def compare(want_data, got_run, want_base, got_base):
     if off < 0 or off + len(want_data) > len(got_run):
         return 'contradiction'
     seg = got_run[off:off + len(want_data)]
-    diffs = sum(1 for a, b in zip(want_data, seg) if a != b)
-    if diffs == 0:
+    diffs = [i for i, (a, b) in enumerate(zip(want_data, seg)) if a != b]
+    if not diffs:
         return 'exact'
-    # A patch touches operand bytes, not the instruction stream. Allow a
-    # small minority; anything more is a different routine, not a patch.
-    if diffs <= max(4, len(want_data) // 10):
+    # A patch touches operand bytes, not the instruction stream -- so ask
+    # the decode which is which, instead of counting. Operand bytes may
+    # differ freely (dskindex.bas relocates five address high bytes; the
+    # sound routines take pitch and duration this way). A changed OPCODE
+    # byte is allowed only as a small minority of a payload big enough to
+    # have one: freqanal.bas pokes a RET over one LD in 193 bytes. The
+    # first rule here was `diffs <= max(4, len // 10)`, which called any
+    # payload of four bytes or fewer, and four wrong bytes anywhere in a
+    # 27-byte sound routine, agreement -- weakest where the gate
+    # population lives.
+    operands = operand_offsets(want_data, want_base)
+    stream = [i for i in diffs if i not in operands]
+    if len(stream) <= len(want_data) // 10:
         return 'patched'
     return 'contradiction'
+
+
+def operand_offsets(data, base=0):
+    """Offsets in `data` that hold an operand (n, nn, d, e), by linear decode.
+
+    Everything else is instruction stream: opcode and prefix bytes, and
+    every byte of what does not decode. DD CB d op keeps its displacement
+    third and its opcode last.
+    """
+    out = set()
+    for ins in disassemble(data, base):
+        if ins.op is None:
+            continue
+        k = ins.ignored_prefixes
+        enc = ins.op.encoding
+        if len(enc) == 3 and enc[1] == 0xCB:
+            opcode = {k, k + 1, k + 3}
+        else:
+            opcode = set(range(k + len(enc)))
+        out.update(ins.offset + i for i in range(ins.length)
+                   if i not in opcode)
+    return out
 
 
 def validate(files, timeout=10.0, verbose=False):
