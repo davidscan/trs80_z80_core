@@ -84,7 +84,10 @@ the location counter; `+ - * /` and `.AND. .OR. .XOR. .NOT. .MOD. .SHL.
 .SHR.`; `ORG`, `EQU`, `DEFB`/`DB`, `DEFW`/`DW`, `DEFM`/`DM`, `DEFS`/`DS`,
 `END entry`. Every instruction comes from the same opcode table the core
 executes and the disassembler prints from, so a disassembly listing is
-valid source again. Errors are printed as `file:line: message`, all of
+valid source again: assembled at the same address it gives the same bytes
+(bytes the assembler would encode another way -- an undefined `ED` opcode,
+a second encoding, a prefix that changes nothing -- are listed as `DB`
+with the mnemonic as a comment). Errors are printed as `file:line: message`, all of
 them, and nothing is written. **Writes:** the `-o` file and the `--list`
 file; with neither, the listing goes to stdout.
 

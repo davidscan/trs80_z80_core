@@ -13,7 +13,12 @@ callers can report confidence instead of pretending certainty.
 from dataclasses import dataclass
 from typing import Optional
 
-from .table import TABLE
+from .table import TABLE, _hex
+
+
+def db_text(raw):
+    """The bytes as a DB statement the assembler takes back: DB 0EDH,00H."""
+    return 'DB ' + ','.join(_hex(b, 2) for b in raw)
 
 
 def s8(b):
@@ -86,9 +91,7 @@ def decode(data, pos, base=0):
         break
 
     if pos >= n:
-        return Insn(base + start, start, n - start, bytes(data[start:n]),
-                    None, text='DB (truncated prefix)', truncated=True,
-                    ignored_prefixes=ignored)
+        return _trunc(data, start, n, base, ignored)
 
     b = data[pos]
     disp = None
@@ -115,7 +118,8 @@ def decode(data, pos, base=0):
     op = TABLE.get(enc)
     if op is None:
         return Insn(base + start, start, 1, bytes(data[start:start + 1]),
-                    None, text='DB %02XH' % b, ignored_prefixes=ignored)
+                    None, text=db_text(data[start:start + 1]),
+                    ignored_prefixes=ignored)
 
     if any(o.kind == 'idx' for o in op.operands):
         if cur >= n:
@@ -145,7 +149,7 @@ def decode(data, pos, base=0):
 
 def _trunc(data, start, n, base, ignored):
     return Insn(base + start, start, n - start, bytes(data[start:n]),
-                None, text='DB (truncated)', truncated=True,
+                None, text=db_text(data[start:n]), truncated=True,
                 ignored_prefixes=ignored)
 
 
@@ -153,8 +157,7 @@ def _finish(data, start, end, base, op, disp, imm, ignored, is_rel=False):
     raw = bytes(data[start:end])
     if op is None:
         return Insn(base + start, start, len(raw), raw, None,
-                    text='DB ' + ' '.join('%02XH' % x for x in raw),
-                    ignored_prefixes=ignored)
+                    text=db_text(raw), ignored_prefixes=ignored)
     target = None
     if is_rel and imm is not None:
         target = (base + end + s8(imm)) & 0xFFFF
@@ -174,6 +177,8 @@ def render(ins):
     op = ins.op
     if op is None:
         return ins.text
+    if op.kind == 'invalid':
+        return db_text(ins.raw)         # an undefined ED opcode: its two bytes
     parts = []
     for o in op.operands:
         parts.append(o.text(imm=ins.imm, disp=ins.disp, addr=ins.target))
@@ -196,12 +201,39 @@ def disassemble(data, base=0, limit=None):
     return out
 
 
+_SOURCE = {}
+
+
+def source_text(ins):
+    """Text that assembles back to exactly ins.raw at ins.addr.
+
+    Usually that is ins.text.  It is not when the bytes are one of several
+    encodings of an instruction and not the one the assembler picks
+    (ED 77 is a NOP of two bytes, ED 4C a second NEG), or carry a DD/FD
+    prefix that changes nothing (DD 00, DD DD 21 ..): assembled from the
+    mnemonic the line would come back shorter and every address after it
+    would move.  Those are written as DB with the mnemonic as the comment.
+    Asked of the assembler itself, so the two cannot drift apart.
+    """
+    if ins.op is None or ins.invalid:
+        return ins.text + (' ;truncated' if ins.truncated else '')
+    rel = any(o.kind == 'rel' for o in ins.op.operands)
+    key = (ins.raw, ins.addr if rel else None)
+    if key not in _SOURCE:
+        from .asm import assemble
+        r = assemble(' ORG %d\n %s\n' % (ins.addr & 0xFFFF, ins.text))
+        _SOURCE[key] = (not r.errors and len(r.segments) == 1
+                        and r.segments[0][1] == ins.raw)
+    return ins.text if _SOURCE[key] else '%s ;%s' % (db_text(ins.raw), ins.text)
+
+
 def listing(data, base=0):
-    """Human-readable listing -- used by the anchor validation."""
+    """Human-readable listing -- used by the anchor validation.  The text
+    column is source: assembled at `base` it gives `data` back."""
     lines = []
     for ins in disassemble(data, base):
         hexb = ' '.join('%02X' % b for b in ins.raw)
-        lines.append('%04X  %-12s  %s' % (ins.addr, hexb, ins.text))
+        lines.append('%04X  %-12s  %s' % (ins.addr, hexb, source_text(ins)))
     return '\n'.join(lines)
 
 

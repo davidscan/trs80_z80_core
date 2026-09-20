@@ -14,6 +14,7 @@ against this core when the interpreter is checked out beside this repo.
 """
 import io
 import os
+import random
 import subprocess
 import sys
 import tempfile
@@ -96,6 +97,30 @@ class TestTableRoundTrip(unittest.TestCase):
             self.assertEqual(r2.segments[0][1], b, '%s -> %r' % (src, ins.text))
             n += 1
         self.assertEqual(n, len(INVERSE))
+
+    def test_a_disassembly_listing_assembles_back_to_its_bytes(self):
+        """The README's claim, held to: undefined ED opcodes, second
+        encodings (ED 77, ED 4C) and prefixes that change nothing come back
+        as DB, so no line is shorter than its bytes and no address moves."""
+        from z80.disasm import listing
+        rng = random.Random(19780801)
+        soup = bytes(rng.randrange(256) for _ in range(6000))
+        stray = bytes.fromhex('ED00 ED77 DD00 DDDD213412 FDED44 DDFD7E01 DDCB01C9 ED4C 18FE')
+        for data, base in ((soup, 0x4000), (stray, 0x7000), (stray + b'\xdd', 0xFFE0)):
+            lines = listing(data, base).splitlines()
+            src = ' ORG %d\n' % base + ''.join(' %s\n' % ln[20:].split('  ', 1)[-1].strip()
+                                               for ln in lines)
+            r = assemble(src)
+            self.assertEqual(r.errors, [])
+            self.assertEqual(r.segments, [(base, data)])
+        self.assertIn('DB 0EDH,00H', listing(stray, 0))
+        self.assertIn('DB 0EDH,77H ;NOP', listing(stray, 0))
+
+    def test_an_empty_db_is_an_error(self):
+        for d in ('DB', 'DEFB', 'DEFW', 'DEFM'):
+            e = assemble('  ORG 0\n  %s\n' % d).errors
+            self.assertEqual(len(e), 1, d)
+            self.assertIn('at least one item', e[0][1])
 
     def test_ddcb_displacement_sits_before_the_last_opcode_byte(self):
         b = one('  ORG 0\n  BIT 0,(IX+3)\n  SET 7,(IY-1)\n  RLC (IX+7FH)').segments[0][1]

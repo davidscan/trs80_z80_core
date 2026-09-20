@@ -390,6 +390,9 @@ def split_operands(text, lineno):
 def data_items(text, lineno):
     """DEFB/DEFM/DEFW items: ('str', bytes) or ('expr', Expr)."""
     out = []
+    if not text.strip():
+        # nothing to define is a slip, and it assembled to no bytes at all
+        raise AsmError(lineno, 'DEFB, DEFW and DEFM need at least one item')
     for item in split_operands(text, lineno):
         if item[0] in '\'"' and item[-1] == item[0] and len(item) >= 2 and (
                 item[0] == '"' or len(item) != 3):
