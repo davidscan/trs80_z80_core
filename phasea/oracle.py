@@ -67,6 +67,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from phasea.basic import is_comment, split_statements         # noqa: E402
 from phasea.extract import extract_file                        # noqa: E402
 from phasea.classify import classify                           # noqa: E402
 
@@ -306,7 +307,7 @@ def region_of(base, data):
 # working core would release all 13. Measured, it releases one.
 
 def strip_basic_comments(line):
-    """Drop ' ... and REM ... tails.
+    """Drop ' ... and REM ... tails -- outside string literals only.
 
     Not cosmetic. liongrp2.bas's spin cycle is
         110 ' X$=INKEY$:IF X$=""110
@@ -316,8 +317,75 @@ def strip_basic_comments(line):
     and the variable USR was assigned to, so an analysis that reads the
     raw source calls it USR-gated. It is the difference between
     reporting 13 unlocks and reporting 1.
+
+    The cut is quote-aware (phasea.basic's splitter): an apostrophe in
+    `PRINT "DON'T MOVE":IF X=0 THEN 10` is text, and cutting there would
+    lose the IF that gates the loop.
     """
-    return re.sub(r'\bREM\b.*$', '', re.sub(r"'.*$", '', line), flags=re.I)
+    return ':'.join(st for st in split_statements(line) if not is_comment(st))
+
+
+# Level II's reserved words. The ROM's cruncher takes them out of a line
+# wherever they stand, blanks or not (`IFKEY=0THEN10` is a real line), and
+# for that reason no variable name contains one. Longest first, so MID$
+# goes before ID-anything and INKEY$ before KEY.
+RESERVED = sorted((
+    'END FOR RESET SET CLS CMD RANDOM NEXT DATA INPUT DIM READ LET GOTO '
+    'RUN IF RESTORE GOSUB RETURN REM STOP ELSE TRON TROFF DEFSTR DEFINT '
+    'DEFSNG DEFDBL LINE EDIT ERROR RESUME OUT ON OPEN FIELD GET PUT CLOSE '
+    'LOAD MERGE NAME KILL LSET RSET SAVE SYSTEM LPRINT DEF POKE PRINT CONT '
+    'LIST LLIST DELETE AUTO CLEAR CLOAD CSAVE NEW TAB TO FN USING VARPTR '
+    'USR ERL ERR STRING$ INSTR POINT TIME$ MEM INKEY$ THEN NOT STEP AND OR '
+    'SGN INT ABS FRE INP POS SQR RND LOG EXP COS SIN TAN ATN PEEK CVI CVS '
+    'CVD EOF LOC LOF MKI$ MKS$ MKD$ CINT CSNG CDBL FIX LEN STR$ VAL ASC '
+    'CHR$ LEFT$ RIGHT$ MID$').split(), key=len, reverse=True)
+
+USR_CALL = re.compile(r'USR\s*\d?\s*\(')
+
+
+def variable_names(text):
+    """The variables an expression reads, as Level II knows them: the first
+    two characters of each name, reserved words taken out first. A `$`
+    stays with the name: X$ and X are two variables."""
+    t = text.upper()
+    for kw in RESERVED:
+        t = t.replace(kw, ' ')
+    return {n[:2] + d for n, d in re.findall(r'([A-Z][A-Z0-9]*)[%!#]?(\$?)', t)}
+
+
+def usr_gating(bodies):
+    """Does a USR result decide a branch in these lines?
+
+    -> (the variables a USR result is assigned to, gated). A loop is
+    gated when an IF tests such a variable, or calls USR in its condition
+    (`IF USR(0)=0 THEN 10`). Names are whole names cut to two characters:
+    `KEY=USR(0)` assigns KE, not the EY a pattern with no left edge finds.
+    """
+    conds, uvars = [], set()
+
+    def scan(st):
+        st = st.strip()
+        m = re.match(r'IF(.*?)(?:THEN|GOTO|$)(.*)$', st, re.S)
+        if m:
+            conds.append(m.group(1))
+            for part in m.group(2).split('ELSE'):
+                scan(part)
+            return
+        st = re.sub(r'^LET\s*', '', st)
+        if st.startswith(tuple(RESERVED)):
+            return
+        m = re.match(r'([A-Z][A-Z0-9]*)[%!#]?(\$?)\s*(?:\([^=]*\))?\s*=(.*)$',
+                     st, re.S)
+        if m and USR_CALL.search(m.group(3)):
+            uvars.add(m.group(1)[:2] + m.group(2))
+
+    for body in bodies:
+        for st in split_statements(body):
+            if not is_comment(st):
+                scan(re.sub(r'"[^"]*"?', '""', st).upper())
+    gated = any(USR_CALL.search(c) or variable_names(c) & uvars
+                for c in conds)
+    return uvars, gated
 
 
 def spin_cycle(trace, max_period=60):
@@ -349,13 +417,15 @@ def analyse_hang(path, timeout=8.0):
     src = {}
     with open(path, encoding='latin-1') as f:
         for line in f:
-            m = re.match(r'\s*(\d+)\s', line)
+            m = re.match(r'\s*(\d+)\s?(.*)$', line.rstrip('\r\n'))
             if m:
-                src.setdefault(m.group(1), strip_basic_comments(line.rstrip()))
-    body = ' '.join(src.get(n, '') for n in cycle).upper()
-    uvars = set(re.findall(r'([A-Z][A-Z0-9]?)\s*=\s*USR', body))
-    gated = [v for v in uvars if re.search(r'\bIF\b[^:]*\b%s\b' % v, body)]
-    if 'USR' not in body:
+                src.setdefault(m.group(1), m.group(2))
+    bodies = [src.get(n, '') for n in cycle]
+    uvars, gated = usr_gating(bodies)
+    calls = any(USR_CALL.search(re.sub(r'"[^"]*"?', '""', st).upper())
+                for b in bodies for st in split_statements(b)
+                if not is_comment(st))
+    if not calls:
         verdict = 'no-usr-in-cycle'
     elif gated:
         verdict = 'usr-gates-the-loop'

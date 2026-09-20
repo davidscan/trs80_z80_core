@@ -102,6 +102,54 @@ class TestRegionDiscrimination(unittest.TestCase):
         self.assertEqual(oracle.region_of(32740, bytes(27)), 'candidate-ml')
 
 
+class TestHangAnalysis(unittest.TestCase):
+    """Whether a USR result gates a spin cycle, read from its source lines."""
+
+    def test_a_long_name_is_its_first_two_characters(self):
+        """KEY=USR(0) assigns KE -- not the EY an unanchored pattern finds."""
+        self.assertEqual(oracle.usr_gating(['KEY=USR(0):IF KEY=0 THEN 10']),
+                         ({'KE'}, True))
+        self.assertEqual(oracle.usr_gating(['KEY=USR(0)', 'IF KEPT=0 THEN 10']),
+                         ({'KE'}, True))
+
+    def test_usr_called_in_the_condition_gates(self):
+        self.assertEqual(oracle.usr_gating(['IF USR(0)=0 THEN 10']),
+                         (set(), True))
+
+    def test_crunched_lines_read_like_spaced_ones(self):
+        self.assertEqual(oracle.usr_gating(['X=USR(0):IFX=0THEN10']),
+                         ({'X'}, True))
+        self.assertEqual(oracle.usr_gating(['IFUSR(0)=0GOTO10']), (set(), True))
+
+    def test_an_apostrophe_in_a_string_is_text(self):
+        line = 'X=USR(0):PRINT "DON\'T MOVE":IF X=0 THEN 10'
+        self.assertEqual(oracle.strip_basic_comments(line), line)
+        self.assertEqual(oracle.usr_gating([line]), ({'X'}, True))
+
+    def test_a_commented_out_if_gates_nothing(self):
+        """liongrp2.bas: the IF is inside a REM, the loop is unconditional."""
+        cycle = ["' X$=INKEY$:IF X$=\"\"110", 'X=USR(0): GOTO 110']
+        self.assertEqual(oracle.strip_basic_comments(cycle[0]), '')
+        self.assertEqual(oracle.usr_gating(cycle), ({'X'}, False))
+
+    def test_other_variables_and_strings_do_not_gate(self):
+        self.assertEqual(oracle.usr_gating(['X=USR(0)', 'IF Y=0 THEN 10']),
+                         ({'X'}, False))
+        self.assertEqual(oracle.usr_gating(['X=USR(0):IF X$="" THEN 10']),
+                         ({'X'}, False))
+        self.assertEqual(oracle.usr_gating(['X=USR(0):IF A$="X" THEN 10']),
+                         ({'X'}, False))
+
+    def test_an_assignment_behind_then_counts(self):
+        self.assertEqual(
+            oracle.usr_gating(['IF A=1 THEN X=USR(0) ELSE 30', 'IF X>2 GOTO 10']),
+            ({'X'}, True))
+
+    def test_defusr_is_not_a_call(self):
+        self.assertEqual(oracle.usr_gating(['DEFUSR=32000:GOTO 10']),
+                         (set(), False))
+
+
 @unittest.skipUnless(HAVE_INTERP, 'interpreter sources not present')
 class TestPatchPoints(unittest.TestCase):
     """Every instrumentation anchor must still match the interpreter EXACTLY.
