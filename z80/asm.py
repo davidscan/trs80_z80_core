@@ -678,6 +678,14 @@ def assemble(text, org=None, entry=None):
                 s.opnds = [Opnd(t, lineno, symbols, pc) for t in names]
                 s.enc, s.entry = choose(op, s.opnds, lineno)
                 s.size = s.entry.length
+            if pc + s.size > 0x10000:
+                # memory ends at 0FFFFH.  Unchecked, a .cmd wrapped the tail
+                # to 0000H, a .bin grew past 64K, a .bas POKEd above 65535
+                # and a .cas died on a byte of 256; the listing's & 0FFFFH
+                # hid all of it.
+                size, s.size = s.size, 0
+                raise AsmError(lineno, 'the location counter runs past 0FFFFH: '
+                                       '%d byte(s) at %04XH' % (size, pc))
             pc += s.size
         except AsmError as e:
             res.errors.append((e.lineno, e.msg))

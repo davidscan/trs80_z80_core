@@ -255,6 +255,16 @@ class TestErrors(unittest.TestCase):
         self.assertIn('division by zero', self.errors('  ORG 0\n  DEFB 1/0\n')[0][1])
         self.assertIn('bad number', self.errors('  ORG 0\n  DEFB 12G\n')[0][1])
 
+    def test_the_location_counter_stops_at_the_top_of_memory(self):
+        e = self.errors('  ORG 0FFFEH\n  DEFB 1,2,3,4\n  NOP\n')
+        self.assertEqual([ln for ln, _ in e], [2])
+        self.assertIn('runs past 0FFFFH: 4 byte(s) at FFFEH', e[0][1])
+        self.assertIn('runs past', self.errors('  ORG 0FFFFH\n  LD HL,0\n')[0][1])
+        self.assertIn('runs past', self.errors('  ORG 8000H\n  DEFS 8001H\n')[0][1])
+        r = assemble('  ORG 0FFFEH\n  DEFB 1,2\nTOP EQU $\n  END\n')   # the last byte is usable
+        self.assertEqual((r.errors, r.segments, r.symbols['TOP']),
+                         ([], [(0xFFFE, b'\x01\x02')], 0x10000))
+
 
 TINY = '  ORG 7D00H\n  LD HL,1234H\n  JP 0A9AH\n  END\n'
 
