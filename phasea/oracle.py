@@ -123,12 +123,17 @@ PATCHES = [
     # rather than assumed: liongrp2.bas hangs in `120 X=USR(0):GOTO 110`
     # where line 110 is a REM, and would hang identically with a perfect
     # Z80. Only the trace can tell the two apart.
+    # Flushed per line, like the poke log and for the same reason: the run
+    # ends in a timeout kill. A line is logged only when it CHANGES, so a
+    # one-line spin (`10 IF USR(0)=0 THEN 10`, the typical poll) writes one
+    # short line, and unflushed it dies in gawk's buffer with the process.
     ('p70_exec.awk',
      '        SK = CK; SLI = CLI; SCP = CP\n'
      '        execstmt()\n',
      '        if ("TRS80_LINELOG" in ENVIRON && CLN != LASTTRACELN) {\n'
      '            LASTTRACELN = CLN\n'
      '            print CLN > (ENVIRON["TRS80_LINELOG"])\n'
+     '            fflush(ENVIRON["TRS80_LINELOG"])\n'
      '        }\n'
      '        SK = CK; SLI = CLI; SCP = CP\n'
      '        execstmt()\n'),

@@ -238,6 +238,19 @@ class TestInstrumentedBuild(unittest.TestCase):
         oracle.analyse_hang(prog, timeout=20)
         self.assertEqual(sorted(os.listdir(d)), ['saver.bas'])
 
+    def test_a_one_line_spin_leaves_its_trace(self):
+        """The line log is flushed: the timeout kill must not take it.
+
+        A line is logged when it changes, so a one-line spin writes a
+        single short line that never fills gawk's buffer.
+        """
+        prog = os.path.join(oracle.OUT, 'spin1.bas')
+        with open(prog, 'w') as f:
+            f.write('10 X=USR(0):GOTO 10\n')
+        got = oracle.analyse_hang(prog, timeout=2)
+        self.assertEqual(got['cycle'], ['10'])
+        self.assertEqual(got['verdict'], 'unconditional-loop')
+
     def test_interpreter_answers_the_dos_probe_with_a_ret(self):
         """PEEK(16396) must be 201 -- FINDING 16, now shipped upstream.
 
