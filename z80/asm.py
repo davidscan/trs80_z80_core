@@ -34,7 +34,10 @@ Assembler and its successors:
     as in Zilog syntax: `LD A,(BUF+1)` reads memory, `LD A,BUF+1` loads
     the address.  NOTE: the original EDTASM evaluated left to right with
     no precedence; period listings' expressions (SCREEN+708, $-1) do not
-    tell the two apart, so the usual precedence is used here.
+    tell the two apart, so the usual precedence is used here.  The shifts
+    work on 16 bits with zeros coming in (a count of 0 to 16).  Blanks may
+    stand around an operator, not between two values (`DB 1 2` is an
+    error).  A byte operand is -128..255, a word -32768..65535.
   - Directives: ORG, EQU, DEFB/DB, DEFW/DW, DEFM/DM, DEFS/DS [,fill],
     END [entry].  DEFB and DEFM both take any mix of expressions and
     quoted strings ('' inside single quotes is one quote).
@@ -239,9 +242,9 @@ class Expr:
             elif not 0 <= w <= 16:
                 raise AsmError(self.lineno, 'shift count out of range: %d' % w)
             elif o == '.SHL.':
-                v <<= w
+                v = ((v & 0xFFFF) << w) & 0xFFFF
             else:
-                v >>= w
+                v = (v & 0xFFFF) >> w     # 16 bits, zeros in: -2 .SHR. 1 is 7FFFH
 
     def _unary(self):
         o = self._take('-', '+', '.NOT.')
@@ -339,7 +342,18 @@ def split_fields(line, lineno):
 def split_operands(text, lineno):
     """Split on commas outside quotes and parentheses; drop blanks outside quotes."""
     items, cur, q, depth, prev = [], [], None, 0, ' '
+    gap = False                     # blanks since the last character kept
+
+    def wordish(c, left):
+        return c.isalnum() or c in '_$@?\'"' or c == (')' if left else '(')
+
     for ch in text:
+        if not q and not ch.isspace():
+            # blanks may stand around an operator, never between two values:
+            # dropped blindly, `DB 1 2` assembled as 12 and `LD A,1 0` as 10
+            if gap and cur and wordish(cur[-1], True) and wordish(ch, False):
+                raise AsmError(lineno, 'missing operator or comma in %r' % text.strip())
+            gap = False
         if q:
             cur.append(ch)
             if ch == q:
@@ -356,7 +370,9 @@ def split_operands(text, lineno):
         elif ch == ',' and depth == 0:
             items.append(''.join(cur))
             cur = []
-        elif not ch.isspace():
+        elif ch.isspace():
+            gap = True
+        else:
             cur.append(ch)
         prev = ch
     if q:
@@ -432,7 +448,8 @@ class Opnd:
             return
         if 0 <= v <= 7:
             self.tokens.append(str(v))            # BIT/SET/RES bit, IM mode
-        self.tokens.append('%02XH' % (v & 0xFF))  # RST vector
+        if 0 <= v <= 0xFF:
+            self.tokens.append('%02XH' % v)       # RST vector (RST 138H is not RST 38H)
 
 
 def choose(mnemonic, opnds, lineno):
@@ -447,13 +464,15 @@ def choose(mnemonic, opnds, lineno):
 
 
 def byte_value(v, lineno, what='byte'):
-    if not -256 < v < 256:
+    """A byte is 0..255 or, signed, -128..-1.  The range was +-255, which
+    took LD A,-200 and made it 38H."""
+    if not -128 <= v <= 255:
         raise AsmError(lineno, '%s out of range: %d' % (what, v))
     return v & 0xFF
 
 
 def word_value(v, lineno, what='word'):
-    if not -65536 < v < 65536:
+    if not -32768 <= v <= 65535:
         raise AsmError(lineno, '%s out of range: %d' % (what, v))
     return v & 0xFFFF
 

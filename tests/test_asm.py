@@ -268,6 +268,31 @@ class TestErrors(unittest.TestCase):
             self.assertEqual(len(e), 1, src)
             self.assertIn('duplicate label X', e[0][1])
 
+    def test_operands_are_not_quietly_cut_to_fit(self):
+        for src, what in (('  DB 1 2\n', 'missing operator or comma'),
+                          ('  LD A,1 0\n', 'missing operator or comma'),
+                          ("  DEFM 'A' 'B'\n", 'missing operator or comma'),
+                          ('  LD A,(HL) 5\n', 'missing operator or comma'),
+                          ('  LD A,-200\n', 'out of range'),
+                          ('  DEFB -129\n', 'out of range'),
+                          ('  DEFB 256\n', 'out of range'),
+                          ('  DEFW -32769\n', 'out of range'),
+                          ('  LD HL,65536\n', 'out of range'),
+                          ('  RST 138H\n', 'no such instruction'),
+                          ('  RST -200\n', 'no such instruction')):
+            e = self.errors('  ORG 0\n' + src)
+            self.assertEqual(len(e), 1, src)
+            self.assertIn(what, e[0][1], src)
+
+    def test_blanks_around_operators_and_signed_values_still_assemble(self):
+        r = assemble("  ORG 0\nV EQU 3C00H\n  LD HL, V + 5 * 64\n  LD A, ( V )\n  LD (IX + 2), -1\n"
+                     "  DEFB -128, 255, 'A' , 1 .SHL. 3\n  DEFW -32768, 65535, -2 .SHR. 1, 1 .SHL. 16\n"
+                     "  DEFM 'DON''T', 13\n  RST 38H\n  EX AF, AF'\n")
+        self.assertEqual(r.errors, [])
+        self.assertEqual(r.segments[0][1],
+                         bytes.fromhex('21403d' '3a003c' 'dd3602ff' '80ff4108'
+                                       '0080ffffff7f0000') + b"DON'T\r" + bytes.fromhex('ff08'))
+
     def test_a_shift_count_is_checked(self):
         self.assertIn('shift count out of range: -1',
                       self.errors('  ORG 0\n  DEFB 1 .SHL. -1\n')[0][1])
