@@ -99,11 +99,12 @@ PRINTER = (14312, 14313)
 # build fails loudly rather than silently instrumenting nothing.
 
 PATCHES = [
+    # Re-anchored 2026-09-20: POKE's value now goes through byteconv (the
+    # ROM's range check: ?FC outside 0-255, nothing stored), so the log
+    # sits after it and records only bytes a real machine would store.
     ('p80_stmt.awk',
-     '    b = bfloor(num(v)) % 256\n'
-     '    if (b < 0) b += 256\n',
-     '    b = bfloor(num(v)) % 256\n'
-     '    if (b < 0) b += 256\n'
+     '    b = byteconv(num(v)); if (E) return\n',
+     '    b = byteconv(num(v)); if (E) return\n'
      '    if ("TRS80_POKELOG" in ENVIRON) {\n'
      '        print a, b > (ENVIRON["TRS80_POKELOG"])\n'
      '        fflush(ENVIRON["TRS80_POKELOG"])\n'
