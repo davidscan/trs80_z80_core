@@ -667,6 +667,7 @@ class Block:
         self.disputed = {}          # equates whose value column and operand disagree by a slip
         self.org = None
         self.tally = {}
+        self.first_fixed = 0            # the block's first address was chained backward
 
     def run(self, rounds=5):
         """Settle the block.  A line reconciled in one round gives the address
@@ -902,7 +903,45 @@ class Block:
                 pc = r.addr             # an ORG line moves the counter
             else:
                 pc = None               # a damaged object field breaks the chain
-        self.tally['addresses repaired'] = fixed
+        if self.first_address(recs, lens, step):
+            return self.chain_addresses()       # the lines under it take their place again
+        self.tally['addresses repaired'] = fixed + self.first_fixed
+
+    def first_address(self, recs, lens, step):
+        """The chain runs forward, so nothing has vouched for the FIRST
+        address: a 7 scanned as a 1 there was 'clean', and the block then
+        began at 1D00H (the ROM-call tally counts a branch into the block's
+        own span as a call to itself, and that span reached down into the
+        ROM).  So the first address is chained BACKWARD from the next
+        addressed line -- one whose own scan stands, because the line after
+        IT agrees with it -- less the bytes between.  Not where the page
+        lost lines in between, and not against an ORG whose operand and
+        address column agree: those are two witnesses already."""
+        chained = [i for i, r in enumerate(recs)
+                   if r.addr is not None and r.reserve is None and r.op not in ('EQU', 'DEFL')]
+        if len(chained) < 2:
+            return False
+        i, j = chained[0], chained[1]
+        a, b = recs[i], recs[j]
+        if b.addr != b.col0 or not self.fits_forward(recs, lens, j):
+            return False
+        if any(lens[k] is None for k in range(i, j)) or self.lost_before(recs, j, step):
+            return False
+        want = (b.addr - sum(lens[k] or 0 for k in range(i, j)
+                             if recs[k].op not in ('EQU', 'DEFL'))) & 0xFFFF
+        if want == a.addr:
+            return False
+        if a.op == 'ORG':
+            for args in mechanical(a.args or ''):
+                try:
+                    if asm.Expr(args, a.n).eval(self.symbols, 0) == a.addr:
+                        return False
+                except (asm.AsmError, asm.Undefined):
+                    pass
+        a.anote = 'address %04X->%04X: the lines after it agree' % (a.addr, want)
+        a.addr = want
+        self.first_fixed = 1
+        return True
 
     def reserves(self, r, pc, lost=0):
         """EDTASM prints the SIZE of a DEFS in the first column, where every

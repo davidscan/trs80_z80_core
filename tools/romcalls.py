@@ -55,6 +55,8 @@ NAMES = {
     0x0A9A: 'RETINT return integer', 0x1A19: 'READY', 0x28A7: 'VDLINE display string (HL)',
 }
 
+REACH = 64          # bytes between two lines of one run (hexcheck.continues' reach)
+
 DATA_OPS = {'DEFB', 'DB', 'DEFW', 'DW', 'DEFM', 'DM', 'DEFS', 'DS'}
 
 
@@ -65,8 +67,24 @@ def rom_calls(recs):
     # A listing assembled at a low address (relocatable code, ORG 0) has
     # its own branches in ROM range: a target inside the block is a call to
     # itself, not to the ROM.
-    here = [r.addr for r in recs if r.addr is not None and r.bytes]
-    lo, hi = (min(here), max(here)) if here else (0, -1)
+    # "Inside the block" is inside one of its RUNS of lines, not anywhere
+    # from its lowest address to its highest: one misread address, or a
+    # second ORG far away, stretched that span across the ROM and every
+    # real ROM call inside it was counted as a call to itself.  Lines whose
+    # addresses lie within REACH of each other are one run (lines the scan
+    # lost leave holes that size); an EQU's first column is a value, not a
+    # place, and joins nothing.
+    spans = []
+    for a, n in sorted((r.addr, max(len(r.bytes or b''), getattr(r, 'reserve', None) or 0, 1))
+                       for r in recs if r.addr is not None and r.op not in ('EQU', 'DEFL')):
+        if spans and a - spans[-1][1] <= REACH:
+            spans[-1][1] = max(spans[-1][1], a + n - 1)
+        else:
+            spans.append([a, a + n - 1])
+
+    def own(target):
+        return any(lo <= target <= hi for lo, hi in spans)
+
     for r in recs:
         if not r.bytes or r.addr is None or r.status not in hexcheck.CONFIDENT + ('hexonly',):
             continue
@@ -76,7 +94,7 @@ def rom_calls(recs):
             if ins.invalid or ins.op is None or ins.target is None:
                 continue
             if ins.op.kind in ('jump', 'call') and ins.target < ROM_TOP \
-                    and not lo <= ins.target <= hi:
+                    and not own(ins.target):
                 out.append((ins.target, ins.text.split()[0], r.status == 'hexonly', r))
     return out
 

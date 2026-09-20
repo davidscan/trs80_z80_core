@@ -636,6 +636,35 @@ T44     DEFW    0846H
         self.assertEqual([(r.reserve, r.addr, r.status) for r in defs], [(2, None, 'clean')])
         self.assertEqual([r.addr for r in b.recs if r.hexs][-2:], [0x7D0C, 0x7D0D])
 
+    def test_the_first_address_is_chained_backward(self):
+        """Nothing stood before the first address to check it: a 7 read as a
+        1 there was 'clean' and the block began at 1D00H."""
+        body = self.EDTASM_DEFS.split('\n', 1)[1]                  # no ORG line above it
+        b, = check(body.replace('7D00 210A7D', '1D00 210A7D'))
+        self.assertEqual(b.recs[0].addr, 0x7D00)
+        self.assertIn('1D00->7D00', b.recs[0].anote)
+        self.assertEqual(b.tally['addresses repaired'], 1)
+        self.assertEqual({r.status for r in b.recs}, {'clean'})
+        # the ORG line's own column, against the lines under it
+        b, = check(self.EDTASM_DEFS.replace('7D00          00100', '1D00          00100'))
+        self.assertEqual((b.recs[0].addr, b.recs[0].fargs), (0x7D00, '7D00H'))
+        # an undamaged first address is left alone
+        b, = check(body)
+        self.assertEqual((b.recs[0].addr, b.recs[0].anote, b.tally['addresses repaired']), (0x7D00, '', 0))
+
+    def test_the_first_address_is_not_moved_on_thin_evidence(self):
+        body = self.EDTASM_DEFS.split('\n', 1)[1]
+        # an ORG whose operand and address column agree is two witnesses
+        b, = check(self.EDTASM_DEFS.replace('7D00          00100        ORG  7D00H',
+                                            '7C00          00100        ORG  7C00H'))
+        self.assertEqual(b.recs[0].addr, 0x7C00)
+        # the editor's numbers skip after the first line: lines were lost there
+        b, = check(body.replace('7D00 210A7D   00110', '1D00 210A7D   00050'))
+        self.assertEqual(b.recs[0].addr, 0x1D00)
+        # the second line's own address does not stand (the third disagrees with it)
+        b, = check(body.replace('7D00 210A7D', '1D00 210A7D').replace('7D03 3620', '7D13 3620'))
+        self.assertEqual(b.recs[0].addr, 0x1D00)
+
     def test_a_defs_size_the_operand_does_not_confirm_is_not_taken(self):
         """One column is not two witnesses: 0003 against DEFS 2 stays out."""
         b, = check(self.EDTASM_DEFS.replace('0002          00160', '0003          00160'))

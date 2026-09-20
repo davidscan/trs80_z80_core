@@ -49,6 +49,26 @@ class RomCalls(unittest.TestCase):
         self.assertEqual(sorted({op for _, op, _, _ in calls}), ['CALL', 'JP', 'RST'])
         self.assertFalse(any(alone for _, _, alone, _ in calls))
 
+    def test_an_equate_is_a_value_not_a_place_in_the_block(self):
+        """`GETARG EQU 0A7FH` prints 0A7F in the first column; counted as a
+        line of the block it would make CALL GETARG a call to itself."""
+        res = asm.assemble('GETARG  EQU     0A7FH\n        ORG     7000H\n        CALL    GETARG\n'
+                           '        LD      A,1\n        LD      B,2\n        RET\n        END\n')
+        self.assertEqual(res.errors, [])
+        (b,) = test_hexcheck.check(test_hexcheck.render(res))
+        self.assertEqual([t for t, _, _, _ in romcalls.rom_calls(b.recs)], [0x0A7F])
+
+    def test_the_block_is_its_runs_of_lines_not_one_span(self):
+        """A second ORG far below (or one misread address) stretched the
+        lowest-to-highest span across the ROM, and every real ROM call
+        inside it was taken for a call into the block itself."""
+        res = asm.assemble('        ORG     0020H\nLOW     RET\n' + SOURCE.replace('        END\n', '')
+                           + '        CALL    LOW\n        END\n')
+        self.assertEqual(res.errors, [])
+        (b,) = test_hexcheck.check(test_hexcheck.render(res))
+        targets = sorted(t for t, _, _, _ in romcalls.rom_calls(b.recs))
+        self.assertEqual(targets, [0x0028, 0x0033, 0x0033, 0x01C9, 0x0A7F, 0x1A19])   # not 0020H: its own
+
     def test_a_one_column_line_is_counted_apart(self):
         line = '7008 CD3300 00140 CALL    0033H'
         self.assertIn(line, self.listing, 'the fixture moved')
