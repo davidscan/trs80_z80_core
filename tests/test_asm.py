@@ -255,6 +255,17 @@ class TestErrors(unittest.TestCase):
         self.assertIn('division by zero', self.errors('  ORG 0\n  DEFB 1/0\n')[0][1])
         self.assertIn('bad number', self.errors('  ORG 0\n  DEFB 12G\n')[0][1])
 
+    def test_a_label_is_defined_once_however_it_is_made(self):
+        for src in ('  ORG 0\nX NOP\nX EQU 5\n  LD HL,X\n',
+                    '  ORG 0\nX EQU 5\nX NOP\n',
+                    '  ORG 0\nX EQU 5\nX EQU 6\n',
+                    '  ORG 0\nX EQU Y\nX NOP\nY EQU 1\n',        # the first X is deferred
+                    '  ORG 0\nX NOP\nX ORG 100H\n',
+                    'X ORG 0\nX NOP\n'):
+            e = self.errors(src)
+            self.assertEqual(len(e), 1, src)
+            self.assertIn('duplicate label X', e[0][1])
+
     def test_the_location_counter_stops_at_the_top_of_memory(self):
         e = self.errors('  ORG 0FFFEH\n  DEFB 1,2,3,4\n  NOP\n')
         self.assertEqual([ln for ln, _ in e], [2])

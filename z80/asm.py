@@ -604,6 +604,16 @@ def assemble(text, org=None, entry=None):
     pc = org
     ended = False
 
+    labels = set()                  # every label met, a deferred EQU's too
+
+    def define(label, lineno):
+        """One definition per label, however it is made: an instruction or
+        data label, EQU, or the label on an ORG.  `X NOP / X EQU 5` used to
+        assemble, and LD HL,X took the 5."""
+        if label in labels:
+            raise AsmError(lineno, 'duplicate label %s' % label)
+        labels.add(label)
+
     # ---- pass 1: parse, size, define labels ----
     for lineno, line in enumerate(text.splitlines(), 1):
         if ended:
@@ -619,6 +629,7 @@ def assemble(text, org=None, entry=None):
             if op == 'EQU':
                 if not label:
                     raise AsmError(lineno, 'EQU needs a label')
+                define(label, lineno)
                 s.items = Expr(args, lineno)
                 try:
                     s.value = s.items.eval(symbols, pc if pc is not None else 0)
@@ -635,6 +646,7 @@ def assemble(text, org=None, entry=None):
                     raise AsmError(lineno, 'ORG needs a value known here: %s undefined' % u.name)
                 s.pc = pc
                 if label:
+                    define(label, lineno)
                     symbols[label] = pc
                 continue
             if pc is None:
@@ -643,8 +655,7 @@ def assemble(text, org=None, entry=None):
                 raise AsmError(lineno, 'no ORG before the first statement (or pass --org)')
             s.pc = pc
             if label:
-                if label in symbols:
-                    raise AsmError(lineno, 'duplicate label %s' % label)
+                define(label, lineno)
                 symbols[label] = pc
             if op is None:
                 continue

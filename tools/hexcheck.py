@@ -1353,8 +1353,12 @@ class Block:
             head = (label or '').ljust(8) if len(label or '') < 8 else label + ' '
             return (head + '%-8s%-16s%s' % (op, args, comment)).rstrip()
 
+        # an EQU line is written out below whatever its status says, so its
+        # label is defined here; counted as free as well it was defined
+        # twice, which the assembler let pass until it checked EQU labels
         defined = {r.label for r in self.recs
-                   if r.label and r.status not in ('unresolved', 'text')}
+                   if r.label and r.status != 'unresolved'
+                   and (r.status != 'text' or r.op in ('EQU', 'DEFL'))}
         free = sorted(n for n in referenced(self.recs) if n not in defined)
         pc = None
         for r in self.recs:
