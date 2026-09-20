@@ -95,6 +95,41 @@ class Headless:
         return any(self.machine.known[a] for a in range(VIDEO_LO, VIDEO_HI))
 
 
+DEFAULT_SP = 0xFF00
+
+
+def loaded_at(segments, addr):
+    addr &= 0xFFFF
+    return any(org <= addr < org + len(data) or addr + 0x10000 < org + len(data)
+               for org, data in segments)
+
+
+def place_stack(segments, sp=None):
+    """The stack pointer at entry, never on top of the program.
+
+    The call pushes the sentinel return address at sp-2 and sp-1.  With
+    the default 0FF00H a program loaded across 0FEFEH lost two bytes to it
+    before its first instruction ran, and nothing said so (the
+    interpreter's SYSTEM, whose stack is BASIC's, ran the same file
+    correctly).  So: an --sp that would land on loaded bytes is refused,
+    and when the default would, the stack goes just under the lowest
+    block instead, growing away from the program.
+    """
+    def clear(p):
+        return not (loaded_at(segments, p - 1) or loaded_at(segments, p - 2))
+    if sp is not None:
+        if not clear(sp):
+            raise LoadError('--sp %04XH: the return address at %04XH-%04XH would overwrite '
+                            'loaded bytes' % (sp, (sp - 2) & 0xFFFF, (sp - 1) & 0xFFFF))
+        return sp
+    if clear(DEFAULT_SP):
+        return DEFAULT_SP
+    low = min(org for org, _ in segments)
+    if low < 2 or not clear(low):
+        raise LoadError('no room for the stack under the program: pass --sp')
+    return low
+
+
 def registers(cpu):
     return ('AF=%04X BC=%04X DE=%04X HL=%04X IX=%04X IY=%04X SP=%04X PC=%04X'
             % (cpu.af, cpu.bc, cpu.de, cpu.hl, cpu.ix, cpu.iy, cpu.sp, cpu.pc))
@@ -132,8 +167,9 @@ def main(argv=None):
                     help='where to start (default: the file\'s transfer address, else its first block)')
     ap.add_argument('--arg', type=parse_addr, default=0, metavar='N',
                     help='the USR argument a CALL 0A7FH fetches into HL (default 0)')
-    ap.add_argument('--sp', type=parse_addr, default=0xFF00, metavar='ADDR',
-                    help='the stack pointer at entry (default 0FF00H)')
+    ap.add_argument('--sp', type=parse_addr, default=None, metavar='ADDR',
+                    help='the stack pointer at entry (default 0FF00H, or just under the '
+                         'program when it is loaded there)')
     ap.add_argument('--cycles', type=int, default=DEFAULT_CYCLES, metavar='N',
                     help='the T-state budget (default %d, about 11 s of the machine)' % DEFAULT_CYCLES)
     g = ap.add_mutually_exclusive_group()
@@ -147,17 +183,20 @@ def main(argv=None):
 
     try:
         segments, entry, name = load_file(a.file, org=a.org, entry=a.entry)
+        sp = place_stack(segments, a.sp)
     except (LoadError, OSError) as e:
         sys.stderr.write('%s\n' % e)
         return 1
     h = Headless(a.cycles)
     h.load(segments)
-    how, detail = h.run(entry, a.arg, a.sp)
+    how, detail = h.run(entry, a.arg, sp)
     m = h.machine
     out = []
     if not a.quiet:
         blocks = ', '.join('%d bytes at %04XH' % (len(d), o) for o, d in segments)
-        out.append('%s: %s; entry %04XH' % (a.file, blocks, entry))
+        out.append('%s: %s; entry %04XH%s' % (a.file, blocks, entry,
+                   '' if sp == DEFAULT_SP or a.sp is not None
+                   else '; stack at %04XH, under the program' % sp))
         out.append('%s; HL = %d (%04XH); %s T-states, %.3f s at %.5f MHz'
                    % (detail, m.cpu.hl, m.cpu.hl, format(m.cycles, ','), m.cycles / (MHZ * 1e6), MHZ))
         if a.regs:

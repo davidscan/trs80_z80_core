@@ -173,6 +173,20 @@ class TestCommandLine(unittest.TestCase):
             rc, out = self.main(loop, '--cycles', '1000')
             self.assertEqual(rc, 2)
             self.assertIn('budget', out)
+            # a program loaded where the default stack is: the sentinel push
+            # must not land on it (0FEFEH holds the RET this routine jumps to)
+            high = os.path.join(d, 'high.asm')
+            with open(high, 'w') as f:
+                f.write('  ORG 0FEF0H\nSTART LD HL,1234H\n  JP TAIL\n  ORG 0FEFEH\n'
+                        'TAIL JP 0A9AH\n  END START\n')
+            rc, out = self.main(high)
+            self.assertEqual(rc, 0, out)
+            self.assertIn('HL = 4660', out)
+            self.assertIn('stack at FEF0H', out)
+            rc, out = self.main(high, '--sp', '0FF00H')
+            self.assertEqual(rc, 1)
+            rc, out = self.main(high, '--sp', '0F000H')
+            self.assertEqual(rc, 0, out)
             rc, out = self.main(os.path.join(d, 'missing.cmd'))
             self.assertEqual(rc, 1)
 

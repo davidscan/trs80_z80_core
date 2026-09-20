@@ -115,9 +115,9 @@ an error, 2 when the T-state budget stopped it. **Writes:** nothing.
 |---|---|---|---|
 | `FILE` | required | the program: `.cmd`, `.cas`, `.bin` or `.asm` | always |
 | `--org ADDR` | none | the load address of a `.bin` file, or of `.asm` source with no `ORG` | raw bytes |
-| `--entry ADDR` | the file's transfer address, else its first block | where execution starts | a routine whose entry is not its first byte |
+| `--entry ADDR` | the file's transfer address (in source, `END`'s operand), else its first block | where execution starts; it overrides what the file names | a routine whose entry is not its first byte |
 | `--arg N` | `0` | what `CALL 0A7FH` fetches into HL, as `USR(N)` would | routines that take an argument |
-| `--sp ADDR` | `0FF00H` | the stack pointer at entry | code that assumes a stack somewhere else |
+| `--sp ADDR` | `0FF00H`, or just under the program when it is loaded there | the stack pointer at entry; the return address goes in the two bytes below it, and an `--sp` that would put it on loaded bytes is refused | code that assumes a stack somewhere else |
 | `--cycles N` | `20000000` (about 11 s of the machine) | the T-state budget; a program still running then is stopped | programs that never return, or a shorter wait |
 | `--screen` / `--no-screen` | the screen prints if the program wrote to it | force or suppress the screen dump | checking a display routine; keeping output short |
 | `--regs` | off | prints AF BC DE HL IX IY SP PC at the end | debugging a routine |
