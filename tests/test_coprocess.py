@@ -224,7 +224,7 @@ class TestFixtureLayout(unittest.TestCase):
         fx = Fixture()
         self.assertEqual(sorted(fx.entry), sorted([0x7000, 0x7001, 0x7002, 0x7003,
                                                    0x7005, 0x7006, 0x7007, 0x7009,
-                                                   0x700A, 0x700B, 0x700C, 0x700D, 0x7777]))
+                                                   0x700A, 0x700B, 0x700C, 0x700D, 0x700E, 0x7777]))
         addrs = sorted(fx.image)
         self.assertEqual(addrs, list(range(addrs[0], addrs[0] + len(addrs))))
 
@@ -274,8 +274,23 @@ class TestTransport(unittest.TestCase):
             'M 28672:201',
             'GO',
             'BYE'])
-        self.assertEqual(out[1], 'ERR rom called 0000H, no ROM here')
-        self.assertTrue(out[2].startswith('RET '), out)
+        # the pushes (the sentinel, the CALL's return address) are stores too
+        self.assertEqual(out[1:3], ['W 61436:3,112,253,47',
+                                    'ERR rom called 0000H, no ROM here'])
+        self.assertTrue(out[3].startswith('RET '), out)
+
+    def test_err_sends_the_stores_made_before_it(self):
+        """LD A,42 / LD (7100H),A / CALL 0000H: the store stays in the core's
+        RAM, so it must reach the interpreter too -- as W lines ahead of the
+        ERR -- or the two memories disagree from then on."""
+        out, err, rc = self.talk([
+            'HELLO proto=1 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'M 28672:62,42,50,0,113,205,0,0',
+            'GO',
+            'BYE'])
+        self.assertEqual(out[1:], ['W 28928:42', 'W 61436:8,112,253,47',
+                                   'ERR rom called 0000H, no ROM here'])
 
     def test_exit_on_eof(self):
         out, err, rc = self.talk(['HELLO proto=1 mhz=0 ramtop=65535'])

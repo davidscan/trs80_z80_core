@@ -88,6 +88,9 @@ FIXTURE = {
     0x700C: bytes.fromhex('3E00' 'D3FF' 'C9'),
     # 700D: OUT (FFH),08H (32-col) then CALL 01C9H (CLS, which restores 64-col)
     0x700D: bytes.fromhex('3E08' 'D3FF' 'CDC901' 'C9'),
+    # 700E: store 42 at the argument address, then CALL 0000H: the store
+    # reaches the interpreter ahead of the ERR
+    0x700E: bytes.fromhex('CD7F0A' '362A' 'CD0000'),
     # anything else the stub answers with a plain RET
     0x7777: bytes.fromhex('C9'),
 }
@@ -468,7 +471,15 @@ def serve(m, recv, send, fixture):
         try:
             m.run(entry, arg, sp)
         except CoreError as e:
+            # The routine's stores up to the error stay in this RAM, and the
+            # next frame is a delta of what the INTERPRETER changed: unsent,
+            # they would never be corrected and the two memories would
+            # disagree for the rest of the session.  So they go out first,
+            # as W lines, and the ERR ends the call (PROTOCOL.md, Errors).
             m.flush_video()
+            for w in m.runs(m.dirty):
+                send('W ' + w)
+            m.dirty = {}
             send('ERR %s %s' % (e.code, e.text))
 
 
