@@ -36,14 +36,25 @@ CORPUS = os.environ.get('TRS80_CORPUS') or os.path.join(HERE, 'corpus')
 PROGRAMS = os.path.join(CORPUS, 'programs')
 
 
-def gate_check():
-    """Run the anchor suites. Returns (ok, summary)."""
-    r = subprocess.run(
-        [sys.executable, '-m', 'unittest',
-         'tests.test_table', 'tests.test_anchors', 'tests.test_extract'],
-        cwd=HERE, capture_output=True, text=True)
-    tail = (r.stderr or '').strip().splitlines()
-    return r.returncode == 0, tail[-1] if tail else ''
+ANCHOR_SUITES = ('tests.test_table', 'tests.test_anchors', 'tests.test_extract')
+
+
+def gate_check(suites=ANCHOR_SUITES, cwd=HERE):
+    """Run the anchor suites. Returns (ok, summary).
+
+    A SKIPPED test is not a passed one. The anchor tests skip when the
+    corpus sibling is absent, and unittest still exits 0 with
+    `OK (skipped=14)`: the gate would say PASS with neither anchor read.
+    So the gate wants exit 0, at least one test run, and no skip.
+    """
+    r = subprocess.run([sys.executable, '-m', 'unittest'] + list(suites),
+                       cwd=cwd, capture_output=True, text=True)
+    lines = (r.stderr or '').strip().splitlines()
+    summary = lines[-1] if lines else ''
+    ran = [ln for ln in lines if ln.startswith('Ran ')]
+    ok = (r.returncode == 0 and 'skipped' not in summary
+          and bool(ran) and not ran[-1].startswith('Ran 0 '))
+    return ok, summary
 
 
 def input_files():
@@ -161,7 +172,8 @@ def main():
         print('anchor gate: %s  (%s)' % ('PASS' if ok else 'FAIL', summary))
         if not ok:
             print('\nREFUSING TO PUBLISH COUNTS: a count produced '
-                  'without both anchor checks passing is not a measurement.')
+                  'without both anchor checks passing is not a measurement '
+                  '(a skipped anchor test has not passed).')
             return 2
 
     files = input_files()
