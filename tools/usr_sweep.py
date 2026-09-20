@@ -54,9 +54,22 @@ def norm(r):
     lines = (r['out'] + '\n--stderr--\n' + r['err']).splitlines()
     return '\n'.join(l for l in lines if not l.startswith(('gawk:', 'USR STUB:', 'USR CORE:')))
 
+def clear_logs(base):
+    """Remove base.in and base.out before a logged run.  The interpreter
+    starts the core at the first USR call, so a listing that never reaches
+    one writes no log -- and the log a previous sweep left under the same
+    name would be counted as this run's calls, RETs and ERRs: exactly the
+    listing a re-sweep exists to catch (the 2026-09-19 audit, H-22)."""
+    for ext in ('.in', '.out'):
+        try:
+            os.remove(base + ext)
+        except FileNotFoundError:
+            pass
+
 def one(path):
     rel = os.path.relpath(path, CORPUS)
     tag = rel.replace('/', '__')
+    clear_logs(RUNS + '/' + tag)
     stub = run(path, '')
     core = run(path, 'sh %s %s' % (CORELOG, RUNS + '/' + tag))
     ctrl = run(path, CORE)
