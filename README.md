@@ -51,6 +51,7 @@ The core reads these from the environment it inherits from the interpreter:
 |---|---|---|---|
 | `TRS80_SOUND` | unset (silent) | `auto` plays through the first installed player (ffplay, then ffmpeg's AudioToolbox device on macOS, aplay, pw-play); any other value is a shell command fed raw 16-bit little-endian mono PCM on stdin, with `{rate}` replaced by the sample rate | hearing a routine's sound live |
 | `TRS80_SOUND_WAV` | unset | writes the routines' audio to this WAV file, overwriting it when the core starts | keeping the sound, or checking it without speakers |
+| `TRS80_SOUND_WAV_APPEND` | unset | `1` carries an existing capture in that file on instead of overwriting it; the interpreter sets it when it restarts the core inside one session (`speed`, `sound`), so a restart loses no audio | never by hand |
 | `TRS80_SOUND_RATE` | `22050` | the sample rate for both | `44100` if your player prefers it |
 
 These belong to the interpreter (see its README) but decide how the core is used:

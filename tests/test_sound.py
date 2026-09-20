@@ -325,6 +325,63 @@ class TestFromEnv(unittest.TestCase):
             self.assertIsNone(cmd)
 
 
+class TestWavSinkAcrossRestarts(unittest.TestCase):
+    """The interpreter restarts the core for `speed`, `sound` and a REM META
+    line; a capture must not start over each time."""
+
+    def path(self):
+        fd, path = tempfile.mkstemp(suffix='.wav')
+        os.close(fd)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        return path
+
+    def test_append_carries_the_capture_on(self):
+        path = self.path()
+        a, b = b'\x01\x00' * 300, b'\x02\x00' * 500
+        k = WavSink(path, RATE); k.write(a); k.close()
+        k = WavSink(path, RATE, append=True); k.write(b); k.close()
+        self.assertEqual(wav_pcm(path), ((1, 2, RATE), a + b))       # wave reads it: the header is right
+        k = WavSink(path, RATE, append=True); k.close()              # a core that makes no sound
+        self.assertEqual(wav_pcm(path)[1], a + b)
+
+    def test_a_first_start_is_a_new_file(self):
+        path = self.path()
+        k = WavSink(path, RATE); k.write(b'\x01\x00' * 300); k.close()
+        k = WavSink(path, RATE); k.close()
+        self.assertEqual(wav_pcm(path), ((1, 2, RATE), b''))
+
+    def test_append_onto_something_else_starts_over(self):
+        path = self.path()
+        for junk in (b'', b'not a wav file at all, but longer than a header is........'):
+            with open(path, 'wb') as f:
+                f.write(junk)
+            k = WavSink(path, RATE, append=True); k.write(b'\x03\x00' * 10); k.close()
+            self.assertEqual(wav_pcm(path), ((1, 2, RATE), b'\x03\x00' * 10))
+        k = WavSink(path, 11025, append=True); k.close()            # another rate: not this capture
+        self.assertEqual(wav_pcm(path), ((1, 2, 11025), b''))
+        os.unlink(path)
+        k = WavSink(path, RATE, append=True); k.close()              # nothing there
+        self.assertEqual(wav_pcm(path), ((1, 2, RATE), b''))
+
+    def test_an_odd_byte_left_by_a_kill_is_dropped(self):
+        path = self.path()
+        k = WavSink(path, RATE); k.write(b'\x01\x00' * 4); k.close()
+        with open(path, 'ab') as f:
+            f.write(b'\x7f')
+        k = WavSink(path, RATE, append=True); k.write(b'\x02\x00'); k.close()
+        self.assertEqual(wav_pcm(path)[1], b'\x01\x00' * 4 + b'\x02\x00')
+
+    def test_from_env_reads_the_switch(self):
+        path = self.path()
+        k = WavSink(path, RATE); k.write(b'\x01\x00' * 8); k.close()
+        snd, _ = from_env({'TRS80_SOUND_WAV': path, 'TRS80_SOUND_WAV_APPEND': '1'}, 0.0)
+        snd.close()
+        self.assertEqual(len(wav_pcm(path)[1]), 16)
+        snd, _ = from_env({'TRS80_SOUND_WAV': path}, 0.0)
+        snd.close()
+        self.assertEqual(len(wav_pcm(path)[1]), 0)
+
+
 class TestTransport(unittest.TestCase):
 
     def talk(self, lines, env=None):

@@ -33,6 +33,8 @@ Configuration, read from the environment by `from_env`:
                       sample rate; `auto` picks an installed player;
                       unset or empty means no live sound
     TRS80_SOUND_WAV   path of a WAV file to write; unset means none
+    TRS80_SOUND_WAV_APPEND  1 = carry an existing capture on (a core restarted
+                      inside one interpreter session); else the file starts over
     TRS80_SOUND_RATE  sample rate, default 22050
 
 Live sound needs the core paced, since both players buffer seconds
@@ -46,11 +48,11 @@ the WAV sink carry on.
 import array
 import collections
 import shutil
+import struct
 import subprocess
 import sys
 import threading
 import time
-import wave
 
 DEFAULT_MHZ = 1.77408        # the literal, not 10.6445e6/6: awk's %.6g sends it exactly
 DEFAULT_RATE = 22050
@@ -137,22 +139,60 @@ class Synth:
 
 class WavSink:
     """A WAV file of the emulated timeline.  The header is patched after
-    every write, so the file is valid however the session ends."""
+    every write, so the file is valid however the session ends.
+
+    A CAPTURE OUTLIVES A CORE.  The interpreter restarts the core for a
+    changed `speed` or `sound` switch, and a program can do it from a REM
+    META line; each start used to open the file 'wb' and throw away what
+    the session had recorded so far.  With append=True (the interpreter
+    sets TRS80_SOUND_WAV_APPEND=1 on a restart inside one session) a file
+    that is a capture of this shape -- our own 44-byte header, mono,
+    16-bit, the same rate -- is carried on from its end.  Anything else
+    there, or nothing, starts a new file, as a first start always does.
+    Written by hand: the standard wave module cannot reopen a file."""
 
     dead = False
+    HEADER = 44
 
-    def __init__(self, path, rate):
-        self.f = open(path, 'wb')            # opened here, so a bad path raises before wave holds it
-        self.w = wave.open(self.f, 'wb')
-        self.w.setnchannels(1)
-        self.w.setsampwidth(2)
-        self.w.setframerate(rate)
+    def __init__(self, path, rate, append=False):
+        self.rate = rate
+        self.f = self._reopen(path) if append else None
+        if self.f is None:
+            self.f = open(path, 'wb')        # a bad path raises here, to from_env
+            self.n = 0
+            self.f.write(self._header())
+            self.f.flush()
+
+    def _header(self):
+        return struct.pack('<4sI4s4sIHHIIHH4sI', b'RIFF', 36 + self.n, b'WAVE', b'fmt ', 16,
+                           1, 1, self.rate, self.rate * 2, 2, 16, b'data', self.n)
+
+    def _reopen(self, path):
+        try:
+            f = open(path, 'r+b')
+        except OSError:
+            return None
+        head = f.read(self.HEADER)
+        self.n = 0
+        want = self._header()
+        if len(head) != self.HEADER or head[:4] != want[:4] or head[8:40] != want[8:40]:
+            f.close()
+            return None
+        f.seek(0, 2)
+        self.n = (f.tell() - self.HEADER) & ~1          # whole samples only
+        f.truncate(self.HEADER + self.n)
+        f.seek(0, 2)
+        return f
 
     def write(self, pcm):
-        self.w.writeframes(pcm)
+        self.f.write(pcm)
+        self.n += len(pcm)
+        self.f.seek(0)
+        self.f.write(self._header())
+        self.f.seek(0, 2)
+        self.f.flush()
 
     def close(self):
-        self.w.close()
         self.f.close()
 
 
@@ -333,8 +373,8 @@ def from_env(env, mhz):
     sinks = []
     if wav:
         try:
-            sinks.append(WavSink(wav, rate))
-        except (OSError, wave.Error):
+            sinks.append(WavSink(wav, rate, env.get('TRS80_SOUND_WAV_APPEND', '').strip() == '1'))
+        except OSError:
             pass
     if player:
         cmd = default_player(rate) if player == 'auto' else player.replace('{rate}', str(rate))
