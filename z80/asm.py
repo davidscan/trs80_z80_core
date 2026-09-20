@@ -812,6 +812,13 @@ def parse_addr(s):
     return v
 
 
+def same_file(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:                     # one of them does not exist yet
+        return os.path.realpath(a) == os.path.realpath(b)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog='python3 -m z80.asm',
@@ -834,6 +841,19 @@ def main(argv=None):
     ap.add_argument('--symbols', action='store_true',
                     help='print the symbol table after the listing')
     a = ap.parse_args(argv)
+
+    # An output that IS the source would be opened for writing over it: a
+    # slip of the hand (`-o prog.asm`) cost the program.  Checked before
+    # anything is written, by file identity, so ./x.asm and a link count.
+    outs = [(flag, p) for flag, p in (('-o', a.output), ('--list', a.listing))
+            if p and p != '-']
+    for flag, p in outs:
+        if same_file(p, a.source):
+            sys.stderr.write('%s %s is the source file: nothing written\n' % (flag, p))
+            return 1
+    if len(outs) == 2 and same_file(outs[0][1], outs[1][1]):
+        sys.stderr.write('-o and --list name one file (%s): nothing written\n' % a.output)
+        return 1
 
     try:
         with open(a.source, 'rb') as f:

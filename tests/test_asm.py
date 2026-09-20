@@ -388,6 +388,23 @@ class TestCommandLine(unittest.TestCase):
                 f.write('  ORG 0\n  LD A,(3\n')
             self.assertEqual(asm.main([bad, '-o', out]), 1)
 
+    def test_an_output_that_is_the_source_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 't.asm')
+            with open(src, 'w') as f:
+                f.write(TINY)
+            link = os.path.join(d, 'link.asm')
+            os.symlink(src, link)
+            out = os.path.join(d, 'same.out')
+            with redirect_stderr(io.StringIO()):
+                for argv in ([src, '-o', src], [src, '--list', src],
+                             [src, '-o', os.path.join(d, '.', 't.asm')], [src, '-o', link],
+                             [src, '-o', out, '--list', out]):
+                    self.assertEqual(asm.main(argv), 1, argv)
+            with open(src) as f:
+                self.assertEqual(f.read(), TINY)
+            self.assertFalse(os.path.exists(out))
+
     def test_bad_command_lines_are_messages_not_tracebacks(self):
         with tempfile.TemporaryDirectory() as d:
             src = os.path.join(d, 't\u00e9.asm')
