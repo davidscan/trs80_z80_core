@@ -219,6 +219,25 @@ class TestInstrumentedBuild(unittest.TestCase):
         self.assertEqual(oracle.runs_from_pokes(got['pokes']),
                          [(32000, bytes([0xCD, 0xC9, 0x80, 0xFF]))])
 
+    def test_a_listing_that_saves_writes_nothing_beside_itself(self):
+        """The corpus is only read: a run's files land in a scratch cwd."""
+        d = os.path.join(oracle.OUT, 'readonly')
+        os.makedirs(d, exist_ok=True)
+        for n in os.listdir(d):
+            os.remove(os.path.join(d, n))
+        prog = os.path.join(d, 'saver.bas')
+        with open(prog, 'w') as f:
+            f.write('10 OPEN "O",1,"SCORES.DAT":PRINT#1,7:CLOSE\n'
+                    '20 SAVE "COPY.BAS"\n'
+                    '30 FOR I=0 TO 3:POKE 32000+I,9:NEXT\n')
+        got = oracle.run_listing(prog, timeout=20)
+        self.assertEqual(got['rc'], 0, got['reason'])
+        self.assertEqual(oracle.runs_from_pokes(got['pokes']),
+                         [(32000, bytes([9] * 4))])
+        self.assertEqual(sorted(os.listdir(d)), ['saver.bas'])
+        oracle.analyse_hang(prog, timeout=20)
+        self.assertEqual(sorted(os.listdir(d)), ['saver.bas'])
+
     def test_interpreter_answers_the_dos_probe_with_a_ret(self):
         """PEEK(16396) must be 201 -- FINDING 16, now shipped upstream.
 

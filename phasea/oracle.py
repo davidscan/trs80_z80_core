@@ -59,9 +59,10 @@ import argparse
 import json
 import os
 import re
-
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -195,6 +196,25 @@ def build(force=False):
 FEED = ('1\n' * 400).encode()
 
 
+def run_interp(path, env, timeout):
+    """One batch run of `path`, in a working directory of its own.
+
+    NEVER in the listing's directory. The corpus is only read: a listing
+    that CSAVEs, SAVEs or OPENs for output would write beside itself, and
+    a saved .bas would be a listing the next sweep counts. The price is
+    that a listing which reads a companion file by a bare name no longer
+    finds it, which is how it runs anywhere else too.
+    """
+    cwd = tempfile.mkdtemp(prefix='oracle_')
+    try:
+        return subprocess.run(
+            GAWK + [INTERP, '--', '--seed', '1', os.path.abspath(path)],
+            input=FEED, capture_output=True, env=env, cwd=cwd,
+            timeout=timeout)
+    finally:
+        shutil.rmtree(cwd, ignore_errors=True)
+
+
 def run_listing(path, timeout=10.0):
     """Run one listing under the instrumented interpreter.
 
@@ -207,10 +227,7 @@ def run_listing(path, timeout=10.0):
     env = dict(os.environ, TRS80_POKELOG=log)
     timed_out = False
     try:
-        r = subprocess.run(
-            GAWK + [INTERP, '--', '--seed', '1', path],
-            input=FEED, capture_output=True, env=env,
-            cwd=os.path.dirname(path), timeout=timeout)
+        r = run_interp(path, env, timeout)
         rc, err = r.returncode, r.stderr.decode('latin-1', 'replace')
     except subprocess.TimeoutExpired:
         rc, timed_out, err = 124, True, ''
@@ -315,9 +332,7 @@ def analyse_hang(path, timeout=8.0):
         os.remove(log)
     env = dict(os.environ, TRS80_LINELOG=log)
     try:
-        subprocess.run(GAWK + [INTERP, '--', '--seed', '1', path],
-                       input=FEED, capture_output=True, env=env,
-                       cwd=os.path.dirname(path), timeout=timeout)
+        run_interp(path, env, timeout)
     except subprocess.TimeoutExpired:
         pass
     if not os.path.exists(log):
