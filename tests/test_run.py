@@ -97,6 +97,14 @@ class TestReaders(unittest.TestCase):
                 segs, entry, name = load_file(path, org=0x7D00 if ext == 'bin' else None)
                 self.assertEqual(segs, r.segments, ext)
                 self.assertEqual(entry, 0x7D00, ext)
+                # --entry wins over the entry the file names, END's operand too
+                segs, entry, name = load_file(path, org=0x7D00 if ext == 'bin' else None,
+                                              entry=0x7D03)
+                self.assertEqual(entry, 0x7D03, ext)
+            with open(os.path.join(d, 'empty.asm'), 'w') as f:
+                f.write('  ORG 7000H\n  END\n')
+            with self.assertRaises(LoadError):
+                load_file(os.path.join(d, 'empty.asm'))
             with open(os.path.join(d, 'bad.asm'), 'w') as f:
                 f.write('  ORG 0\n  FOO BAR\n')
             with self.assertRaises(LoadError):

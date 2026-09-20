@@ -103,7 +103,10 @@ def load_cas(data):
 
 def load_file(path, org=None, entry=None, fmt=None):
     """Read PATH by its extension (or FMT: bin, cmd, cas).  An .asm file
-    is assembled first (z80.asm), so a source file runs directly."""
+    is assembled first (z80.asm), so a source file runs directly.  ENTRY
+    overrides what the file names -- a transfer record, a 78H record or
+    the operand of END alike; a file that names none starts at its first
+    block (the interpreter's SYSTEM follows the same rule)."""
     import os
     ext = (fmt or os.path.splitext(path)[1].lstrip('.')).lower()
     with open(path, 'rb') as f:
@@ -113,8 +116,11 @@ def load_file(path, org=None, entry=None, fmt=None):
         r = assemble(data.decode('latin-1'), org=org, entry=entry)
         if r.errors:
             raise LoadError('\n'.join('%s:%d: %s' % (path, ln, msg) for ln, msg in r.errors))
-        return r.segments, r.entry, os.path.splitext(os.path.basename(path))[0]
-    if ext == 'cmd':
+        segments, e = r.segments, r.entry
+        name = os.path.splitext(os.path.basename(path))[0]
+        if not segments:
+            raise LoadError('%s: the source assembles to no bytes' % path)
+    elif ext == 'cmd':
         segments, e, name = load_cmd(data)
     elif ext == 'cas':
         segments, e, name = load_cas(data)
