@@ -599,6 +599,55 @@ T44     DEFW    0846H
         self.assertEqual(hexcheck.split_source('SETO CALL «=OATFH ;GET')[:3], ('SETO', 'CALL', 'OATFH'))
         self.assertEqual(hexcheck.split_source('csIN —-EQu 0235H')[:3], ('CSIN', 'EQU', '0235H'))
 
+    EDTASM_DEFS = (
+        '7D00          00100        ORG  7D00H\n'
+        '7D00 210A7D   00110 START  LD   HL,BUF\n'
+        '7D03 3620     00120        LD   (HL),20H\n'
+        '7D05 3A0C7D   00130        LD   A,(FLAG)\n'
+        '7D08 C9       00140        RET\n'
+        '7D09 00       00150        NOP\n'
+        '0002          00160 BUF    DEFS 2\n'
+        '7D0C 01       00170 FLAG   DEFB 1\n'
+        '7D0D C9       00180 EXIT   RET\n'
+        '7D0E          00190        END\n')
+
+    def test_a_defs_line_prints_its_size_where_the_address_goes(self):
+        """EDTASM's own shape (Barden's listings: `0002  00640 AI  DEFS 2`):
+        the first column of a DEFS line is the size.  Read as an address it
+        made an undamaged page exit 1, and the chain repaired the line after."""
+        b, = check(self.EDTASM_DEFS)
+        self.assertEqual({r.status for r in b.recs}, {'clean'})
+        defs = b.recs[6]
+        self.assertEqual((defs.addr, defs.reserve, defs.fop, defs.fargs), (0x7D0A, 2, 'DEFS', '2'))
+        self.assertEqual([r.addr for r in b.recs[7:9]], [0x7D0C, 0x7D0D])
+        self.assertEqual(b.symbols['BUF'], 0x7D0A)
+        self.assertEqual(b.verify(), [])
+        self.assertEqual(b.tally.get('addresses repaired'), 0)
+
+    def test_defs_lines_after_a_ruined_line_rejoin_their_listing(self):
+        """Barden's page: the line before the DEFS block did not scan, and
+        blank lines stand between all of them.  The DEFS lines belong to
+        the listing (their first column is no address to part them by), and
+        after a lost line the chain's address for them is not believed."""
+        page = self.EDTASM_DEFS.replace('7D09 00       00150        NOP', '7D09 O0 0O1 50 aR N0P,') \
+                               .replace('DEFS 2', 'DEFS) 2').replace('\n', '\n\n')
+        b, = check(page)
+        defs = [r for r in b.recs if hexcheck.is_defs(r.op)]
+        self.assertEqual([(r.reserve, r.addr, r.status) for r in defs], [(2, None, 'clean')])
+        self.assertEqual([r.addr for r in b.recs if r.hexs][-2:], [0x7D0C, 0x7D0D])
+
+    def test_a_defs_size_the_operand_does_not_confirm_is_not_taken(self):
+        """One column is not two witnesses: 0003 against DEFS 2 stays out."""
+        b, = check(self.EDTASM_DEFS.replace('0002          00160', '0003          00160'))
+        self.assertIsNone(b.recs[6].reserve)
+        self.assertNotEqual(b.recs[6].status, 'clean')
+
+    def test_a_defs_line_that_prints_its_address_still_reads(self):
+        """Other assemblers print the address there; the operand is the size."""
+        b, = check(self.EDTASM_DEFS.replace('0002          00160', '7D0A          00160'))
+        self.assertEqual({r.status for r in b.recs}, {'clean'})
+        self.assertEqual((b.recs[6].addr, b.recs[6].reserve), (0x7D0A, 2))
+
     def test_a_clean_listing_reads_as_clean(self):
         blocks = check(self.listing)
         self.assertEqual(len(blocks), 1)

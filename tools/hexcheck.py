@@ -485,6 +485,8 @@ class Rec:
         self.dpos = None            # where in the DATA stream those start
         self.conflict = False       # settled on two witnesses, and the DATA disagrees
         self.lost = 0               # lines of the page before this one that would not parse
+        self.col0 = None            # the first column as scanned, before the chain touched it
+        self.reserve = None         # a DEFS line with no object bytes: how many it reserves
 
 
 HEXRUN = re.compile(r'^[0-9A-Fa-f%s]{1,4}$' % re.escape(''.join(HEXFIX)))
@@ -618,6 +620,11 @@ def find_blocks(text, min_lines=4):
     return [b for b in blocks if len(b) >= min_lines and sum(1 for r in b if r.hexs) >= 2]
 
 
+def is_defs(op):
+    """DEFS or DS, under the marks a scan leaves on a word (`DEFS)`)."""
+    return re.sub(r'[^A-Z]', '', (op or '').upper()) in ('DEFS', 'DS')
+
+
 def continues(block, r, skipped, page_lines=12, reach=64):
     """Does this line carry on the listing that ended a page break ago?  The
     page number, the running head and the 'Program continued' are what part
@@ -633,11 +640,14 @@ def continues(block, r, skipped, page_lines=12, reach=64):
     if sum(1 for l in skipped if l.strip()) > 3 \
             and not any(re.match(r'^## Page\b', l) for l in skipped):
         return False
+    addr = r.addr
+    if not r.hexs and is_defs(split_source(r.src)[1]):
+        addr = None                     # that first column is a size (Block.reserves), not a place
     tail = [x for x in block if x.addr is not None]
-    if r.addr is not None and tail and 0 < r.addr - tail[-1].addr <= reach:
+    if addr is not None and tail and 0 < addr - tail[-1].addr <= reach:
         return True
     lns = [x.lineno for x in block if x.lineno is not None]
-    return r.lineno is not None and lns and 0 < r.lineno - lns[-1] <= 100 and r.addr is None
+    return r.lineno is not None and lns and 0 < r.lineno - lns[-1] <= 100 and addr is None
 
 
 # ---- the check ---------------------------------------------------------------
@@ -854,6 +864,10 @@ class Block:
             r.gap = False
             if r.op in ('EQU', 'DEFL'):
                 continue                # the value column, not a place: the counter stands
+            if self.reserves(r, pc, self.lost_before(recs, i, step)):
+                lens[i] = r.reserve
+                pc = (r.addr + r.reserve) & 0xFFFF if r.addr is not None else None
+                continue
             if r.addr is None:
                 if r.hexs and pc is not None:
                     r.addr, r.anote = pc, 'address %04X from the chain' % pc
@@ -890,6 +904,50 @@ class Block:
                 pc = None               # a damaged object field breaks the chain
         self.tally['addresses repaired'] = fixed
 
+    def reserves(self, r, pc, lost=0):
+        """EDTASM prints the SIZE of a DEFS in the first column, where every
+        other line has its address, and no object bytes beside it:
+
+            805C 16F6    00630        ...
+            0002         00640 AI     DEFS 2
+            0002         00650 LO     DEFS 2
+
+        (as it prints an EQU's value there).  Read as an address the 0002
+        breaks the chain on an undamaged page, and the chain then "repairs"
+        the address of the line after.  So on a DEFS line with an empty
+        object column the first column is checked against the OPERAND, the
+        other place the size is printed: when the two agree the line
+        reserves that many bytes at the chain's address.  A first column
+        that IS the chain's address is an assembler that prints the address
+        there, and the operand alone gives the size.  Anything else is left
+        to the ordinary rules, which will not accept it.  The line has no
+        scanned address to stop the chain at, so where the page lost lines
+        just before it the chain's address is not believed: the size stands
+        and the address is unknown until a scanned one takes the chain up."""
+        r.reserve = None
+        if not is_defs(r.op) or r.hexs or r.col0 is None:
+            return False
+        if lost and r.col0 != pc:
+            pc = None
+        size = None
+        for args in mechanical(r.args or ''):
+            try:
+                size = asm.Expr(asm.split_operands(args, r.n)[0], r.n).eval(self.symbols, pc or 0)
+                break
+            except (asm.AsmError, asm.Undefined, IndexError):
+                continue
+        if size is None or not 0 <= size <= 0xFFFF:
+            return False
+        if r.col0 == size and r.col0 != pc:
+            r.addr = pc
+            r.anote = ('the first column is the size, %d; %s' % (
+                size, 'address %04X from the chain' % pc if pc is not None
+                else 'its address is not known here'))
+        elif r.col0 != pc:
+            return False
+        r.reserve = size
+        return True
+
     def lineno_step(self):
         """The editor's usual increment between consecutive line numbers."""
         steps = {}
@@ -916,6 +974,8 @@ class Block:
 
     def length_of(self, r):
         """How many bytes this line holds, as well as it is known."""
+        if r.reserve is not None:
+            return r.reserve
         if r.bytes is not None and r.status not in ('unresolved', 'text'):
             return len(r.bytes)
         if r.op in ('DEFM', 'DM') and r.hexs and defm_len(r.args) > len(r.hexs) // 2:
@@ -946,6 +1006,7 @@ class Block:
     def parse_sources(self):
         for r in self.recs:
             r.label, r.op, r.args, r.comment = split_source(r.src)
+            r.col0 = r.addr
 
     def collect_symbols(self):
         """A label's value is its own line's address -- the listing defines its
@@ -1041,6 +1102,14 @@ class Block:
         need no third witness, only the shape of the line."""
         if r.hexs or not r.op:
             return False
+        if r.reserve is not None:
+            # a DEFS whose size two places on the line agree on (reserves):
+            # it emits no object bytes to check, only moves the counter
+            fill = asm.split_operands(mechanical(r.args or '')[-1], r.n)[1:]
+            r.status, r.fop = 'clean', 'DEFS'
+            r.fargs = ','.join([str(r.reserve)] + fill)
+            r.bytes = b''
+            return True
         if r.addr is None:
             # An END the assembler printed without an address (2990 END).
             if r.op == 'END' or (ocr_distance(r.op, 'END') <= 1.0 and not r.args):
@@ -1385,7 +1454,7 @@ class Block:
             if r.status == 'hexonly':
                 c = (c + '  ' if c else ';') + '?? one object column alone'
             out.append(stmt(r.label, r.fop, r.fargs, c))
-            pc = (pc or 0) + len(r.bytes or b'')
+            pc = (pc or 0) + len(r.bytes or b'') + (r.reserve or 0)
         if free:
             out[1:1] = [stmt(n, 'EQU', hexlit(self.symbols[n]) if n in self.symbols else '0',
                              ';from the object code' if n in self.inferred else
