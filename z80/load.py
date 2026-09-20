@@ -48,6 +48,8 @@ def load_cmd(data):
                             % (t, i, ln, len(body)))
         i += 2 + ln
         if t == 0x01:
+            if ln < 2:
+                raise LoadError('load record at offset %d is %d bytes long' % (i - 2 - ln, ln))
             a = body[0] | (body[1] << 8)
             segments.append((a, bytes(body[2:])))
         elif t == 0x02:
@@ -73,12 +75,16 @@ def load_cas(data):
     i += 1
     if i >= len(data) or data[i] != 0x55:
         raise LoadError('not a SYSTEM tape: 55H does not follow the sync byte')
+    if i + 7 > len(data):
+        raise LoadError('the tape ends inside the program name')
     name = data[i + 1:i + 7].decode('latin-1').rstrip()
     i += 7
     segments, entry = [], None
     while i < len(data):
         t = data[i]
         if t == 0x3C:
+            if i + 4 > len(data):
+                raise LoadError('the tape ends inside the block header at offset %d' % i)
             n = data[i + 1] or 256
             if i + 5 + n > len(data):
                 raise LoadError('data block at offset %d runs past the end' % i)

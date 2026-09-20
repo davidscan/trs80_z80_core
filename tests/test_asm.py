@@ -12,11 +12,13 @@ would.  And the output formats read back: the load module, the SYSTEM
 tape with its checksums, the DATA/POKE loader run by the interpreter
 against this core when the interpreter is checked out beside this repo.
 """
+import io
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -266,6 +268,11 @@ class TestErrors(unittest.TestCase):
             self.assertEqual(len(e), 1, src)
             self.assertIn('duplicate label X', e[0][1])
 
+    def test_a_shift_count_is_checked(self):
+        self.assertIn('shift count out of range: -1',
+                      self.errors('  ORG 0\n  DEFB 1 .SHL. -1\n')[0][1])
+        self.assertIn('shift count', self.errors('  ORG 0\n  DEFW 1 .SHR. 99999999\n')[0][1])
+
     def test_the_location_counter_stops_at_the_top_of_memory(self):
         e = self.errors('  ORG 0FFFEH\n  DEFB 1,2,3,4\n  NOP\n')
         self.assertEqual([ln for ln, _ in e], [2])
@@ -380,6 +387,25 @@ class TestCommandLine(unittest.TestCase):
             with open(bad, 'w') as f:
                 f.write('  ORG 0\n  LD A,(3\n')
             self.assertEqual(asm.main([bad, '-o', out]), 1)
+
+    def test_bad_command_lines_are_messages_not_tracebacks(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 't\u00e9.asm')
+            with open(src, 'w') as f:
+                f.write(TINY)
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertEqual(asm.main([os.path.join(d, 'missing.asm')]), 1)
+                for ext in ('cmd', 'cas'):          # the name comes from the file's
+                    self.assertEqual(asm.main([src, '-o', os.path.join(d, 'o.' + ext)]), 1)
+                self.assertEqual(asm.main([src, '-o', os.path.join(d, 'o.cmd'), '--name', 'TE']), 0)
+                self.assertEqual(asm.main([src, '-o', os.path.join(d, 'nowhere', 'o.bin')]), 1)
+                self.assertEqual(asm.main([src, '--list', os.path.join(d, 'nowhere', 'o.lst')]), 1)
+                for bad in ('10000H', '0xZZ', '65536'):
+                    with self.assertRaises(SystemExit):
+                        asm.main([src, '--entry', bad])
+            self.assertIn('not printable ASCII', err.getvalue())
+            self.assertIn('past 0FFFFH', err.getvalue())
 
 
 if __name__ == '__main__':

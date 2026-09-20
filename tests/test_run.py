@@ -13,7 +13,7 @@ import os
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -82,6 +82,22 @@ class TestReaders(unittest.TestCase):
             load_cas(bytes(256) + b'\xa5\x00')
         with self.assertRaises(LoadError):
             load_cas(b'\x00' * 10)
+
+    def test_a_file_that_ends_early_is_a_load_error(self):
+        r = asm(HI)
+        for whole, load in ((r.to_cas('hi'), load_cas), (r.to_cmd('hi'), load_cmd)):
+            load(whole)
+            for n in range(len(whole) - 1):
+                if load is load_cas and n < 257:
+                    continue                    # still inside the leader: "no sync byte"
+                try:
+                    load(whole[:n])
+                except LoadError:
+                    pass                        # never an IndexError
+        with self.assertRaises(LoadError):
+            load_cas(bytes(3) + b'\xa5\x55HELLO \x3c')
+        with self.assertRaises(LoadError):
+            load_cmd(b'\x01\x01\x00')
 
     def test_bin_and_load_file(self):
         self.assertEqual(load_bin(b'\x00\xc9', 0x7000), ([(0x7000, b'\x00\xc9')], None, ''))
@@ -187,6 +203,8 @@ class TestCommandLine(unittest.TestCase):
             self.assertEqual(rc, 1)
             rc, out = self.main(high, '--sp', '0F000H')
             self.assertEqual(rc, 0, out)
+            with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                self.main(path, '--entry', '10000H')        # was an IndexError in the core
             rc, out = self.main(os.path.join(d, 'missing.cmd'))
             self.assertEqual(rc, 1)
 

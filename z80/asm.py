@@ -236,6 +236,8 @@ class Expr:
                 if w == 0:
                     raise AsmError(self.lineno, 'division by zero')
                 v %= w
+            elif not 0 <= w <= 16:
+                raise AsmError(self.lineno, 'shift count out of range: %d' % w)
             elif o == '.SHL.':
                 v <<= w
             else:
@@ -550,8 +552,15 @@ class Result:
             img[o - lo:o - lo + len(b)] = b
         return bytes(img)
 
-    def to_cmd(self, name):
+    @staticmethod
+    def _name(name):
         name = name.upper()[:6]
+        if not all(32 <= ord(c) < 127 for c in name):
+            raise ValueError('the program name %r is not printable ASCII: pass --name' % name)
+        return name
+
+    def to_cmd(self, name):
+        name = self._name(name)
         out = bytearray([0x05, len(name)]) + name.encode('ascii')
         for org, data in self.segments:
             for i in range(0, len(data), 253):
@@ -563,7 +572,7 @@ class Result:
         return bytes(out)
 
     def to_cas(self, name):
-        name = name.upper()[:6].ljust(6)
+        name = self._name(name).ljust(6)
         out = bytearray(256) + bytes([0xA5, 0x55]) + name.encode('ascii')
         for org, data in self.segments:
             for i in range(0, len(data), 256):
@@ -792,9 +801,14 @@ FORMATS = ('bin', 'cmd', 'cas', 'bas')
 def parse_addr(s):
     """A command-line address: decimal, 7D00H, or 0x7D00 as z80.disasm takes it."""
     t = s.strip().upper()
-    v = int(t[2:], 16) if t.startswith('0X') and t[2:].isalnum() else number(t)
+    try:
+        v = int(t[2:], 16) if t.startswith('0X') else number(t)
+    except ValueError:
+        v = None
     if v is None:
         raise argparse.ArgumentTypeError('not a number: %r (decimal, 7D00H or 0x7D00)' % s)
+    if v > 0xFFFF:
+        raise argparse.ArgumentTypeError('%r is past 0FFFFH' % s)
     return v
 
 
@@ -821,8 +835,12 @@ def main(argv=None):
                     help='print the symbol table after the listing')
     a = ap.parse_args(argv)
 
-    with open(a.source, 'rb') as f:
-        text = f.read().decode('latin-1')
+    try:
+        with open(a.source, 'rb') as f:
+            text = f.read().decode('latin-1')
+    except OSError as e:
+        sys.stderr.write('%s: %s\n' % (a.source, e.strerror))
+        return 1
     res = assemble(text, org=a.org, entry=a.entry)
     if res.errors:
         for lineno, msg in res.errors:
@@ -836,20 +854,24 @@ def main(argv=None):
         ext = os.path.splitext(a.output)[1].lower().lstrip('.')
         fmt = ext if ext in FORMATS else 'bin'
     if a.output:
-        if fmt == 'bin':
-            data = res.to_bin()
-        elif fmt == 'cmd':
-            data = res.to_cmd(name)
-        elif fmt == 'cas':
-            data = res.to_cas(name)
-        else:
-            try:
-                data = res.to_bas(name).encode('ascii')
-            except ValueError as e:
-                sys.stderr.write('%s: %s\n' % (a.source, e))
-                return 1
-        with open(a.output, 'wb') as f:
-            f.write(data)
+        try:
+            if fmt == 'bin':
+                data = res.to_bin()
+            elif fmt == 'cmd':
+                data = res.to_cmd(name)
+            elif fmt == 'cas':
+                data = res.to_cas(name)
+            else:
+                data = res.to_bas(name).encode('ascii', 'replace')
+        except ValueError as e:
+            sys.stderr.write('%s: %s\n' % (a.source, e))
+            return 1
+        try:
+            with open(a.output, 'wb') as f:
+                f.write(data)
+        except OSError as e:
+            sys.stderr.write('%s: %s\n' % (a.output, e.strerror))
+            return 1
         sys.stderr.write('%s: %d bytes in %d block(s), entry %04XH -> %s (%s, %d bytes)\n'
                          % (a.source, res.size, len(res.segments), res.entry, a.output, fmt, len(data)))
 
@@ -858,8 +880,12 @@ def main(argv=None):
         listing += '\n' + ''.join('%-12s %04X\n' % (k, v & 0xFFFF)
                                   for k, v in sorted(res.symbols.items(), key=lambda kv: (kv[1], kv[0])))
     if a.listing and a.listing != '-':
-        with open(a.listing, 'w') as f:
-            f.write(listing)
+        try:
+            with open(a.listing, 'w', encoding='latin-1') as f:
+                f.write(listing)
+        except OSError as e:
+            sys.stderr.write('%s: %s\n' % (a.listing, e.strerror))
+            return 1
     elif a.listing == '-' or not a.output:
         sys.stdout.write(listing)
     return 0
