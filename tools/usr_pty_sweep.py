@@ -65,8 +65,14 @@ def drive(path):
     env.pop('TRS80_DUMB', None)
     pid, fd = pty.fork()
     if pid == 0:
-        os.chdir(CWD)
-        os.execvpe(os.path.join(BASIC, 'basic'), ['basic'], env)
+        # The child must never come back from here: if the chdir or the
+        # exec fails it is a copy of this sweep, thread pool and all, and
+        # would carry on driving listings. 127 is the shell's "not found".
+        try:
+            os.chdir(CWD)
+            os.execvpe(os.path.join(BASIC, 'basic'), ['basic'], env)
+        finally:
+            os._exit(127)
     got = [0]
 
     def pump(t):
@@ -96,6 +102,7 @@ def drive(path):
         os.close(fd)
     except OSError:
         pass
+    status = None
     for sig in (None, signal.SIGTERM, signal.SIGKILL):
         if sig is not None:
             try:
@@ -107,7 +114,9 @@ def drive(path):
                     pass
         for _ in range(20):
             try:
-                if os.waitpid(pid, os.WNOHANG)[0] == pid:
+                done, st = os.waitpid(pid, os.WNOHANG)
+                if done == pid:
+                    status = st
                     sig = 'done'; break
             except ChildProcessError:
                 sig = 'done'; break
@@ -127,7 +136,9 @@ def drive(path):
     vs = sum(1 for l in log_out.splitlines() if l.startswith('V '))
     entries = sorted(set(int(dict(kv.split('=', 1) for kv in l.split()[1:] if '=' in kv)['entry'])
                          for l in log_in.splitlines() if l.startswith('CALL ')))
-    if errs:
+    if status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 127:
+        cls = 'launch-failed'               # no interpreter ran: not a measurement
+    elif errs:
         cls = 'err'
     elif calls == 0:
         cls = 'not-reached'
@@ -159,6 +170,10 @@ def main():
             if i % 20 == 0:
                 print(i, r['file'], r['cls'], r['calls'], flush=True)
     json.dump(res, open(OUT + '/results.json', 'w'), indent=1)
+    failed = sum(1 for r in res if r['cls'] == 'launch-failed')
+    if failed:
+        sys.exit('%d of %d runs never started the interpreter (%s): no counts'
+                 % (failed, len(res), os.path.join(BASIC, 'basic')))
     print(Counter(r['cls'] for r in res))
     roms = Counter()
     for r in res:

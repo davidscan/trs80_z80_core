@@ -59,5 +59,26 @@ class TestStaleLogs(unittest.TestCase):
         self.assertEqual((r['cls'], r['calls'], r['errs']), ('not-reached', 0, []))
 
 
+class TestPtyLaunch(unittest.TestCase):
+
+    def test_pty_sweep_child_that_cannot_exec_ends_there(self):
+        """No interpreter at BASIC: the forked child must _exit, not return
+        into the sweep as a second driver, and the run is not 'not-reached'."""
+        with tempfile.TemporaryDirectory() as d:
+            m = usr_pty_sweep
+            saved = (m.CORPUS, m.RUNS, m.CWD, m.BASIC, m.SPAN)
+            m.CORPUS, m.RUNS, m.CWD, m.BASIC, m.SPAN = (os.path.join(d, 'corpus'), os.path.join(d, 'runs'),
+                                                        d, os.path.join(d, 'nowhere'), 0.0)
+            parent = os.getpid()
+            try:
+                os.makedirs(m.RUNS)
+                r = m.drive(os.path.join(m.CORPUS, 'runnable', 'x.bas'))
+            finally:
+                if os.getpid() != parent:       # the old code: the child is back
+                    os._exit(3)
+                m.CORPUS, m.RUNS, m.CWD, m.BASIC, m.SPAN = saved
+        self.assertEqual(r['cls'], 'launch-failed')
+
+
 if __name__ == '__main__':
     unittest.main()
