@@ -82,6 +82,12 @@ SRC = os.path.join(INTERP_REPO, 'src')
 PROGRAMS = os.path.join(CORPUS, 'programs')
 OUT = os.path.join(HERE, 'out', 'oracle')
 INTERP = os.path.join(OUT, 'trs80basic-oracle.awk')
+# ALWAYS -b. The interpreter's strings are byte strings; without -b a
+# UTF-8 locale turns every byte above 127 that gawk reads from a listing
+# into 3FH, so a routine packed into a string literal is measured as a
+# run of '?'. The interpreter warns about it on stderr, but run_listing
+# keeps only the lines that start with '?', so nothing would say so.
+GAWK = ['gawk', '-b', '-f']
 
 # Video RAM and the other device windows the interpreter maps. A run landing
 # wholly inside video is screen data, not a routine -- FINDING 5's
@@ -173,7 +179,7 @@ def build(force=False):
 
     with open(INTERP, 'w') as f:
         f.write(''.join(chunks))
-    subprocess.run(['gawk', '-f', INTERP, '--', '-h'],
+    subprocess.run(GAWK + [INTERP, '--', '-h'],
                    capture_output=True, check=False)
     return INTERP
 
@@ -202,7 +208,7 @@ def run_listing(path, timeout=10.0):
     timed_out = False
     try:
         r = subprocess.run(
-            ['gawk', '-f', INTERP, '--', '--seed', '1', path],
+            GAWK + [INTERP, '--', '--seed', '1', path],
             input=FEED, capture_output=True, env=env,
             cwd=os.path.dirname(path), timeout=timeout)
         rc, err = r.returncode, r.stderr.decode('latin-1', 'replace')
@@ -309,7 +315,7 @@ def analyse_hang(path, timeout=8.0):
         os.remove(log)
     env = dict(os.environ, TRS80_LINELOG=log)
     try:
-        subprocess.run(['gawk', '-f', INTERP, '--', '--seed', '1', path],
+        subprocess.run(GAWK + [INTERP, '--', '--seed', '1', path],
                        input=FEED, capture_output=True, env=env,
                        cwd=os.path.dirname(path), timeout=timeout)
     except subprocess.TimeoutExpired:

@@ -171,10 +171,10 @@ class TestInstrumentedBuild(unittest.TestCase):
             f.write('10 PRINT "HELLO"\n20 PRINT 6*7\n')
         env = {k: v for k, v in os.environ.items()
                if k not in ('TRS80_POKELOG', 'TRS80_CASSETTE', 'TRS80_LINELOG')}
-        mine = subprocess.run(['gawk', '-f', self.interp, '--', prog],
+        mine = subprocess.run(['gawk', '-b', '-f', self.interp, '--', prog],
                               capture_output=True, env=env)
         theirs = subprocess.run(
-            ['gawk', '-f', os.path.join(oracle.INTERP_REPO, 'trs80basic.awk'),
+            ['gawk', '-b', '-f', os.path.join(oracle.INTERP_REPO, 'trs80basic.awk'),
              '--', prog], capture_output=True, env=env)
         self.assertEqual(mine.stdout, theirs.stdout)
         self.assertEqual(mine.returncode, theirs.returncode)
@@ -187,6 +187,37 @@ class TestInstrumentedBuild(unittest.TestCase):
         got = oracle.run_listing(prog, timeout=20)
         self.assertEqual(oracle.runs_from_pokes(got['pokes']),
                          [(32000, bytes([62, 1, 211, 255]))])
+
+    def test_high_bytes_in_a_listing_survive_a_utf8_locale(self):
+        """gawk runs with -b: a byte above 127 is itself, not 3FH.
+
+        String packing is the corpus's dominant loader idiom, and its
+        bytes are mostly above 127. Without -b a UTF-8 locale reads each
+        of them as '?', and the interpreter's warning never reaches the
+        report (run_listing keeps only the '?XX ERROR' lines).
+        """
+        have = subprocess.run(['locale', '-a'], capture_output=True,
+                              text=True).stdout.split()
+        utf8 = [n for n in ('en_US.UTF-8', 'C.UTF-8', 'en_US.utf8', 'C.utf8')
+                if n in have]
+        if not utf8:
+            self.skipTest('no UTF-8 locale installed')
+        prog = os.path.join(oracle.OUT, 'highbytes.bas')
+        with open(prog, 'wb') as f:
+            f.write(b'10 A$="\xcd\xc9\x80\xff"\n'
+                    b'20 FOR I=1 TO 4:POKE 31999+I,ASC(MID$(A$,I,1)):NEXT\n')
+        saved = {k: os.environ.get(k) for k in ('LC_ALL', 'LANG')}
+        os.environ['LC_ALL'] = os.environ['LANG'] = utf8[0]
+        try:
+            got = oracle.run_listing(prog, timeout=20)
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        self.assertEqual(oracle.runs_from_pokes(got['pokes']),
+                         [(32000, bytes([0xCD, 0xC9, 0x80, 0xFF]))])
 
     def test_interpreter_answers_the_dos_probe_with_a_ret(self):
         """PEEK(16396) must be 201 -- FINDING 16, now shipped upstream.
