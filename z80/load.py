@@ -54,7 +54,13 @@ def load_cmd(data):
             segments.append((a, bytes(body[2:])))
         elif t == 0x02:
             if ln < 2:
-                raise LoadError('transfer record at offset %d is %d bytes long' % (i, ln))
+                # i has already advanced past the record, as the 01H arm
+                # above knows: it reports i - 2 - ln.  This one reported i,
+                # naming a byte past the end of the bad record -- and past
+                # the end of the file for the last one (the 2026-09-19
+                # audit, L-55).
+                raise LoadError('transfer record at offset %d is %d bytes long'
+                                % (i - 2 - ln, ln))
             entry = body[0] | (body[1] << 8)
             break
         elif t == 0x05:

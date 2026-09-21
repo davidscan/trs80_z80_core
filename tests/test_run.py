@@ -209,5 +209,54 @@ class TestCommandLine(unittest.TestCase):
             self.assertEqual(rc, 1)
 
 
+class TestDiagnosticsNameTheRightPlace(unittest.TestCase):
+    """Two messages that pointed somewhere else (the 2026-09-19 audit, L-55)."""
+
+    def test_a_short_transfer_record_names_its_own_offset(self):
+        """`i` has already advanced past the record when the check runs.
+
+        The 01H arm knows that and reports i - 2 - ln; the 02H arm reported
+        i, which for the last record in a file is past the end of it.
+        """
+        m = bytes([0x01, 0x03, 0x00, 0x7D, 0xC9,     # load C9H at 7D00H
+                   0x02, 0x01, 0x00])                # transfer record, 1 byte: too short
+        with self.assertRaises(LoadError) as e:
+            load_cmd(m)
+        self.assertIn('offset 5', str(e.exception))      # where it really starts
+        self.assertNotIn('offset 8', str(e.exception))   # past the end of 8 bytes
+
+    def test_the_offset_is_right_for_a_record_in_the_middle_too(self):
+        m = bytes([0x02, 0x00,                        # transfer record, 0 bytes
+                   0x01, 0x03, 0x00, 0x7D, 0xC9])
+        with self.assertRaises(LoadError) as e:
+            load_cmd(m)
+        self.assertIn('offset 0', str(e.exception))
+
+    def test_a_dump_across_the_top_wraps(self):
+        """Memory wraps at 64K, and the address column already did.
+
+        The bytes came from a plain slice, so a range crossing the top came
+        back short: --dump 0FFF8H,16 printed eight bytes under a label that
+        promised sixteen.
+        """
+        ram = [i & 0xFF for i in range(0x10000)]
+        lines = run.hexdump(ram, 0xFFF8, 16)
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith('FFF8  '))
+        self.assertIn('F8 F9 FA FB FC FD FE FF 00 01 02 03 04 05 06 07', lines[0])
+
+    def test_a_short_dump_across_the_top(self):
+        ram = [i & 0xFF for i in range(0x10000)]
+        lines = run.hexdump(ram, 0xFFFE, 4)
+        self.assertIn('FE FF 00 01', lines[0])
+
+    def test_an_ordinary_dump_is_unchanged(self):
+        ram = [i & 0xFF for i in range(0x10000)]
+        lines = run.hexdump(ram, 0x7D00, 20)
+        self.assertEqual(len(lines), 2)
+        self.assertIn('00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F', lines[0])
+        self.assertTrue(lines[1].startswith('7D10  10 11 12 13 '))
+
+
 if __name__ == '__main__':
     unittest.main()

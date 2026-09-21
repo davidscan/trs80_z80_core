@@ -136,10 +136,19 @@ def registers(cpu):
 
 
 def hexdump(ram, start, length):
+    """`length` bytes from `start`, wrapping at 64K as the Z80's memory does.
+
+    The bytes came out of a plain slice, so a range crossing the top came
+    back short and the dump quietly stopped -- while the address column
+    already wrapped, so --dump 0FFF8H,16 printed eight bytes under a label
+    that promised sixteen (the 2026-09-19 audit, L-55).
+    """
     out = []
-    for a in range(start, start + length, 16):
-        chunk = ram[a:min(a + 16, start + length)]
-        out.append('%04X  %-47s  %s' % (a & 0xFFFF, ' '.join('%02X' % b for b in chunk),
+    for off in range(0, length, 16):
+        n = min(16, length - off)
+        chunk = bytes(ram[(start + off + k) & 0xFFFF] for k in range(n))
+        out.append('%04X  %-47s  %s' % ((start + off) & 0xFFFF,
+                                        ' '.join('%02X' % b for b in chunk),
                                         ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)))
     return out
 
