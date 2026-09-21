@@ -80,5 +80,48 @@ class TestPtyLaunch(unittest.TestCase):
         self.assertEqual(r['cls'], 'launch-failed')
 
 
+class TestTheSweepEnvironmentIsItsOwn(unittest.TestCase):
+    """A sweep is a measurement, so the caller's shell must not reach it.
+
+    Both sweeps inherited the environment whole, so a TRS80_USR=strict
+    left over from a debugging session turned every un-executed USR into
+    ?FC, TRS80_SOUND started a player per listing, and TRS80_PRINTER
+    collected every LPRINT in the corpus into one file (the 2026-09-19
+    audit, L-65).
+    """
+
+    HOSTILE = {'TRS80_USR': 'strict', 'TRS80_USR_TRACE': '2',
+               'TRS80_SOUND': 'auto', 'TRS80_SOUND_WAV': '/tmp/w.wav',
+               'TRS80_PRINTER': '/tmp/lp', 'TRS80_EXT': '1',
+               'TRS80_MHZ': '1.77', 'TRS80_MANFILE': '/tmp/man.txt'}
+
+    def envs(self):
+        keep = dict(os.environ)
+        try:
+            os.environ.update(self.HOSTILE)
+            return (usr_sweep.sweep_env(TRS80_Z80='c', TRS80_DUMB='1'),
+                    usr_pty_sweep.sweep_env(TRS80_Z80='c'))
+        finally:
+            os.environ.clear()
+            os.environ.update(keep)
+
+    def test_nothing_hostile_survives_into_either_sweep(self):
+        for env in self.envs():
+            for v in self.HOSTILE:
+                self.assertNotIn(v, env, v)
+
+    def test_what_the_sweep_sets_itself_is_kept(self):
+        a, b = self.envs()
+        self.assertEqual(a['TRS80_Z80'], 'c')
+        self.assertEqual(a['TRS80_DUMB'], '1')
+        self.assertEqual(b['TRS80_Z80'], 'c')
+        self.assertEqual(a['LC_ALL'], 'C')
+
+    def test_the_rest_of_the_environment_still_comes_through(self):
+        """PATH and HOME are not the sweep's business to remove."""
+        for env in self.envs():
+            self.assertIn('PATH', env)
+
+
 if __name__ == '__main__':
     unittest.main()

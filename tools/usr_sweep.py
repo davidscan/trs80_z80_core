@@ -38,9 +38,29 @@ def population():
             keep.append(f)
     return keep
 
+# A sweep is a MEASUREMENT, so the environment it runs listings in cannot
+# be whoever's shell started it.  Both sweeps inherited it whole, so a
+# TRS80_USR=strict left over from a debugging session turned every
+# un-executed USR into ?FC, TRS80_SOUND started a player per listing, and
+# TRS80_PRINTER collected every LPRINT in the corpus into one file (the
+# 2026-09-19 audit, L-65).  tools/kbd_probe.py has stripped them from the
+# start; phasea/oracle.py does since L-64.
+SWEEP_DROP = ('TRS80_USR', 'TRS80_USR_TRACE', 'TRS80_SOUND', 'TRS80_SOUND_WAV',
+              'TRS80_SOUND_WAV_APPEND', 'TRS80_PRINTER', 'TRS80_EXT',
+              'TRS80_MANFILE', 'TRS80_OLLAMA_CURL', 'TRS80_MEMSIZE',
+              'TRS80_KMHOLD', 'TRS80_KBPROTO', 'TRS80_MHZ')
+
+
+def sweep_env(**over):
+    env = dict(os.environ, LC_ALL='C')
+    for v in SWEEP_DROP:
+        env.pop(v, None)
+    env.update(over)
+    return env
+
+
 def run(path, z80):
-    env = dict(os.environ, TRS80_Z80=z80, TRS80_DUMB='1')
-    env.pop('TRS80_MHZ', None)
+    env = sweep_env(TRS80_Z80=z80, TRS80_DUMB='1')
     t0 = time.monotonic()
     p = subprocess.Popen([BASIC, '--seed', '1', path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, env=env, cwd=CWD, start_new_session=True)

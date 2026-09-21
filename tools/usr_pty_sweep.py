@@ -56,13 +56,34 @@ def clear_logs(base):
             pass
 
 
+# A sweep is a MEASUREMENT, so the environment it runs listings in cannot
+# be whoever's shell started it.  Both sweeps inherited it whole, so a
+# TRS80_USR=strict left over from a debugging session turned every
+# un-executed USR into ?FC, TRS80_SOUND started a player per listing, and
+# TRS80_PRINTER collected every LPRINT in the corpus into one file (the
+# 2026-09-19 audit, L-65).  tools/kbd_probe.py has stripped them from the
+# start; phasea/oracle.py does since L-64.
+SWEEP_DROP = ('TRS80_USR', 'TRS80_USR_TRACE', 'TRS80_SOUND', 'TRS80_SOUND_WAV',
+              'TRS80_SOUND_WAV_APPEND', 'TRS80_PRINTER', 'TRS80_EXT',
+              'TRS80_MANFILE', 'TRS80_OLLAMA_CURL', 'TRS80_MEMSIZE',
+              'TRS80_KMHOLD', 'TRS80_KBPROTO', 'TRS80_MHZ')
+
+
+def sweep_env(**over):
+    env = dict(os.environ, LC_ALL='C')
+    for v in SWEEP_DROP:
+        env.pop(v, None)
+    env.update(over)
+    return env
+
+
 def drive(path):
     rel = os.path.relpath(path, CORPUS)
     tag = rel.replace('/', '__')
     clear_logs(os.path.join(RUNS, tag))
-    env = dict(os.environ, TRS80_Z80='sh %s %s' % (CORELOG, os.path.join(RUNS, tag)),
-               TERM='xterm', LINES='24', COLUMNS='80')
-    env.pop('TRS80_DUMB', None)
+    env = sweep_env(TRS80_Z80='sh %s %s' % (CORELOG, os.path.join(RUNS, tag)),
+                    TERM='xterm', LINES='24', COLUMNS='80')
+    env.pop('TRS80_DUMB', None)          # this sweep wants the real grid
     pid, fd = pty.fork()
     if pid == 0:
         # The child must never come back from here: if the chdir or the
