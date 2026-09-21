@@ -119,7 +119,12 @@ class Synth:
                 lvl = l
                 i += 1
             acc += lvl * (b - pos)
-            x = acc / (b - a)
+            # Below `rate` Hz of clock -- `speed 0.01` with a WAV set -- two
+            # sample boundaries can be the SAME T-state, b == a: the sample
+            # spans no time at all and its mean is simply the level in
+            # force.  The division took the core down with ZeroDivisionError
+            # (the 2026-09-19 audit, L-46).
+            x = acc / (b - a) if b > a else float(lvl)
             y = x - px + hp * py
             px, py = x, y
             v = int(y * amp)

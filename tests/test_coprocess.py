@@ -230,6 +230,19 @@ class TestCalls(unittest.TestCase):
         m.run(0x7000, 0, 0xF000)
         self.assertEqual(sc.ret()['hl'], '255')
 
+    def test_a_slow_clock_ticks_by_wall_time(self):
+        """The tick is the interpreter's proof of life (its read guard is
+        5 s).  Paced at 0.001 MHz, 8870 T-states are 8.9 s of wall time, so
+        the guard fired inside a healthy routine (the 2026-09-19 audit,
+        L-46).  The interval is 5 ms of wall time at the paced clock -- 5
+        T-states here -- and at full speed it is what it always was."""
+        sc = Scripted()
+        self.assertEqual(Machine(sc.send, sc.recv, mhz=0.001).tick_every, 5)
+        self.assertEqual(Machine(sc.send, sc.recv, mhz=1.774).tick_every, TICK_TSTATES)
+        self.assertEqual(Machine(sc.send, sc.recv, mhz=4.0).tick_every, TICK_TSTATES)
+        self.assertEqual(Machine(sc.send, sc.recv, mhz=0.0).tick_every, TICK_TSTATES)
+        self.assertEqual(Machine(sc.send, sc.recv, mhz=1e-9).tick_every, 1)
+
     def test_ticks_and_break(self):
         # a loop of 65536 x 26 T-states, BREAK on the third tick
         m, sc = machine(bytes.fromhex('010000' '0B' '78' 'B1' '20FB' 'C9'),

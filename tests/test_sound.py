@@ -86,6 +86,20 @@ class TestSynth(unittest.TestCase):
                 got = pitch(one_shot(tr, total, rate), rate)
                 self.assertAlmostEqual(got / f, 1.0, delta=0.001, msg='%d Hz at %d' % (f, rate))
 
+    def test_a_clock_slower_than_the_sample_rate_renders(self):
+        """Below `rate` Hz two sample boundaries fall on one T-state and the
+        sample between them spans no time: it takes the level in force.  It
+        used to divide by zero and kill the core -- `speed 0.01` with a WAV
+        set (the 2026-09-19 audit, L-46)."""
+        s = Synth(10000, RATE)
+        s.begin_call()
+        s.transition(3, 1)
+        s.transition(40, 2)
+        pcm = s.end_call(100)
+        # boundaries are whole T-states, (s * clock) // rate, so at a clock
+        # this coarse the count runs a sample or two past the exact 220.5
+        self.assertAlmostEqual(len(pcm) // 2, 100 * RATE / 10000, delta=3)
+
     def test_sample_count_is_floor_of_emulated_time(self):
         self.assertEqual(len(one_shot([], CLOCK)), 2 * RATE)
         self.assertEqual(len(one_shot([], CLOCK - 1)), 2 * (RATE - 1))

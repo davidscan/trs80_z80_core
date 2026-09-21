@@ -61,6 +61,7 @@ SERVED = (0x0A7F, 0x0A9A, 0x01C9, 0x1A19)
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
 KBD_LO, KBD_HI = 0x3800, 0x3900
 TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz
+TICK_SECONDS = 0.005           # ... and never more wall time than this at a slower clock
 CLS_A = 0x1C                   # the clear-screen control character
 
 # the machine code z80.sh expects to find behind the stub's canned entries
@@ -124,6 +125,18 @@ class Machine:
         self.send = send
         self.recv = recv
         self.mhz = mhz
+        # A tick is the interpreter's proof of life -- its read guard gives
+        # up after 5 s of silence -- and its BREAK poll.  Counted in
+        # T-states alone, a paced slow clock stretched it: at `speed 0.001`
+        # 8870 T-states are 8.9 s of wall time, so the guard fired in the
+        # middle of a healthy routine and the core was declared dead (the
+        # 2026-09-19 audit, L-46).  The interval is 5 ms of WALL time at
+        # the paced clock, and never more T-states than before.  (Still out
+        # of reach: a clock so slow that ONE instruction outlasts the guard,
+        # under about 5 T-states a second.)
+        self.tick_every = TICK_TSTATES
+        if mhz > 0:
+            self.tick_every = max(1, min(TICK_TSTATES, int(mhz * 1e6 * TICK_SECONDS)))
         self.sound = sound          # a z80.sound.Sound, or None: no capture at all
         self.bits = 0               # port FFH bits 0-1 as last written; carries across calls
         self.ram = bytearray(b'\xff' * 65536)
@@ -351,7 +364,7 @@ class Machine:
                     self.since_tick += n
                     if cpu.halted:
                         raise CoreError('halt', 'HALT at %04XH' % ((cpu.pc - 1) & 0xFFFF))
-                    if self.since_tick >= TICK_TSTATES:
+                    if self.since_tick >= self.tick_every:
                         self.tick()
             except EndCall:
                 pass
