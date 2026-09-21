@@ -133,6 +133,7 @@ class Machine:
         self.video = {}            # addr -> last value written, video
         self.arg = 0
         self.result = 0
+        self.ready = 0
         self.cpu = Z80(self.read, self.write, self.port_in, self.port_out)
         self.cycles = 0
         self.since_tick = 0
@@ -255,9 +256,16 @@ class Machine:
         if pc == 0x1A19:
             # the ROM's "READY" entry (022EH is EI / JP 1A19H, and a period
             # program ends with JP 1A19H to hand the machine back to BASIC):
-            # the call ends like a RET, with no result.  The interpreter's
-            # SYSTEM `/` runs whole programs this way.  0000H (reset) stays
-            # `ERR rom`: it is the conformance suite's canonical no-ROM call.
+            # the call ends, with no result -- and NOT like a RET: the
+            # routine handed the machine to the READY prompt, so the BASIC
+            # program that called it is over.  `ready=1` on the RET line
+            # says so; without it the interpreter carried on with the next
+            # statement as though the routine had returned (the 2026-09-19
+            # audit, L-44).  The interpreter's SYSTEM `/` runs whole
+            # programs this way, and at the prompt the two endings look the
+            # same.  0000H (reset) stays `ERR rom`: it is the conformance
+            # suite's canonical no-ROM call.
+            self.ready = 1
             raise EndCall()
         if pc == 0x01C9:
             for a in range(VIDEO_LO, VIDEO_HI):
@@ -315,6 +323,7 @@ class Machine:
         self.arg = arg
         self.entry = entry
         self.result = 0
+        self.ready = 0
         self.result_hl = 0
         self.dirty = {}
         self.video = {}
@@ -353,9 +362,10 @@ class Machine:
                 self.sound.end_call(self.cycles)    # the last partial tick, on every exit
         self.flush_video()
         writes = self.runs(self.dirty)
-        self.send('RET hl=%d result=%d cycles=%d break=%d writes=%d'
+        self.send('RET hl=%d result=%d cycles=%d break=%d writes=%d%s'
                   % (self.result_hl if self.result else cpu.hl,
-                     self.result, self.cycles, brk, len(writes)))
+                     self.result, self.cycles, brk, len(writes),
+                     ' ready=1' if self.ready else ''))
         for w in writes:
             self.send('W ' + w)
 

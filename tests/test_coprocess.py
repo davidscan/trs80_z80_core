@@ -130,15 +130,30 @@ class TestCalls(unittest.TestCase):
         m.run(0x7000, 0, 0xF000)
         self.assertEqual((sc.ret()['hl'], sc.ret()['result']), ('5', '1'))
 
-    def test_ready_entry_ends_the_call_like_a_ret(self):
-        """JP 1A19H (the ROM's READY) hands the machine back to BASIC: the
-        call ends with no result, as a RET would.  The interpreter's
-        SYSTEM runs whole programs this way.  (0000H stays ERR rom: the
-        tests below and the interpreter's z80.sh pin it as the no-ROM call.)"""
+    def test_ready_entry_ends_the_call_and_says_so(self):
+        """JP 1A19H (the ROM's READY) hands the machine back to the prompt:
+        the call ends with no result, its stores arrive, and the RET line
+        carries `ready=1` so the interpreter ends the PROGRAM instead of
+        running the next statement as after a return (the 2026-09-19
+        audit, L-44).  The interpreter's SYSTEM runs whole programs this
+        way.  (0000H stays ERR rom: the tests below and the interpreter's
+        z80.sh pin it as the no-ROM call.)"""
         m, sc = machine(bytes.fromhex('3E09' '32407E' 'C3191A'))
         m.run(0x7000, 0, 0xF000)
         self.assertEqual(sc.ret()['result'], '0')
+        self.assertEqual(sc.ret().get('ready'), '1')
         self.assertEqual(m.ram[0x7E40], 9)
+        self.assertIn('%d:9' % 0x7E40, sc.writes())
+
+    def test_a_plain_return_is_not_ready_and_the_flag_does_not_stick(self):
+        """`ready` is present only when it applies, and it is per call: a
+        RET after a JP 1A19H call on the same machine carries no field."""
+        m, sc = machine(bytes.fromhex('C3191A'))
+        m.run(0x7000, 0, 0xF000)
+        m.ram[0x7000] = 0xC9
+        del sc.out[:]
+        m.run(0x7000, 0, 0xF000)
+        self.assertNotIn('ready', sc.ret())
 
     def test_cls_trap_paints_and_homes(self):
         # CALL 01C9H / RET, with a byte on screen and the cursor elsewhere
