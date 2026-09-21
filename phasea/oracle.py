@@ -129,10 +129,15 @@ PATCHES = [
     # ends in a timeout kill. A line is logged only when it CHANGES, so a
     # one-line spin (`10 IF USR(0)=0 THEN 10`, the typical poll) writes one
     # short line, and unflushed it dies in gawk's buffer with the process.
+    # DIRECTLN (65535) is skipped: since trs80basic's L-4 fix the
+    # interpreter marks a statement typed at the prompt with the ROM's own
+    # Input Phase value in CLN, rather than 0, and that is not a program
+    # line -- logging it put a 65535 at the end of every trace.
     ('p70_exec.awk',
      '        SK = CK; SLI = CLI; SCP = CP\n'
      '        execstmt()\n',
-     '        if ("TRS80_LINELOG" in ENVIRON && CLN != LASTTRACELN) {\n'
+     '        if ("TRS80_LINELOG" in ENVIRON && CLN != LASTTRACELN &&\n'
+     '            CLN != DIRECTLN) {\n'
      '            LASTTRACELN = CLN\n'
      '            print CLN > (ENVIRON["TRS80_LINELOG"])\n'
      '            fflush(ENVIRON["TRS80_LINELOG"])\n'
