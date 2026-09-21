@@ -109,6 +109,22 @@ class TestCalls(unittest.TestCase):
         self.assertIn('%d:%d,%d' % (0x4121, 0x34, 0x12), sc.writes())
         self.assertIn('%d:2' % 0x40AF, sc.writes())
 
+    def test_a_store_into_rom_space_changes_nothing(self):
+        """0000-2FFFH is the ROM and PROTOCOL.md has it holding no bytes on
+        either side.  LD A,5AH / LD (1000H),A / LD A,(1000H) / LD (7100H),A
+        / RET: the store is dropped, so it reads back what was there (the
+        core's RAM starts at 255) and never reaches the write-set -- it used
+        to be kept and sent to the interpreter, which copied it into its
+        own memory (the 2026-09-19 audit, L-45)."""
+        m, sc = machine(bytes.fromhex('3E5A' '320010' '3A0010' '320071' 'C9'))
+        before = m.ram[0x1000]
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x1000], before, 'the ROM byte is unchanged')
+        self.assertEqual(m.ram[0x7100], before, 'and that is what reads back')
+        self.assertFalse([w for w in sc.writes() if w.startswith('%d:' % 0x1000)],
+                         'no ROM-space store in the write-set')
+        self.assertIn('%d:%d' % (0x7100, before), sc.writes())
+
     def test_0a9a_twice_keeps_the_last_value(self):
         m, sc = machine(bytes.fromhex('210300' 'CD9A0A' '210500' 'C39A0A'))
         m.run(0x7000, 0, 0xF000)

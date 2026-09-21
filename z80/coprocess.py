@@ -153,6 +153,13 @@ class Machine:
         return self.ram[a]
 
     def write(self, a, v):
+        # 0000-2FFFH is the ROM: a store there changes nothing on the
+        # machine, and PROTOCOL.md has the range holding no bytes on either
+        # side.  It used to be kept here and sent back in the write-set,
+        # where the interpreter copied it into its own memory (the
+        # 2026-09-19 audit, L-45); poke_byte drops it too now.
+        if a < ROM_TOP:
+            return
         self.ram[a] = v
         self.known[a] = 1
         if VIDEO_LO <= a < VIDEO_HI:
