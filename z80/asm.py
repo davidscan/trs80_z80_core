@@ -387,18 +387,37 @@ def split_operands(text, lineno):
     return items
 
 
-def data_items(text, lineno):
-    """DEFB/DEFM/DEFW items: ('str', bytes) or ('expr', Expr)."""
+def data_items(text, lineno, words=False):
+    """DEFB/DEFM/DEFW items: ('str', bytes), ('word', int) or ('expr', Expr).
+
+    With `words` (DEFW) every item is a WORD, so a quoted one or two
+    characters is a character constant -- this module's own rule, 'AB' is
+    4142H -- and goes out low byte first like any other word.  Both were
+    taken as strings before: DEFW 'AB' emitted 41 42 where 4142H is 42 41,
+    and DEFW "A" emitted ONE byte, which is not a word at all (the
+    2026-09-19 audit, L-53).  Three or more characters is not a word; that
+    is what DEFM is for, and saying so beats emitting half a listing.
+    """
     out = []
     if not text.strip():
         # nothing to define is a slip, and it assembled to no bytes at all
         raise AsmError(lineno, 'DEFB, DEFW and DEFM need at least one item')
     for item in split_operands(text, lineno):
-        if item[0] in '\'"' and item[-1] == item[0] and len(item) >= 2 and (
-                item[0] == '"' or len(item) != 3):
+        quoted = item[0] in '\'"' and item[-1] == item[0] and len(item) >= 2
+        if quoted:
             s = item[1:-1]
             if item[0] == "'":
                 s = s.replace("''", "'")
+        if words and quoted:
+            if len(s) == 1:
+                out.append(('word', ord(s)))
+            elif len(s) == 2:
+                out.append(('word', (ord(s[0]) << 8) | ord(s[1])))
+            else:
+                raise AsmError(lineno, 'DEFW takes words: %s is %d characters, '
+                                       'use DEFM for text' % (item, len(s)))
+            continue
+        if quoted and (item[0] == '"' or len(item) != 3):
             out.append(('str', s.encode('latin-1')))
         else:
             out.append(('expr', Expr(item, lineno)))
@@ -698,8 +717,8 @@ def assemble(text, org=None, entry=None):
                 s.items = data_items(args, lineno)
                 s.size = sum(len(v) if k == 'str' else 1 for k, v in s.items)
             elif op in ('DEFW', 'DW'):
-                s.items = data_items(args, lineno)
-                s.size = sum(len(v) if k == 'str' else 2 for k, v in s.items)
+                s.items = data_items(args, lineno, words=True)
+                s.size = 2 * len(s.items)
             elif op in ('DEFS', 'DS'):
                 parts = split_operands(args, lineno)
                 if not 1 <= len(parts) <= 2:
@@ -790,11 +809,8 @@ def assemble(text, org=None, entry=None):
                     out += v if k == 'str' else bytes([byte_value(v.eval(symbols, s.pc), s.lineno)])
             elif op in ('DEFW', 'DW'):
                 for k, v in s.items:
-                    if k == 'str':
-                        out += v
-                    else:
-                        w = word_value(v.eval(symbols, s.pc), s.lineno)
-                        out += bytes((w & 0xFF, w >> 8))
+                    w = v if k == 'word' else word_value(v.eval(symbols, s.pc), s.lineno)
+                    out += bytes((w & 0xFF, w >> 8))
             elif op in ('DEFS', 'DS'):
                 fill = byte_value(s.items.eval(symbols, s.pc), s.lineno, 'fill') if s.items else 0
                 out += bytes([fill]) * s.size

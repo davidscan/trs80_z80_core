@@ -215,10 +215,15 @@ class TestSyntax(unittest.TestCase):
         self.assertIn('7D3C  20 4F 4B', lst)                 # the continuation line
 
     def test_numbers_and_operators(self):
-        b = one('  ORG 0\n  DEFW 0FFFFH,65535,177777Q,1111111111111111B,\'AB\'\n'
+        # 1234H is here because the four spellings of 0FFFFH before it are
+        # palindromes: the line could not tell a word stored low byte first
+        # from one stored high byte first, and so it pinned DEFW 'AB' as
+        # 41 42 for a value the module documents as 4142H (the 2026-09-19
+        # audit, L-53).  A word is a word however it is written.
+        b = one('  ORG 0\n  DEFW 0FFFFH,65535,177777Q,1111111111111111B,1234H,\'AB\'\n'
                 '  DEFB 7.MOD.4, 1.SHL.4, 255.SHR.4, 0FH.AND.3, 4.OR.1, 5.XOR.1, .NOT.0\n'
                 '  DEFB 2+3*4, (2+3)*4, -1, 10/3').segments[0][1]
-        self.assertEqual(b.hex(), 'ffff' 'ffff' 'ffff' 'ffff' '4142'
+        self.assertEqual(b.hex(), 'ffff' 'ffff' 'ffff' 'ffff' '3412' '4241'
                                   '03' '10' '0f' '03' '05' '04' 'ff'
                                   '0e' '14' 'ff' '03')
 
@@ -473,6 +478,52 @@ class TestCommandLine(unittest.TestCase):
                         asm.main([src, '--entry', bad])
             self.assertIn('not printable ASCII', err.getvalue())
             self.assertIn('past 0FFFFH', err.getvalue())
+
+
+class TestDefwTakesWords(unittest.TestCase):
+    """DEFW's items are words, quoted characters included.
+
+    This module's own rule is that a quoted one or two characters is a
+    number -- 'AB' is 4142H.  DEFW took both as strings instead, so
+    DEFW 'AB' emitted 41 42 where 4142H stored as a word is 42 41, and
+    DEFW "A" emitted a single byte, which is not a word at all (the
+    2026-09-19 audit, L-53).
+    """
+
+    def bytes_of(self, src):
+        r = assemble(' ORG 0\n' + src + '\n')
+        self.assertEqual(r.errors, [], src)
+        self.assertEqual(len(r.segments), 1, src)
+        return r.segments[0][1]
+
+    def test_two_characters_are_one_word_low_byte_first(self):
+        self.assertEqual(self.bytes_of(" DEFW 'AB'"), bytes([0x42, 0x41]))
+        self.assertEqual(self.bytes_of(" DEFW 'AB'"), self.bytes_of(' DEFW 4142H'))
+
+    def test_one_character_is_a_whole_word(self):
+        self.assertEqual(self.bytes_of(" DEFW 'A'"), bytes([0x41, 0x00]))
+        self.assertEqual(self.bytes_of(' DEFW "A"'), bytes([0x41, 0x00]))
+
+    def test_several_items(self):
+        self.assertEqual(self.bytes_of(" DEFW 'AB','CD',1"),
+                         bytes([0x42, 0x41, 0x44, 0x43, 0x01, 0x00]))
+
+    def test_longer_text_is_an_error_naming_defm(self):
+        r = assemble(" ORG 0\n DEFW 'ABC'\n")
+        self.assertTrue(r.errors)
+        self.assertIn('DEFM', r.errors[0][1])
+
+    def test_defb_and_defm_still_take_strings(self):
+        self.assertEqual(self.bytes_of(" DEFB 'AB'"), b'AB')
+        self.assertEqual(self.bytes_of(" DEFM 'ABC'"), b'ABC')
+        self.assertEqual(self.bytes_of(" DEFB 'A'"), b'A')
+
+    def test_pass_one_and_pass_two_agree_on_the_size(self):
+        """A size the two passes disagree on is an internal error, so a
+        label after the DEFW proves the sizing."""
+        r = assemble(" ORG 0\n DEFW 'AB','C'\nAFTER EQU $\n DEFW AFTER\n")
+        self.assertEqual(r.errors, [])
+        self.assertEqual(r.segments[0][1], bytes([0x42, 0x41, 0x43, 0x00, 0x04, 0x00]))
 
 
 if __name__ == '__main__':
