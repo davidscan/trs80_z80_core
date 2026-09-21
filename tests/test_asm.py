@@ -480,6 +480,52 @@ class TestCommandLine(unittest.TestCase):
             self.assertIn('past 0FFFFH', err.getvalue())
 
 
+class TestRelativeJumpsAcrossTheTop(unittest.TestCase):
+    """The PC wraps at 64K, so a JR over the top is an ordinary short jump.
+
+    The displacement was `target - (pc + length)` with no wrap, so a JR
+    from FFFEH to 0002H computed -65534 and was refused -- although the
+    disassembler wraps its own target and hands back exactly that line, so
+    the two tools disagreed about a listing (the 2026-09-19 audit, L-54).
+    """
+
+    def bytes_of(self, org, ins):
+        r = assemble(' ORG %d\n %s\n' % (org, ins))
+        self.assertEqual(r.errors, [], '%04X %s' % (org, ins))
+        return r.segments[0][1]
+
+    def test_forward_across_the_top(self):
+        self.assertEqual(self.bytes_of(0xFFFE, 'JR 0002H'), bytes([0x18, 0x02]))
+
+    def test_backward_across_the_bottom(self):
+        self.assertEqual(self.bytes_of(0x0002, 'JR 0FFFFH'), bytes([0x18, 0xFB]))
+        self.assertEqual(self.bytes_of(0x0000, 'JR 0FFF0H'), bytes([0x18, 0xEE]))
+
+    def test_a_disassembled_wrap_assembles_back(self):
+        """What disasm prints for the wrap is what asm takes."""
+        raw = bytes([0x18, 0x02])
+        for base in (0xFFFE, 0xFF00, 0x0000):
+            ins = disassemble(raw, base=base)[0]
+            r = assemble(' ORG %d\n %s\n' % (ins.addr, ins.text))
+            self.assertEqual(r.errors, [], '%04X %s' % (base, ins.text))
+            self.assertEqual(r.segments[0][1], raw, '%04X %s' % (base, ins.text))
+
+    def test_a_jump_that_really_is_too_far_is_still_refused(self):
+        r = assemble(' ORG 7D00H\n JR 7E00H\n')
+        self.assertTrue(r.errors)
+        # 7E00H from 7D02H, the address after the two-byte JR, is 254 --
+        # just past the reach, and the message names the wrapped signed
+        # displacement rather than a five-digit one
+        self.assertIn('out of range: 254 bytes', r.errors[0][1])
+
+    def test_the_far_side_of_the_wrap_is_also_refused(self):
+        """Wrapping does not make every address reachable: 8000H away is
+        -32768 either way round, and still too far."""
+        r = assemble(' ORG 0\n JR 8000H\n')
+        self.assertTrue(r.errors)
+        self.assertIn('out of range', r.errors[0][1])
+
+
 class TestDefwTakesWords(unittest.TestCase):
     """DEFW's items are words, quoted characters included.
 

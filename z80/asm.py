@@ -514,7 +514,15 @@ def encode(enc, entry, opnds, symbols, pc, lineno):
             tail += bytes((v & 0xFF, v >> 8))
         elif k == 'rel':
             target = opnd.expr.eval(symbols, pc)
-            disp = target - (pc + entry.length)
+            # The PC wraps at 64K, so a jump ACROSS the top is an ordinary
+            # short one: the displacement is taken modulo 65536 and read as
+            # signed.  Unwrapped, a JR from 0FFFEH to 0002H computed -65534
+            # and was refused, although the disassembler wraps its own
+            # target and so hands back exactly that line (the 2026-09-19
+            # audit, L-54).
+            disp = (target - (pc + entry.length)) & 0xFFFF
+            if disp > 32767:
+                disp -= 65536
             if not -128 <= disp <= 127:
                 raise AsmError(lineno, 'relative jump out of range: %d bytes' % disp)
             tail.append(disp & 0xFF)
