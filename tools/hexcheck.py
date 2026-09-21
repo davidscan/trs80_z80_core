@@ -1953,10 +1953,19 @@ def main(argv=None):
     streams = find_data(text)
     if a.out:
         os.makedirs(a.out, exist_ok=True)
+    # --block past the end skipped every block and reported "0 lines: 0
+    # clean, 0 repaired, 0 unresolved", exit 0 -- a silent pass for a
+    # block that is not there, which is the wrong answer to a typo (the
+    # 2026-09-19 audit, L-68).  `a.block and` also let --block 0 through
+    # to check everything, since 0 is falsy and the numbering is 1-based.
+    if a.block is not None and not 1 <= a.block <= len(blocks):
+        sys.stderr.write('%s: --block %d: the file has %d block(s)\n'
+                         % (a.file, a.block, len(blocks)))
+        return 2
     total = {k: 0 for k in ORDER}
     bad = 0
     for i, recs in enumerate(blocks, 1):
-        if a.block and i != a.block:
+        if a.block is not None and i != a.block:
             continue
         b = Block(recs, '%s block %d (lines %d-%d)'
                   % (os.path.basename(a.file), i, recs[0].n, recs[-1].n), streams)

@@ -760,6 +760,33 @@ T44     DEFW    0846H
                                 cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
 
+    def test_a_block_that_is_not_there_is_refused(self):
+        """--block past the end skipped every block and reported
+
+            0 lines: 0 clean, 0 repaired, 0 unresolved
+
+        with exit 0 -- a silent pass for a block that does not exist, which
+        is the wrong answer to a typo (the 2026-09-19 audit, L-68).
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            good = os.path.join(d, 'good.txt')
+            with open(good, 'w') as f:
+                f.write(self.listing)
+            for n in ('2', '0', '-1', '99'):
+                r = subprocess.run([sys.executable, 'tools/hexcheck.py', good,
+                                    '--block', n],
+                                   cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(r.returncode, 2, '--block %s: %s%s' % (n, r.stdout, r.stderr))
+                self.assertIn('block', r.stderr)
+                self.assertNotIn('0 lines:', r.stdout)
+            # ... while the block that IS there is checked as before
+            r = subprocess.run([sys.executable, 'tools/hexcheck.py', good, '--block', '1'],
+                               cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn('lines:', r.stdout)
+            self.assertNotIn('0 lines:', r.stdout)
+
     def test_the_columns_come_apart(self):
         """The line number ends the columns, whatever the scan did to them."""
         cases = [
