@@ -124,5 +124,52 @@ class TestPlays(unittest.TestCase):
         self.assertAlmostEqual(m.cycles / frames / (mkgame.MHZ * 1e6 / 30), 1.0, delta=0.05)
 
 
+class TestValuesThatDoNotFitAreRefused(unittest.TestCase):
+    """A masked immediate is a game that misbehaves and says it does not.
+
+    Every immediate was written with `& 0xFF` or `& 0xFFFF`, so a value
+    the generator computed too large was quietly cut -- `--fps 1` wants a
+    delay of 68218 turns and emitted LD DE,2682, a 25x faster game, while
+    the statistics it printed went on quoting 68218 (the 2026-09-19
+    audit, L-66).
+    """
+
+    def test_a_frame_rate_the_loop_cannot_reach_is_refused(self):
+        with self.assertRaises(ValueError) as e:
+            mkgame.build(32000, 1)
+        self.assertIn('65535', str(e.exception))
+        self.assertIn('68218', str(e.exception))
+
+    def test_the_message_says_what_the_loop_can_reach(self):
+        with self.assertRaises(ValueError) as e:
+            mkgame.delay_count(1, overhead=400)
+        self.assertIn('slowest', str(e.exception))
+
+    def test_a_reachable_frame_rate_still_builds(self):
+        for fps in (2, 10, 30, 60):
+            asm, code, delay, per_turn = mkgame.build(32000, fps)
+            self.assertTrue(0 < delay <= 0xFFFF, fps)
+            self.assertTrue(code)
+
+    def test_a_byte_operand_that_does_not_fit_is_refused(self):
+        a = mkgame.Asm(32000)
+        with self.assertRaises(ValueError) as e:
+            a.op('LD', ('A', 'n'), 300)
+        self.assertIn('byte', str(e.exception))
+
+    def test_a_word_operand_that_does_not_fit_is_refused(self):
+        a = mkgame.Asm(32000)
+        with self.assertRaises(ValueError) as e:
+            a.op('LD', ('DE', 'nn'), 70000)
+        self.assertIn('word', str(e.exception))
+
+    def test_the_shipped_demo_is_unchanged(self):
+        """The fix must not move demo/catch.bas."""
+        asm, code, delay, fps_turn = mkgame.build(32000, 30)
+        text = mkgame.listing(code, 32000, delay, 30)
+        with open(os.path.join(ROOT, 'demo', 'catch.bas')) as f:
+            self.assertEqual(text, f.read())
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -95,8 +95,17 @@ class Asm:
         self.out += bytes(enc)
         vi = 0
         for o in entry.operands:
+            # A value that does not FIT is a slip in the generator, and a
+            # silent mask turns it into a game that misbehaves: --fps 1
+            # wanted a delay of 68218 and emitted LD DE,2682 while the
+            # printed statistics went on quoting 68218 (the 2026-09-19
+            # audit, L-66).  Say so instead, as the assembler does.
             if o.kind in ('imm8', 'port_imm'):
-                self.out.append(values[vi] & 0xFF)
+                v = values[vi]
+                if not -128 <= v <= 255:
+                    raise ValueError('%s %s: %d does not fit in a byte'
+                                     % (mnem, ','.join(operands), v))
+                self.out.append(v & 0xFF)
                 vi += 1
             elif o.kind in ('imm16', 'aimm16'):
                 v = values[vi]
@@ -105,6 +114,9 @@ class Asm:
                     self.fixups.append((len(self.out), 'abs', v))
                     self.out += b'\0\0'
                 else:
+                    if not -32768 <= v <= 65535:
+                        raise ValueError('%s %s: %d does not fit in a word'
+                                         % (mnem, ','.join(operands), v))
                     self.out += bytes((v & 0xFF, (v >> 8) & 0xFF))
             elif o.kind == 'rel':
                 self.fixups.append((len(self.out), 'rel', values[vi]))
@@ -173,6 +185,13 @@ def delay_count(fps, overhead):
                 + cycles_of('OR', ('E',)) + cycles_of('JR', ('NZ', 'd')))
     frame = MHZ * 1e6 / fps
     n = int((frame - overhead) / per_turn)
+    # the loop counts down in DE, so it cannot be told to run more than
+    # 65535 turns; a slower frame rate than that allows is not something
+    # to mask into a wrong constant (the 2026-09-19 audit, L-66)
+    if n > 0xFFFF:
+        raise ValueError('%g fps needs a delay of %d turns, and DE counts to '
+                         '65535: the slowest this loop reaches is %.2f fps'
+                         % (fps, n, MHZ * 1e6 / (0xFFFF * per_turn + overhead)))
     return max(1, n), per_turn
 
 
