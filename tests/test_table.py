@@ -24,7 +24,8 @@ import sys
 import os
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 
 from z80.table import TABLE, INVERSE, build_table          # noqa: E402
 from z80.disasm import decode, disassemble, listing        # noqa: E402
@@ -562,6 +563,72 @@ class TestUndocumentedAgainstTheReferenceCard(unittest.TestCase):
             self.assertEqual(op.length, 2, hex(low))
             self.assertEqual(op.cycles, (8,), hex(low))
             self.assertTrue(op.undoc, hex(low))
+
+
+class TestAddressesWrapAtSixtyFourK(unittest.TestCase):
+    """The Z80 has 64K, so a listing that runs off the top comes back to 0.
+
+    Every address was `base + offset` unwrapped, so bytes at FFFEH listed
+    as 10000H and up -- addresses that cannot exist (the 2026-09-19 audit,
+    L-52).  The relative-jump target was already wrapped, which is what
+    made the inconsistency visible: `JR $` at FFFEH named FFFEH while the
+    next line claimed 10000H.
+    """
+
+    def test_a_listing_past_the_top_comes_back_to_zero(self):
+        text = listing(bytes([0x18, 0xFE, 0x00, 0x00]), base=0xFFFE)
+        rows = [l.split()[0] for l in text.split('\n')]
+        self.assertEqual(rows, ['FFFE', '0000', '0001'])
+
+    def test_the_instruction_address_itself_wraps(self):
+        ins = disassemble(bytes([0x00, 0x00]), base=0xFFFF)
+        self.assertEqual([i.addr for i in ins], [0xFFFF, 0x0000])
+
+    def test_a_relative_jump_agrees_with_the_wrapped_address(self):
+        """JR $ at FFFEH targets FFFEH, and both columns say so."""
+        ins = disassemble(bytes([0x18, 0xFE]), base=0xFFFE)[0]
+        self.assertEqual(ins.addr, 0xFFFE)
+        self.assertEqual(ins.target, 0xFFFE)
+
+
+class TestTheCommandLineSaysWhatIsWrong(unittest.TestCase):
+    """`python3 -m z80.disasm` answers a bad argument with a message.
+
+    --base outside 64K was accepted and printed impossible addresses; a
+    --base that is not a number, a missing file and bad --hex digits were
+    tracebacks (seen during group 3, recorded with L-52).
+    """
+
+    def run_disasm(self, *args):
+        import subprocess
+        return subprocess.run([sys.executable, '-m', 'z80.disasm'] + list(args),
+                              capture_output=True, text=True, cwd=ROOT)
+
+    def test_a_base_outside_64k_is_refused(self):
+        r = self.run_disasm('--hex', '00', '--base', '0x10000')
+        self.assertEqual(r.returncode, 2)
+        self.assertIn('outside 0-65535', r.stderr)
+        self.assertNotIn('Traceback', r.stderr)
+
+    def test_a_base_that_is_not_a_number_is_a_message(self):
+        r = self.run_disasm('--hex', '00', '--base', 'zz')
+        self.assertEqual(r.returncode, 2)
+        self.assertNotIn('Traceback', r.stderr)
+
+    def test_a_missing_file_is_a_message(self):
+        r = self.run_disasm(os.path.join(ROOT, 'no', 'such.bin'))
+        self.assertEqual(r.returncode, 2)
+        self.assertNotIn('Traceback', r.stderr)
+
+    def test_bad_hex_digits_are_a_message(self):
+        r = self.run_disasm('--hex', 'ZZ')
+        self.assertEqual(r.returncode, 2)
+        self.assertNotIn('Traceback', r.stderr)
+
+    def test_a_good_command_line_still_works(self):
+        r = self.run_disasm('--hex', 'CD 7F 0A', '--base', '7F00H')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('7F00', r.stdout)
 
 
 if __name__ == '__main__':

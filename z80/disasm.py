@@ -117,7 +117,7 @@ def decode(data, pos, base=0):
 
     op = TABLE.get(enc)
     if op is None:
-        return Insn(base + start, start, 1, bytes(data[start:start + 1]),
+        return Insn((base + start) & 0xFFFF, start, 1, bytes(data[start:start + 1]),
                     None, text=db_text(data[start:start + 1]),
                     ignored_prefixes=ignored)
 
@@ -148,7 +148,7 @@ def decode(data, pos, base=0):
 
 
 def _trunc(data, start, n, base, ignored):
-    return Insn(base + start, start, n - start, bytes(data[start:n]),
+    return Insn((base + start) & 0xFFFF, start, n - start, bytes(data[start:n]),
                 None, text=db_text(data[start:n]), truncated=True,
                 ignored_prefixes=ignored)
 
@@ -156,7 +156,7 @@ def _trunc(data, start, n, base, ignored):
 def _finish(data, start, end, base, op, disp, imm, ignored, is_rel=False):
     raw = bytes(data[start:end])
     if op is None:
-        return Insn(base + start, start, len(raw), raw, None,
+        return Insn((base + start) & 0xFFFF, start, len(raw), raw, None,
                     text=db_text(raw), ignored_prefixes=ignored)
     target = None
     if is_rel and imm is not None:
@@ -167,7 +167,7 @@ def _finish(data, start, end, base, op, disp, imm, ignored, is_rel=False):
                 target = imm
             elif o.kind == 'rst':
                 target = o.value
-    ins = Insn(base + start, start, len(raw), raw, op, disp, imm, target,
+    ins = Insn((base + start) & 0xFFFF, start, len(raw), raw, op, disp, imm, target,
                '', False, ignored)
     ins.text = render(ins)
     return ins
@@ -256,11 +256,24 @@ def main(argv=None):
     ap.add_argument('--length', type=int, default=None, help='bytes to disassemble')
     a = ap.parse_args(argv)
     b = a.base.strip()
-    base = int(b[:-1], 16) if b[-1:] in 'Hh' else int(b, 0)
+    try:
+        base = int(b[:-1], 16) if b[-1:] in 'Hh' else int(b, 0)
+    except ValueError:
+        ap.error('--base: %r is not a number (decimal, 0x.., or ..H)' % a.base)
+    # the Z80 has 64K and the listing wraps there, so a base outside it
+    # would print addresses that cannot exist (the 2026-09-19 audit, L-52)
+    if not 0 <= base <= 0xFFFF:
+        ap.error('--base: %d is outside 0-65535' % base)
     if a.hex is not None:
-        data = bytes.fromhex(a.hex.replace(' ', ''))
+        try:
+            data = bytes.fromhex(a.hex.replace(' ', ''))
+        except ValueError as e:
+            ap.error('--hex: %s' % e)
     elif a.file:
-        data = open(a.file, 'rb').read()
+        try:
+            data = open(a.file, 'rb').read()
+        except OSError as e:
+            ap.error('%s: %s' % (a.file, e.strerror))
     else:
         ap.error('a file or --hex is required')
     data = data[a.skip:]
