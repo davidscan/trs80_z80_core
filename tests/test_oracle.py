@@ -15,6 +15,7 @@ corpus sibling.
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -372,6 +373,58 @@ class TestInstrumentedBuild(unittest.TestCase):
         self.assertTrue(got['usr_seen'], 'never reached the USR call')
         self.assertEqual(oracle.runs_from_pokes(got['pokes']),
                          [(32000, bytes([9] * 4))])
+
+
+class TestTheEnvironmentDoesNotLeakIn(unittest.TestCase):
+    """The oracle's measurement must not depend on the caller's shell.
+
+    It inherited the environment whole, so TRS80_USR=strict turned every
+    un-executed USR into ?FC, a TRS80_Z80 put a real core behind calls the
+    oracle believes are stubbed, and TRS80_SOUND started a player -- the
+    same corpus gave different numbers to different people (the 2026-09-19
+    audit, L-64).
+    """
+
+    def test_the_variables_that_would_change_a_measurement_are_gone(self):
+        keep = dict(os.environ)
+        try:
+            os.environ.update({
+                'TRS80_USR': 'strict',
+                'TRS80_Z80': 'python3 /nonexistent/core.py',
+                'TRS80_SOUND': 'auto',
+                'TRS80_USR_TRACE': '2',
+                'TRS80_EXT': '1',
+                'TRS80_PRINTER': '/tmp/lp',
+            })
+            env = oracle.base_env(TRS80_POKELOG='/tmp/x')
+        finally:
+            os.environ.clear()
+            os.environ.update(keep)
+        self.assertEqual(env['TRS80_Z80'], '')        # the stub, always
+        self.assertEqual(env['TRS80_DUMB'], '1')
+        self.assertEqual(env['TRS80_POKELOG'], '/tmp/x')
+        for v in ('TRS80_USR', 'TRS80_SOUND', 'TRS80_USR_TRACE',
+                  'TRS80_EXT', 'TRS80_PRINTER'):
+            self.assertNotIn(v, env, v)
+
+    def test_a_run_under_a_hostile_environment_measures_the_same(self):
+        """The whole point, end to end: one listing, two shells."""
+        src = b'10 DEFUSR=32000:X=USR(1)\n20 PRINT "DONE"\n'
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, 'u.bas')
+            with open(p, 'wb') as f:
+                f.write(src)
+            clean = oracle.run_listing(p)
+            keep = dict(os.environ)
+            try:
+                os.environ['TRS80_USR'] = 'strict'
+                os.environ['TRS80_SOUND'] = 'auto'
+                hostile = oracle.run_listing(p)
+            finally:
+                os.environ.clear()
+                os.environ.update(keep)
+        self.assertEqual(clean['rc'], hostile['rc'])
+        self.assertEqual(clean['usr_seen'], hostile['usr_seen'])
 
 
 if __name__ == '__main__':

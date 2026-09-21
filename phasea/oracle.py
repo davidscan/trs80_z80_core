@@ -208,6 +208,34 @@ def build(force=False):
 FEED = ('1\n' * 400).encode()
 
 
+# The oracle's whole point is a measurement that does not move, so the
+# environment it runs the interpreter in cannot be the caller's.  It used
+# to be: TRS80_USR=strict turned every un-executed USR into ?FC, a
+# TRS80_Z80 in the shell put a real core behind calls the oracle believes
+# are stubbed, and TRS80_SOUND started a player.  Results depended on who
+# typed the command (the 2026-09-19 audit, L-64).  tools/kbd_probe.py has
+# had a base_env() like this from the start.
+DETERMINISTIC = {
+    'TRS80_Z80': '',          # the stub: the oracle measures the interpreter
+    'TRS80_DUMB': '1',
+    'TRS80_MHZ': '0',         # no throttle
+    'LC_ALL': 'C',
+}
+# stripped rather than set: any value at all changes what is measured
+DROPPED = ('TRS80_USR', 'TRS80_USR_TRACE', 'TRS80_SOUND', 'TRS80_SOUND_WAV',
+           'TRS80_SOUND_WAV_APPEND', 'TRS80_PRINTER', 'TRS80_EXT',
+           'TRS80_KMHOLD', 'TRS80_KBPROTO', 'TRS80_MANFILE',
+           'TRS80_OLLAMA_CURL', 'TRS80_MEMSIZE')
+
+
+def base_env(**extra):
+    env = dict(os.environ, **DETERMINISTIC)
+    for v in DROPPED:
+        env.pop(v, None)
+    env.update(extra)
+    return env
+
+
 def run_interp(path, env, timeout):
     """One batch run of `path`, in a working directory of its own.
 
@@ -236,7 +264,7 @@ def run_listing(path, timeout=10.0):
     log = os.path.join(OUT, 'pokelog.txt')
     if os.path.exists(log):
         os.remove(log)
-    env = dict(os.environ, TRS80_POKELOG=log)
+    env = base_env(TRS80_POKELOG=log)
     timed_out = False
     try:
         r = run_interp(path, env, timeout)
@@ -409,7 +437,7 @@ def analyse_hang(path, timeout=8.0):
     log = os.path.join(OUT, 'linelog.txt')
     if os.path.exists(log):
         os.remove(log)
-    env = dict(os.environ, TRS80_LINELOG=log)
+    env = base_env(TRS80_LINELOG=log)
     try:
         run_interp(path, env, timeout)
     except subprocess.TimeoutExpired:
