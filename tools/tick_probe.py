@@ -133,6 +133,33 @@ def batch(basic, passes, log, mhz):
     return time.monotonic() - t0
 
 
+def wait_for(fd, buf, s, timeout):
+    """Read from `fd` into `buf[0]` until `s` is in it.
+
+    Raises SystemExit if the timeout runs out OR the terminal goes away.
+    The second half is the point: on Linux a read from a pty whose child
+    has exited raises OSError(EIO), and this used to `break` out of the
+    loop and RETURN -- exactly what it does when the text arrives.  So an
+    interpreter that died during a probe was measured as one that answered,
+    and the tick numbers it produced were of nothing at all (the
+    2026-09-19 audit, L-69).  macOS gives a 0-byte read for the same case,
+    so both endings are taken together.
+    """
+    t0 = time.monotonic()
+    while s not in buf[0]:
+        r, _, _ = select.select([fd], [], [], 0.05)
+        if r:
+            try:
+                n = os.read(fd, 4096)
+            except OSError:
+                n = b''
+            if not n:
+                raise SystemExit('the interpreter exited while waiting for %r' % s)
+            buf[0] += n
+        if time.monotonic() - t0 > timeout:
+            raise SystemExit('timeout waiting for %r' % s)
+
+
 # ---- 3. interactive, through a pseudo-terminal -----------------------------------
 def interactive(basic, passes, log, mhz):
     env = env_for(basic, log, mhz)
@@ -143,16 +170,7 @@ def interactive(basic, passes, log, mhz):
     buf = [b'']
 
     def until(s, timeout):
-        t0 = time.monotonic()
-        while s not in buf[0]:
-            r, _, _ = select.select([fd], [], [], 0.05)
-            if r:
-                try:
-                    buf[0] += os.read(fd, 4096)
-                except OSError:
-                    break
-            if time.monotonic() - t0 > timeout:
-                raise SystemExit('timeout waiting for %r' % s)
+        wait_for(fd, buf, s, timeout)
 
     def send(s):
         os.write(fd, s.encode())

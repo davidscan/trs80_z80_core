@@ -45,8 +45,17 @@ for l in open(log).read().splitlines():
         run += 1
         if call == call_want and str(run) in marks:
             render('call %d, V run %d' % (call, run))
-    elif l.startswith('RET'):
+    elif l.startswith('RET') or l.startswith('ERR'):
+        # A call ends at its RET *or* at an ERR -- the protocol's two
+        # endings.  Counting only RET left every call after a failed one
+        # numbered one too low, so asking for "call 7" of a log with an
+        # earlier ERR rendered call 8 (the 2026-09-19 audit, L-67).
         if call == call_want and 'end' in marks:
-            render('call %d, at RET (%d V runs)' % (call, run))
+            render('call %d, at %s (%d V runs)' % (call, l.split()[0], run))
         call += 1
+        run = 0
+    elif l.startswith('NEED'):
+        # NOT a new call: the interpreter resends this same one as a full
+        # frame.  But the V runs so far belong to the attempt thrown away,
+        # so the run numbers start again with it.
         run = 0
