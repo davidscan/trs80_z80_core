@@ -160,11 +160,14 @@ ALIAS_RE = re.compile(r'^\s*(?:LET\s*)?([A-Za-z][A-Za-z0-9]*[%!#]?)\s*=\s*(.+)$'
 def varptr_strings(prog):
     """The string variables whose VARPTR feeds the USR ENTRY -- a DEF USR
     or a POKE of the 408EH vector that names VARPTR(X$), directly or
-    through a numeric variable assigned from it (V=VARPTR(X$):DEFUSR=
-    PEEK(V+1)+256*PEEK(V+2)).  A packed routine is always run that way;
-    VARPTR(X$) anywhere else is a string handed to a routine as its
-    argument or aliased for a screen trick, and its bytes are text."""
+    through numeric variables assigned from it, however many hops
+    (V=VARPTR(X$):AD=PEEK(V+1)+256*PEEK(V+2):DEFUSR=AD -- the second hop
+    was dropped before the 2026-09-19 audit, H-17).  A packed routine is
+    always run that way; VARPTR(X$) anywhere else is a string handed to a
+    routine as its argument or aliased for a screen trick, and its bytes
+    are text."""
     alias = {}                    # numeric var -> string var it was set from
+    derived = []                  # (numeric var, the names on its right side)
     sinks = []                    # statements that set the USR entry
     for _ln, _body, stmts in prog:
         for st in stmts:
@@ -175,8 +178,25 @@ def varptr_strings(prog):
                 vs = VARPTR_STR_RE.findall(m.group(2))
                 if vs:
                     alias[m.group(1).upper()] = vs[0].upper()
+                else:
+                    derived.append((m.group(1).upper(), set(
+                        x.upper() for x in
+                        re.findall(r'[A-Za-z][A-Za-z0-9]*[%!#]?', m.group(2)))))
             if USR_SINK_RE.search(st):
                 sinks.append(st)
+    # A variable computed from an aliased one is an alias too, to a fixed
+    # point: the hops need not be in program order (a subroutine below the
+    # DEF USR may take them), so this is not a single pass down the listing.
+    grew = True
+    while grew:
+        grew = False
+        for var, names in derived:
+            if var not in alias:
+                for n in names:
+                    if n in alias:
+                        alias[var] = alias[n]
+                        grew = True
+                        break
     out = set()
     for st in sinks:
         for v in VARPTR_STR_RE.findall(st):

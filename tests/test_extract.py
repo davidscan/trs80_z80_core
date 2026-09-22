@@ -253,6 +253,22 @@ class TestStringPacked(unittest.TestCase):
         self.assertEqual(p.bytes, [205, 127, 10, 41, 195, 154, 10, 0])
 
 
+    def test_the_usr_link_is_followed_through_every_variable(self):
+        """V=VARPTR(A$):AD=PEEK(V+1)+256*PEEK(V+2):DEFUSR=AD -- the entry
+        names no VARPTR and no variable assigned one directly, only a
+        variable computed from such a variable (the 2026-09-19 audit,
+        H-17: one hop was followed, this common form was dropped).  The
+        hops may sit anywhere in the listing: a subroutine below sets
+        them for a DEF USR above."""
+        p = only(run('10 A$=CHR$(205)+CHR$(127)+CHR$(10)+CHR$(41)+CHR$(195)+CHR$(154)+CHR$(10)+CHR$(0)\n'
+                     '20 V=VARPTR(A$):AD=PEEK(V+1)+256*PEEK(V+2):DEFUSR=AD\n'))
+        self.assertEqual((p.idiom, p.base_symbol), ('string-packed', 'VARPTR(A$)'))
+        p = only(run('10 FOR I=1 TO 8:READ V:A$=A$+CHR$(V):NEXT\n'
+                     '20 DATA 205,127,10,41,195,154,10,0\n'
+                     '30 GOSUB 900:POKE 16526,LO:POKE 16527,HI:END\n'
+                     '900 P=VARPTR(A$):L=PEEK(P+1):H=PEEK(P+2):LO=L:HI=H:RETURN\n'))
+        self.assertEqual((p.idiom, p.base_symbol), ('string-packed', 'VARPTR(A$)'))
+
     def test_a_string_nobody_takes_varptr_of_is_text(self):
         rep = run('10 PR$=" PREPROCESSING":F$=CHR$(24)+STRING$(34,24)+CHR$(26)+CHR$(13)\n'
                   '20 FOR I=1 TO 8:READ V:L$=L$+CHR$(V):NEXT\n'
