@@ -865,6 +865,13 @@ class Block:
             r.gap = False
             if r.op in ('EQU', 'DEFL'):
                 continue                # the value column, not a place: the counter stands
+            if 'agree' not in (r.anote or ''):
+                # Decided from the SCANNED address every round: a move made
+                # in round one, when the line's own length was not known,
+                # stood for good, and a line settled since then says how
+                # long it is (the 2026-09-19 audit, H-21).  The first
+                # address, chained backward, is first_address's to keep.
+                r.addr, r.anote = r.col0, ''
             if self.reserves(r, pc, self.lost_before(recs, i, step)):
                 lens[i] = r.reserve
                 pc = (r.addr + r.reserve) & 0xFFFF if r.addr is not None else None
@@ -1241,8 +1248,19 @@ class Block:
                 # shape, or the line is that column's reading alone.
                 if not (b in wants or (not both and plausible_hex(r.rawhex, b))):
                     continue
-            elif not (b in wants or (not both and near_hex(r.rawhex, b))
+            elif not (b in wants
+                      or (not both and near_hex(r.rawhex, b)
+                          and (not hwants or r.dirty or len(r.hexs) % 2))
                       or (not wants and clen == len(b))):
+                # A near miss of the object field carries the source only
+                # where that field has no clean reading of its own -- a
+                # character outside the hex alphabet, or a digit lost.  A
+                # field that reads cleanly as other bytes is a witness
+                # AGAINST the source as printed, and the two were one slip
+                # apart as often as not: RFADY was taken over a hex column
+                # that read READY (the 2026-09-19 audit, H-21).  Such a
+                # line falls to (b), where the hex's own reading can come
+                # back as one column alone, flagged.
                 continue
             self.accept(r, op, args, b, 'clean' if b == want else 'hex')
             self.settle_data(r, hwants, dwants)

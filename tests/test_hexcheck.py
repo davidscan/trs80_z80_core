@@ -732,6 +732,41 @@ T44     DEFW    0846H
                                  'seed %d: the recovered source does not '
                                  'produce the reconciled bytes' % seed)
 
+    def test_a_clean_hex_field_is_not_outvoted_by_a_source_one_slip_off(self):
+        """DEFM 'RFADY' over an object column that reads 5245414459 cleanly:
+        the source's bytes were a near miss of the field, so they were
+        taken as a two-witness repair and the listing's word became RFADY
+        (the 2026-09-19 audit, H-21, damage seed 58).  A field that reads
+        cleanly as other bytes is a witness against the source, and the
+        line comes back as the object column's own reading, flagged."""
+        import re
+        msg = re.search(r"^7D52 5245414459 \d{5} MSG\s+DEFM\s+'READY'$", self.listing, re.M)
+        self.assertTrue(msg, 'the fixture moved')
+        page = self.listing.replace(msg.group(0), msg.group(0).replace('READY', 'RFADY'))
+        (b,) = check(page)
+        (r,) = [r for r in b.recs if r.addr == 0x7D52]
+        self.assertEqual((r.status, r.bytes), ('hexonly', b'READY'))
+        self.assertIn("DEFM    'READY'", b.recovered())
+        # ... while a hex field with a digit LOST is still repaired from the
+        # source: that field is a bad scan of the source's bytes, not a
+        # clean reading of others.
+        page = self.listing.replace(msg.group(0), msg.group(0).replace('5245414459', '524541459'))
+        (b,) = check(page)
+        (r,) = [r for r in b.recs if r.addr == 0x7D52]
+        self.assertEqual((r.status, r.bytes), ('hex', b'READY'))
+
+    def test_the_damage_model_beyond_the_pinned_seeds(self):
+        """The audit ran seeds 12-211 and found 98 with wrong accepted bytes.
+        The H-21 fixes brought the wrong lines over seeds 12-59 from 47 to
+        34 (what is left: the address chain's one witness per address, and
+        both columns damaged at once).  A bar, so the number cannot climb
+        back unnoticed; the pinned seeds above stay the exact check."""
+        wrong = 0
+        for seed in range(12, 60):
+            blocks = check(damage(self.listing, 0.10, seed))
+            wrong += self.resolved(blocks, checked_only=True)[1]
+        self.assertLessEqual(wrong, 34, '%d wrong accepted lines over seeds 12-59' % wrong)
+
     def test_a_line_with_object_bytes_is_never_dropped_as_text(self):
         """A mnemonic the scan began with a mark or a digit made the line
         'text' with no bytes: not counted unresolved, absent from the
