@@ -190,6 +190,8 @@ class HexCheck(unittest.TestCase):
             for r in b.recs:
                 if r.status == 'unresolved':
                     unresolved += 1
+                elif r.status == 'text' and r.hexs:
+                    wrong += 1          # object bytes dropped without a word (H-20)
                 elif r.bytes and r.addr is not None:
                     if checked_only and r.status == 'hexonly':
                         continue
@@ -729,6 +731,38 @@ T44     DEFW    0846H
                 self.assertEqual(b.verify(), [],
                                  'seed %d: the recovered source does not '
                                  'produce the reconciled bytes' % seed)
+
+    def test_a_line_with_object_bytes_is_never_dropped_as_text(self):
+        """A mnemonic the scan began with a mark or a digit made the line
+        'text' with no bytes: not counted unresolved, absent from the
+        recovered source and from the ROM-call tally, exit 0 (the
+        2026-09-19 audit, H-20).  With bytes in the object column the
+        line is repaired like any other, or reported."""
+        import re
+        call = re.search(r'^7D16 CD347D \d{5} CALL\s+COUNT$', self.listing, re.M)
+        store = re.search(r'^7D38 32417D \d{5} LD\s+\(FLAG\),A$', self.listing, re.M)
+        msg = re.search(r"^7D52 5245414459 (\d{5}) MSG\s+DEFM\s+'READY'$", self.listing, re.M)
+        self.assertTrue(call and store and msg, 'the fixture moved')
+        page = self.listing.replace(call.group(0), call.group(0).replace('CALL', '(ALL')) \
+                           .replace(store.group(0), store.group(0).replace('LD ', '1D ')) \
+                           .replace(msg.group(0), '7D52 5245414459 %s' % msg.group(1))
+        (b,) = check(page)
+        by = {r.addr: r for r in b.recs if r.addr is not None}
+        self.assertEqual((by[0x7D16].status, by[0x7D16].bytes), ('source', b'\xCD\x34\x7D'))
+        self.assertEqual((by[0x7D38].status, by[0x7D38].bytes), ('source', b'\x32\x41\x7D'))
+        # bytes with no source at all: one column, and the report says so
+        self.assertEqual(by[0x7D52].status, 'unresolved')
+        self.assertFalse(any(r.status == 'text' and r.hexs for r in b.recs))
+        self.assertIn('CALL    COUNT', b.recovered())
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'page.txt')
+            with open(path, 'w') as f:
+                f.write(page)
+            out = subprocess.run([sys.executable, 'tools/hexcheck.py', path],
+                                 cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn('7D52', out.stdout)
 
     def test_a_line_damaged_in_both_columns_is_not_guessed_at(self):
         """Neither column readable, and no guess: the line is reported."""

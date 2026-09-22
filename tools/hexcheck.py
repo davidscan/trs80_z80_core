@@ -1127,8 +1127,16 @@ class Block:
             self.tally.pop(k, None)     # this round's count, not a running one
         for r in self.recs:
             r.note = ''
-            if r.op in ('EQU', 'DEFL') or (r.op is None and r.label is None) \
-                    or not re.match(r'^[A-Z]', r.op or ''):
+            # A line is text when it holds no object bytes: an equate, a
+            # comment, a mnemonic the scan began with a mark or a digit
+            # (`(ALL 0033H`, `1D HL,VIDEO`) on a line with none.  With
+            # bytes in the object column it is a line of the program, and
+            # goes on to be repaired or reported: called text, its bytes
+            # vanished from the recovered source and the ROM-call tally,
+            # and nothing said so (the 2026-09-19 audit, H-20).
+            if r.op in ('EQU', 'DEFL') or (not r.hexs and (
+                    (r.op is None and r.label is None)
+                    or not re.match(r'^[A-Z]', r.op or ''))):
                 r.status, r.bytes = 'text', b''
                 continue
             if self.structural(r):
