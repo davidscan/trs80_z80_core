@@ -446,7 +446,12 @@ def resolve_poke_target(addr_expr, var, start, step, symbols):
     """
     e = addr_expr.strip()
     up = e.upper()
-    varpat = re.compile(r'\b%s\b' % re.escape(var))
+    # The variable as a whole name, its type suffix included: `\b` after
+    # a % finds no word boundary, so FOR I%= never matched POKE I%,A and
+    # the loader was filed fixed-address-unresolved (the 2026-09-19 audit,
+    # H-19).  I and I% are two variables, so a suffix in the address that
+    # the loop variable lacks is no match either.
+    varpat = re.compile(r'(?<![A-Z0-9])%s(?![A-Z0-9%%!#$])' % re.escape(var))
 
     if not varpat.search(up):
         # Loop variable absent: a fixed destination -- a device stream.

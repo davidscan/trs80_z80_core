@@ -147,6 +147,23 @@ class TestLoaderIdioms(unittest.TestCase):
                      '30 DATA 1,2,3\n'))
         self.assertEqual(p.bytes, [1, 2, 3])
 
+    def test_a_loop_variable_with_a_type_suffix(self):
+        """I% indexes the POKE like I does (the 2026-09-19 audit, H-19: no
+        word boundary follows a %, so the variable was never found and the
+        loader filed as fixed-address-unresolved).  I and I% are two
+        variables: a loop on I does not index a POKE at I%."""
+        p = only(run('10 FOR I%=32000 TO 32003:READ A%:POKE I%,A%:NEXT\n'
+                     '20 DATA 62,1,211,201\n'))
+        self.assertEqual((p.base, p.bytes, p.confidence),
+                         (32000, [62, 1, 211, 201], 'high'))
+        p = only(run('10 FOR I%=0 TO 3:READ A:POKE 32000+I%,A:NEXT\n'
+                     '20 DATA 62,1,211,201\n'))
+        self.assertEqual(p.base, 32000)
+        p = only(run('10 FOR I=0 TO 3:READ A:POKE 32000+I%,A:NEXT\n'
+                     '20 DATA 62,1,211,201\n'))
+        self.assertEqual(p.kind, 'unextractable')
+        self.assertIn('fixed-address-unresolved', p.flags)
+
 
 class TestSymbolsThatStopBeingConstant(unittest.TestCase):
     """A base is a constant only while nothing else can have stored into
