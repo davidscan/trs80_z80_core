@@ -270,20 +270,29 @@ def find_loaders(path, prog, stream, table):
     # item c: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
     # None: no RESTORE; 0: a bare RESTORE, the program's first DATA.
     prev_restore = None
+    consumed = []                 # (start, end, pinned): what loaders above read
     for li, (lineno, _body, stmts) in enumerate(prog):
         symbols = symbols_at(table, lineno)
         restore_target = prev_restore
         prev_restore = None
-        for st in stmts:
+        restore_si = None
+        for si, st in enumerate(stmts):
             m = RESTORE_RE.match(st)
             if m:
                 restore_target = int(m.group(1)) if m.group(1) else 0
                 prev_restore = restore_target
+                restore_si = si
 
         for si, st in enumerate(stmts):
             fm = FOR_RE.match(st)
             if not fm or is_comment(st):
                 continue
+            if restore_si is not None and si > restore_si:
+                # A loader behind the RESTORE on its own line has consumed
+                # it: the pointer moved on, so it is not the next line's
+                # loader's too (H-18 by another path: `10 RESTORE 900:FOR
+                # ...` / `20 FOR ...` read the same block twice).
+                prev_restore = None
             var = fm.group(1).upper()
             start = eval_const(fm.group(2), symbols)
             end = eval_const(fm.group(3), symbols)
@@ -345,8 +354,10 @@ def find_loaders(path, prog, stream, table):
                 count = (end - start) // step + 1
                 if count <= 0:
                     continue
-                sp = _data_start(stream, restore_target, read_line, read_si)
-                vals, _e, exact = take_from(stream, sp, count)
+                sp = _data_start(stream, restore_target, read_line, read_si,
+                                 consumed)
+                vals, end, exact = take_from(stream, sp, count)
+                consumed.append((sp, end, _pinned(restore_target, consumed, sp)))
                 payloads.append(_make_varptr_payload(
                     fname, arr, lineno, count, vals, exact, restore_target))
                 continue
@@ -413,9 +424,11 @@ def find_loaders(path, prog, stream, table):
                 kind = 'table-data'
                 flags.append('multi-value-read-%d' % per_iter)
 
-            sp = _data_start(stream, restore_target, read_line, read_si)
+            sp = _data_start(stream, restore_target, read_line, read_si,
+                             consumed)
             need = count * per_iter
-            vals, _e, exact = take_from(stream, sp, need)
+            vals, end, exact = take_from(stream, sp, need)
+            consumed.append((sp, end, _pinned(restore_target, consumed, sp)))
 
             conf, cflags = grade(vals, need, exact, restore_target)
             flags.extend(cflags)
@@ -585,15 +598,47 @@ def find_string_packed(path, prog, table, min_len=8):
     return out
 
 
-def _data_start(stream, restore_target, read_line, read_si):
+def _pinned(restore_target, consumed, sp):
+    """Is this loader's place in the stream KNOWN -- a RESTORE of its own,
+    or the continuation of a loader whose place was known?"""
+    if restore_target is not None:
+        return True
+    return bool(consumed) and consumed[-1][2] and sp == consumed[-1][1]
+
+
+def _data_start(stream, restore_target, read_line, read_si, consumed=()):
     """Where the loader's READ starts in the DATA stream: after a RESTORE n
     at line n's DATA, after a bare RESTORE at the program's first DATA,
-    otherwise adjacent -- the first DATA after the READ itself."""
+    otherwise adjacent -- the first DATA after the READ itself.
+
+    Level II READ has ONE pointer (the 2026-09-19 audit, H-18: two loaders
+    sharing a block came out with the same bytes, the second at confidence
+    high).  `consumed` is what the loaders above this one, in program
+    order, read: (start, end, pinned).  Two rules follow the pointer where
+    it can be followed, and adjacency keeps the rest, because a pointer
+    followed blindly through the whole listing is wrong wherever the flow
+    is not the line order (measured 2026-09-22: it lost polar2 and GLOBE):
+      - a loader whose adjacent start lands in DATA already read begins
+        where that reading stopped;
+      - a loader behind one whose place was PINNED -- a RESTORE of its own,
+        or the continuation of a pinned one -- continues where it stopped,
+        wherever its adjacent DATA is (ld8509b puts each DATA line ABOVE
+        its loader, and only the pointer reaches them).
+    A RESTORE of the loader's own is an explicit pointer and stands."""
     if restore_target:
         return stream_pos_at_line(stream, restore_target)
     if restore_target == 0:
         return 0
-    return stream_pos_after(stream, read_line, read_si)
+    if consumed and consumed[-1][2]:
+        return consumed[-1][1]
+    sp = stream_pos_after(stream, read_line, read_si)
+    moved = True
+    while moved:
+        moved = False
+        for s, e, _pin in consumed:
+            if s <= sp < e:
+                sp, moved = e, True
+    return sp
 
 
 def grade(vals, need, exact, restored):

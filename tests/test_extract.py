@@ -147,6 +147,40 @@ class TestLoaderIdioms(unittest.TestCase):
                      '30 DATA 1,2,3\n'))
         self.assertEqual(p.bytes, [1, 2, 3])
 
+    def test_two_loaders_share_one_data_block(self):
+        """Level II READ has one sequential pointer, so the second loader
+        reads where the first one stopped (the 2026-09-19 audit, H-18:
+        both started at "the first DATA after this READ" and came out
+        with the same bytes at confidence high).  A RESTORE of its own
+        sets the second loader's pointer back; a loader that follows a
+        RESTOREd one and lands in its DATA continues behind it."""
+        rep = run('10 FOR I=32000 TO 32003:READ A:POKE I,A:NEXT\n'
+                  '20 FOR I=32100 TO 32103:READ A:POKE I,A:NEXT\n'
+                  '30 DATA 62,1,211,201\n'
+                  '40 DATA 175,211,255,201\n')
+        self.assertEqual([(p.base, p.bytes, p.confidence) for p in rep.payloads],
+                         [(32000, [62, 1, 211, 201], 'high'),
+                          (32100, [175, 211, 255, 201], 'high')])
+        rep = run('10 FOR I=32000 TO 32003:READ A:POKE I,A:NEXT\n'
+                  '20 RESTORE:FOR I=32100 TO 32103:READ A:POKE I,A:NEXT\n'
+                  '30 DATA 62,1,211,201\n')
+        self.assertEqual([p.bytes for p in rep.payloads],
+                         [[62, 1, 211, 201], [62, 1, 211, 201]])
+        rep = run('10 RESTORE 900:FOR I=32000 TO 32003:READ A:POKE I,A:NEXT\n'
+                  '20 FOR I=32100 TO 32103:READ A:POKE I,A:NEXT\n'
+                  '30 DATA 9,9,9\n'
+                  '900 DATA 62,1,211,201,175,211,255,201\n')
+        self.assertEqual([p.bytes for p in rep.payloads],
+                         [[62, 1, 211, 201], [175, 211, 255, 201]])
+        # three loaders on one block: each behind the one before it
+        rep = run('10 FOR I=1 TO 2:READ A:POKE 32000+I,A:NEXT\n'
+                  '20 FOR I=1 TO 2:READ A:POKE 32100+I,A:NEXT\n'
+                  '30 FOR I=1 TO 2:READ A:POKE 32200+I,A:NEXT\n'
+                  '40 DATA 1,2,3,4,5,6\n')
+        self.assertEqual([p.bytes for p in rep.payloads],
+                         [[1, 2], [3, 4], [5, 6]])
+        self.assertTrue(all(p.confidence == 'medium' for p in rep.payloads[:2]))
+
     def test_a_loop_variable_with_a_type_suffix(self):
         """I% indexes the POKE like I does (the 2026-09-19 audit, H-19: no
         word boundary follows a %, so the variable was never found and the
