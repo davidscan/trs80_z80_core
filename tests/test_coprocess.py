@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from z80.coprocess import Machine, Fixture, SENTINEL, TICK_TSTATES   # noqa: E402
+from z80.coprocess import Machine, Fixture, SENTINEL, TICK_TSTATES, CoreError   # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORE = os.path.join(ROOT, 'core.py')
@@ -77,10 +77,21 @@ class TestCalls(unittest.TestCase):
         self.assertEqual(r['result'], '1')
         self.assertEqual(int(r['hl']), (-42) & 0xFFFF)
 
-    def test_0a7f_truncates_like_the_stub(self):
-        m, sc = machine(bytes.fromhex('CD7F0A' 'C39A0A'))
-        m.run(0x7000, int(float('1.9')), 0xF000)
-        self.assertEqual(int(sc.ret()['hl']), 1)
+    def test_0a7f_floors_like_the_roms_cint(self):
+        # the ROM's CINT (0A7F-0AAF) floors: 1.9 is 1 and -2.7 is -3, not -2
+        for arg, want in ((1.9, 1), (-2.7, -3), (-32768, -32768), (32767, 32767)):
+            m, sc = machine(bytes.fromhex('CD7F0A' 'C39A0A'))
+            m.run(0x7000, arg, 0xF000)
+            self.assertEqual(int(sc.ret()['hl']), want & 0xFFFF, arg)
+
+    def test_0a7f_is_ov_outside_the_integer_range(self):
+        # 0AA3H accepts exactly -32768 and otherwise exits through 07B2H: ?OV,
+        # sent as `ERR ov` (the 2026-09-19 audit, L-43)
+        for arg in (32768, 40000, 70000, -32769, -32768.5):
+            m, sc = machine(bytes.fromhex('CD7F0A' 'C39A0A'))
+            with self.assertRaises(CoreError) as cm:
+                m.run(0x7000, arg, 0xF000)
+            self.assertEqual(cm.exception.code, 'ov', arg)
 
     def test_0a9a_by_call_returns_to_the_routine(self):
         """The ROM routine ends in a RET (the ROM CALLs it itself), so the

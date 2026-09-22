@@ -302,7 +302,15 @@ class Machine:
             self.write(0x403D, flag)
             self.port_out(0xFF, flag)
         elif pc == 0x0A7F:
-            cpu.hl = int(self.arg) & 0xFFFF
+            # the ROM's CINT (0A7F-0AAF): the value is floored to an
+            # integer; an exponent past 16 bits goes to 0AA3H, which accepts
+            # exactly -32768 and otherwise exits through 07B2H, ?OV.  Sent
+            # as `ERR ov`, which the interpreter raises as BASIC's ?OV (the
+            # 2026-09-19 audit, L-43; ruled 2026-09-21).
+            v = int(float(self.arg) // 1)
+            if v < -32768 or v > 32767:
+                raise CoreError('ov', 'USR argument %s is outside -32768..32767 at 0A7FH' % self.arg)
+            cpu.hl = v & 0xFFFF
         elif pc == 0x0A9A:
             # HL to the result, then the RET below: JP 0A9AH pops the
             # sentinel and ends the call, CALL 0A9AH returns to the routine.
@@ -486,7 +494,7 @@ def serve(m, recv, send, fixture):
             gen = int(h['gen'])
             full = h['full'] == '1'
             entry = int(h['entry'])
-            arg = int(float(h['arg']))
+            arg = float(h['arg'])              # 0A7FH floors it; 2.7 and -2.7 must still differ there
             sp = int(h['sp'])
         except (KeyError, ValueError) as e:
             send('ERR bad CALL header: %s' % e)
