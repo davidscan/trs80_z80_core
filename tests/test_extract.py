@@ -65,6 +65,20 @@ class TestBasicSurface(unittest.TestCase):
                      "20 DATA 33,0,60,62,'1':DATA 32,119,201\n"))
         self.assertEqual(p.provenance['values_found'], 8)
 
+    def test_an_empty_data_item_reads_as_zero(self):
+        # READ of an empty item is 0: the ROM's number reader (224DH) finds
+        # nothing and returns 0, and a bare DATA is one such item.  They
+        # were dropped or read as non-numeric, which shifted every byte
+        # behind them (the 2026-09-19 audit, L-59).
+        self.assertEqual(data_items('DATA'), [0])
+        self.assertEqual(data_items('DATA 1,,2,'), [1, 0, 2, 0])
+        self.assertEqual(data_items('DATA 1, ,2'), [1, 0, 2])
+        self.assertEqual(data_items('DATA 1,"",2'), [1, None, 2])  # a quoted one is ?SN
+        p = only(run('10 FOR I=0 TO 7:READ A:POKE 30000+I,A:NEXT\n'
+                     '20 DATA 62,,50,,60,33,,201\n'))
+        self.assertEqual(p.bytes, [62, 0, 50, 0, 60, 33, 0, 201])
+        self.assertEqual(p.confidence, 'high')
+
     def test_eval_const(self):
         self.assertEqual(eval_const('16446'), 16446)
         self.assertEqual(eval_const('&HB000'), 0xB000)

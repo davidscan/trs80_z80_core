@@ -100,7 +100,9 @@ def data_items(stmt):
     """Numeric DATA items in one DATA statement, or None if not DATA.
 
     Non-numeric items are returned as None entries so a caller counting
-    positions stays aligned with the real READ stream.
+    positions stays aligned with the real READ stream.  An EMPTY item is
+    0, a bare DATA one such item: the ROM's number reader (224DH) finds
+    nothing and returns 0 (the 2026-09-19 audit, L-59).
     """
     m = DATA_RE.match(stmt)
     if not m:
@@ -121,9 +123,7 @@ def data_items(stmt):
     out = []
     for it in items:
         t = it.strip()
-        if t == '' and len(items) == 1:
-            continue
-        out.append(parse_number(t))
+        out.append(0 if t == '' else parse_number(t))
     return out
 
 
