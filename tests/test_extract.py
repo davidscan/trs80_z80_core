@@ -157,6 +157,25 @@ class TestLoaderIdioms(unittest.TestCase):
                      '40 DATA 7,8,9\n'))
         self.assertEqual(p.bytes, [7, 8, 9])
 
+    def test_a_restore_behind_the_loader_is_for_the_next_one(self):
+        """A RESTORE after the loader on its own line runs after it: it
+        redirects the NEXT loader, not this one (the 2026-09-19 audit,
+        L-57: the line's RESTORE was taken for every loader on it)."""
+        rep = run('10 FOR I=30000 TO 30003:READ A:POKE I,A:NEXT:RESTORE 100\n'
+                  '20 FOR I=31000 TO 31003:READ A:POKE I,A:NEXT\n'
+                  '30 DATA 1,2,3,4\n'
+                  '100 DATA 5,6,7,8\n')
+        self.assertEqual([p.bytes for p in rep.payloads],
+                         [[1, 2, 3, 4], [5, 6, 7, 8]])
+        # two loaders behind one RESTORE: the second continues, it is not
+        # set back to the same block
+        rep = run('10 RESTORE 100:FOR I=30000 TO 30003:READ A:POKE I,A:NEXT'
+                  ':FOR I=31000 TO 31003:READ A:POKE I,A:NEXT\n'
+                  '30 DATA 1,2,3,4\n'
+                  '100 DATA 5,6,7,8,9,10,11,12\n')
+        self.assertEqual([p.bytes for p in rep.payloads],
+                         [[5, 6, 7, 8], [9, 10, 11, 12]])
+
     def test_bare_restore_means_the_first_data(self):
         p = only(run('5 DATA 1,2,3\n'
                      '10 RESTORE:FOR I=100 TO 102:READ J:POKE I,J:NEXT\n'

@@ -269,30 +269,38 @@ def find_loaders(path, prog, stream, table):
     # A RESTORE on the line BEFORE the loader redirects it too (REPLY 4
     # item c: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
     # None: no RESTORE; 0: a bare RESTORE, the program's first DATA.
+    #
+    # A RESTORE belongs to the first loader BEHIND it: one after the loader
+    # on its own line runs after it and redirects the next one (the
+    # 2026-09-19 audit, L-57: the line's RESTORE was taken for every loader
+    # on the line), and a second loader behind the same RESTORE continues
+    # where the first stopped.  A loader that consumes a RESTORE ends its
+    # carry to the next line (H-18 by another path: `10 RESTORE 900:FOR
+    # ...` / `20 FOR ...` read the same block twice).
     prev_restore = None
     consumed = []                 # (start, end, pinned): what loaders above read
     for li, (lineno, _body, stmts) in enumerate(prog):
         symbols = symbols_at(table, lineno)
-        restore_target = prev_restore
-        prev_restore = None
-        restore_si = None
+        carried = prev_restore    # from the line before; None once taken
+        restores = []             # (si, target) on this line
         for si, st in enumerate(stmts):
             m = RESTORE_RE.match(st)
             if m:
-                restore_target = int(m.group(1)) if m.group(1) else 0
-                prev_restore = restore_target
-                restore_si = si
+                restores.append((si, int(m.group(1)) if m.group(1) else 0))
+        prev_restore = restores[-1][1] if restores else None
+        taken = set()             # the RESTOREs a loader here has consumed
 
         for si, st in enumerate(stmts):
             fm = FOR_RE.match(st)
             if not fm or is_comment(st):
                 continue
-            if restore_si is not None and si > restore_si:
-                # A loader behind the RESTORE on its own line has consumed
-                # it: the pointer moved on, so it is not the next line's
-                # loader's too (H-18 by another path: `10 RESTORE 900:FOR
-                # ...` / `20 FOR ...` read the same block twice).
-                prev_restore = None
+            before = [r for r in restores if r[0] < si]
+            if before:
+                rsi = before[-1][0]
+                restore_target = before[-1][1] if rsi not in taken else None
+            else:
+                rsi = None
+                restore_target = carried
             var = fm.group(1).upper()
             start = eval_const(fm.group(2), symbols)
             end = eval_const(fm.group(3), symbols)
@@ -342,6 +350,12 @@ def find_loaders(path, prog, stream, table):
                     break
             if read_targets is None:
                 continue
+            if rsi is None:
+                carried = None
+            else:
+                taken.add(rsi)
+                if rsi == restores[-1][0]:
+                    prev_restore = None
 
             # ---- VARPTR-array idiom: READ straight into an integer array
             am = ARRAY_READ_RE.match(read_targets[0]) if read_targets else None
