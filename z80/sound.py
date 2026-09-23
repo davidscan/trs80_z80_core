@@ -47,6 +47,7 @@ the WAV sink carry on.
 
 import array
 import collections
+import os
 import shutil
 import struct
 import subprocess
@@ -363,10 +364,16 @@ def default_player(rate):
     return None
 
 
-def from_env(env, mhz):
-    """(Sound or None, the clock to pace at) from the three variables."""
+def from_env(env, mhz, err=None):
+    """(Sound or None, the clock to pace at) from the three variables.
+
+    A WAV path that cannot be written is said on stderr (`err`), once, at
+    the core's start, and the core runs without the capture.  It used to
+    be dropped in silence while the interpreter's `sound` went on showing
+    the capture as active; `~` is expanded, as a shell would have (the
+    2026-09-19 audit, L-49)."""
     player = env.get('TRS80_SOUND', '').strip()
-    wav = env.get('TRS80_SOUND_WAV', '').strip()
+    wav = os.path.expanduser(env.get('TRS80_SOUND_WAV', '').strip())
     if not player and not wav:
         return None, mhz
     try:
@@ -379,8 +386,8 @@ def from_env(env, mhz):
     if wav:
         try:
             sinks.append(WavSink(wav, rate, env.get('TRS80_SOUND_WAV_APPEND', '').strip() == '1'))
-        except OSError:
-            pass
+        except OSError as e:
+            (err or sys.stderr).write('z80 core: WAV %s: %s; no capture\n' % (wav, e.strerror or e))
     if player:
         cmd = default_player(rate) if player == 'auto' else player.replace('{rate}', str(rate))
         if cmd:

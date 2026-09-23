@@ -315,6 +315,35 @@ class TestFromEnv(unittest.TestCase):
         self.assertFalse(snd.live)
         snd.close()
 
+    def test_an_unwritable_wav_is_said_not_dropped(self):
+        # L-49: a directory, and a file in a directory that does not exist
+        import io
+        d = tempfile.mkdtemp()
+        self.addCleanup(os.rmdir, d)
+        for path in (d, os.path.join(d, 'no', 'such.wav')):
+            err = io.StringIO()
+            self.assertEqual(from_env({'TRS80_SOUND_WAV': path}, 0.0, err), (None, 0.0))
+            self.assertIn('z80 core: WAV %s: ' % path, err.getvalue())
+            self.assertIn('no capture', err.getvalue())
+
+    def test_a_wav_path_under_tilde_is_the_home_directory(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(os.rmdir, d)
+        path = os.path.join(d, 'cap.wav')
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        old = os.environ.get('HOME')
+        os.environ['HOME'] = d
+        try:
+            snd, _ = from_env({'TRS80_SOUND_WAV': '~/cap.wav'}, 0.0)
+        finally:
+            if old is None:
+                del os.environ['HOME']
+            else:
+                os.environ['HOME'] = old
+        self.assertIsNotNone(snd)
+        snd.close()
+        self.assertTrue(os.path.exists(path))
+
     def test_player_forces_the_default_clock_and_gets_the_rate(self):
         snd, mhz = from_env({'TRS80_SOUND': 'cat > /dev/null # {rate}', 'TRS80_SOUND_RATE': '44100'}, 0.0)
         self.assertEqual(mhz, DEFAULT_MHZ)
