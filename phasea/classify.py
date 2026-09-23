@@ -29,7 +29,12 @@ from z80.disasm import disassemble, decode
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x3FFF
 KBD_LO, KBD_HI = 0x3800, 0x38FF
 PRINTER_LO, PRINTER_HI = 0x37E0, 0x37FF
-ROM_HI = 0x2FFF                     # Level II ROM occupies 0000-2FFF
+# Level II ROM occupies 0000-2FFF; 3000-37FF is not RAM on a Model I either
+# (37E0-37FF the printer and disk ports; 3033H the DOS entry a Model III
+# ROM has there).  A CALL or JP below 3800H leaves the routine for the
+# system, and ROM_HI at 2FFFH made the named 3033H untallyable (the
+# 2026-09-19 audit, L-61).
+ROM_HI = 0x37FF
 
 # The two ROM entry points Stage 1 was specified with (the USR idiom).
 STAGE1_TRAPS = {0x0A7F, 0x0A9A}
@@ -201,6 +206,7 @@ def classify(data, base=None, entries=(), payload_kind='candidate-ml'):
     linear = disassemble(data, eff_base)
 
     rom_calls = {}
+    indirect = False
     ports_out, ports_in = set(), set()
     invalid = sum(1 for i in insns if i.invalid)
 
@@ -235,11 +241,22 @@ def classify(data, base=None, entries=(), payload_kind='candidate-ml'):
                 else:
                     ev.add('direct', 'port-%02X-%s' % (num, mode))
 
-        if op.kind == 'call' and ins.target is not None:
+        # Every way into the ROM, not CALL alone: a tail JP 0033H prints
+        # and returns to BASIC through it, and a JP (HL) goes where no
+        # static reading can say -- both left stage1_ok True (L-61).
+        # A target inside the payload is the routine's own.  A symbolic
+        # base (a string or array at VARPTR, decoded at 0) has no fixed
+        # place: its relative jumps are its own, its absolute ones never.
+        rel = any(o.kind == 'rel' for o in op.operands)
+        if op.kind in ('call', 'jump') and ins.target is not None:
             t = ins.target
-            if t <= ROM_HI:
+            own = rel if base is None else base <= t < base + len(data)
+            if t <= ROM_HI and not own:
                 rom_calls[t] = ROM_NAMES.get(t)
                 ev.add('direct', 'rom-call')
+        elif op.kind == 'jump' and any(o.kind == 'ireg' for o in op.operands):
+            indirect = True
+            ev.add('direct', 'indirect-jump')
 
         # ---- tier: inferred (register-indirect through a known constant)
         for mode, src in op.access:
@@ -305,12 +322,17 @@ def classify(data, base=None, entries=(), payload_kind='candidate-ml'):
         buckets.append('pure-compute')
 
     primary = buckets[0]
-    stage1_ok = not non_stage1
+    stage1_ok = not non_stage1 and not indirect
     if stage1_ok:
         reason = 'Stage 1 covers this: no ROM call outside 0A7FH/0A9AH.'
     else:
-        reason = ('Needs Stage 2 HLE for ' +
-                  ', '.join('%04XH' % a for a in non_stage1))
+        why = []
+        if non_stage1:
+            why.append('Needs Stage 2 HLE for ' +
+                       ', '.join('%04XH' % a for a in non_stage1))
+        if indirect:
+            why.append('an indirect jump goes where no static reading can say')
+        reason = '; '.join(why) + '.'
 
     return Classification(
         bucket=primary,
