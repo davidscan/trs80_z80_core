@@ -124,6 +124,36 @@ class TestCompareTiering(unittest.TestCase):
                          'contradiction')
 
 
+class TestAfterTheFirstUsr(unittest.TestCase):
+    """A payload loaded after the first USR call is not in the pokes the
+    oracle reads up to it; that is no contradiction (the 2026-09-19
+    audit, L-63)."""
+
+    CODE = bytes([62, 1, 211, 255, 62, 2, 211, 201])
+
+    def pokes(self, base, data):
+        return [(base + i, b) for i, b in enumerate(data)]
+
+    def test_loaded_after_the_first_usr(self):
+        pre = self.pokes(30000, self.CODE)
+        late = self.pokes(31000, self.CODE)
+        self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, late), 'after-usr')
+
+    def test_never_loaded_is_unreached(self):
+        pre = self.pokes(30000, self.CODE)
+        self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, []), 'unreached')
+
+    def test_other_bytes_before_the_usr_still_contradict(self):
+        pre = self.pokes(31000, bytes(8))
+        self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, []), 'contradiction')
+        late = self.pokes(31000, bytes(8))
+        self.assertEqual(oracle.payload_verdict(self.CODE, 31000, [], late), 'contradiction')
+
+    def test_before_the_usr_is_read_as_before(self):
+        pre = self.pokes(31000, self.CODE)
+        self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, []), 'exact')
+
+
 class TestRegionDiscrimination(unittest.TestCase):
     """FINDING 5's not-every-POKE-loop-is-a-loader, applied dynamically."""
 
@@ -257,6 +287,18 @@ class TestInstrumentedBuild(unittest.TestCase):
 
     def test_build_produces_an_interpreter(self):
         self.assertTrue(os.path.getsize(self.interp) > 100000)
+
+    def test_a_routine_loaded_after_the_first_usr_validates(self):
+        prog = os.path.join(oracle.OUT, 'lateload.bas')
+        with open(prog, 'w') as f:
+            f.write('10 FOR I=0 TO 7:READ A:POKE 30000+I,A:NEXT\n'
+                    '20 POKE 16526,48:POKE 16527,117:X=USR(0)\n'
+                    '30 FOR I=0 TO 7:READ A:POKE 31000+I,A:NEXT\n'
+                    '40 DATA 62,1,211,255,62,2,211,201\n'
+                    '50 DATA 62,3,211,255,62,4,211,201\n')
+        res = oracle.validate([prog])
+        self.assertEqual(res['details'][0]['payloads'], ['exact', 'after-usr'])
+        self.assertEqual(res['tally'], {'exact': 1})
 
     def test_uninstrumented_behaviour_is_unchanged(self):
         """The instrumentation must not perturb what it measures."""

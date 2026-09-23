@@ -280,7 +280,10 @@ def run_listing(path, timeout=10.0):
             reason = ln.strip()
             break
 
-    pokes, usr_seen = [], False
+    # Cut at the first USR call; what the listing pokes after it is kept
+    # apart as late_pokes.  validate needs them: a routine loaded after
+    # the first USR is not in `pokes` at all (L-63).
+    pokes, late, usr_seen = [], [], False
     if os.path.exists(log):
         with open(log) as f:
             for line in f:
@@ -289,12 +292,13 @@ def run_listing(path, timeout=10.0):
                     continue
                 if parts[0] == 'USR':
                     usr_seen = True
-                    break                    # cut at the first USR call
+                    continue
                 try:
-                    pokes.append((int(parts[0]), int(parts[1])))
+                    (late if usr_seen else pokes).append(
+                        (int(parts[0]), int(parts[1])))
                 except (ValueError, IndexError):
                     continue
-    return {'rc': rc, 'pokes': pokes, 'usr_seen': usr_seen,
+    return {'rc': rc, 'pokes': pokes, 'late_pokes': late, 'usr_seen': usr_seen,
             'timed_out': timed_out, 'reason': reason}
 
 
@@ -542,6 +546,40 @@ def operand_offsets(data, base=0):
     return out
 
 
+def best_verdict(want_data, want_base, runs):
+    """compare() against every run: 'exact' beats 'patched' beats
+    'contradiction'."""
+    best = 'contradiction'
+    for got_base, got_run in runs:
+        v = compare(want_data, got_run, want_base, got_base)
+        if v == 'exact':
+            return 'exact'
+        if v == 'patched':
+            best = 'patched'
+    return best
+
+
+def payload_verdict(want_data, want_base, pokes, late_pokes):
+    """One static payload against what the listing poked.
+
+    Against the pokes up to the first USR call first.  A payload no poke
+    before that call touched is not contradicted by them: it was loaded
+    AFTER it ('after-usr', when the whole log then agrees with it) or
+    never ('unreached').  Both were scored a contradiction, so a correct
+    extraction of a second routine, loaded once the first had run, made
+    the oracle look untrustworthy (the 2026-09-19 audit, L-63)."""
+    v = best_verdict(want_data, want_base, runs_from_pokes(pokes))
+    if v != 'contradiction':
+        return v
+    span = range(want_base, want_base + len(want_data))
+    if any(a in span for a, _b in pokes):
+        return 'contradiction'
+    if not any(a in span for a, _b in late_pokes):
+        return 'unreached'
+    v = best_verdict(want_data, want_base, runs_from_pokes(pokes + late_pokes))
+    return 'after-usr' if v != 'contradiction' else 'contradiction'
+
+
 def validate(files, timeout=10.0, verbose=False):
     """Does the oracle recover what static extraction already knows?
 
@@ -559,26 +597,14 @@ def validate(files, timeout=10.0, verbose=False):
             continue
         got = run_listing(path, timeout)
         runs = runs_from_pokes(got['pokes'])
-        per = []
-        for want_base, want_data in want:
-            best = 'contradiction'
-            for got_base, got_run in runs:
-                v = compare(want_data, got_run, want_base, got_base)
-                if v == 'exact':
-                    best = 'exact'
-                    break
-                if v == 'patched':
-                    best = 'patched'
-            per.append(best)
+        per = [payload_verdict(want_data, want_base, got['pokes'], got['late_pokes'])
+               for want_base, want_data in want]
 
-        if not runs:
+        if not runs and not runs_from_pokes(got['late_pokes']):
             status = 'silent'
-        elif 'contradiction' in per:
-            status = 'contradiction'
-        elif 'patched' in per:
-            status = 'patched'
         else:
-            status = 'exact'
+            status = next(s for s in ('contradiction', 'patched', 'exact',
+                                      'after-usr', 'unreached') if s in per)
         tally[status] += 1
         details.append({'file': os.path.basename(path), 'status': status,
                         'payloads': per, 'rc': got['rc'],
@@ -664,12 +690,16 @@ def main():
               % t.get('exact', 0))
         print('  patched        %3d   same routine, runtime-poked operands'
               % t.get('patched', 0))
+        print('  after-usr      %3d   agrees, loaded after the first USR call'
+              % t.get('after-usr', 0))
+        print('  unreached      %3d   the run never poked where it loads'
+              % t.get('unreached', 0))
         print('  silent         %3d   oracle produced nothing' % t.get('silent', 0))
         print('  CONTRADICTION  %3d   must be zero to trust the oracle'
               % t.get('contradiction', 0))
         print('  --- %d files; agreement where it spoke: %d/%d'
-              % (n, t.get('exact', 0) + t.get('patched', 0),
-                 n - t.get('silent', 0)))
+              % (n, t.get('exact', 0) + t.get('patched', 0) + t.get('after-usr', 0),
+                 n - t.get('silent', 0) - t.get('unreached', 0)))
         if args.json:
             json.dump(res, open(args.json, 'w'), indent=1)
         return 0 if not t.get('contradiction') else 1
