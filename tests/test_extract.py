@@ -405,6 +405,26 @@ class TestVarptrIdiom(unittest.TestCase):
         # 32717 = 0x7FCD -> CD 7F ; 258 = 0x0102 -> 02 01 ; -1 -> FF FF
         self.assertEqual(p.bytes, [0xCD, 0x7F, 0x02, 0x01, 0xFF, 0xFF])
 
+    def test_an_array_nobody_takes_varptr_of_is_a_table(self):
+        """READ into an integer array is code only if the program takes
+        the array's address: VARPTR of any element, under its two-letter
+        name (DEFINT makes US(0) the same array as US%).  Without one it
+        is a table -- plot offsets, key codes (the 2026-09-19 audit, L-60:
+        8 of the 23 corpus payloads had no VARPTR and no USR)."""
+        p = only(run('10 DIM Z%(2):FOR B=0 TO 2:READ Z%(B):NEXT\n'
+                     '20 DATA 5,6,7\n'))
+        self.assertEqual(p.kind, 'table-data')
+        self.assertIn('array-never-varptr', p.flags)
+        p = only(run('10 DIM P%(2):FOR B=0 TO 2:READ P%(B):NEXT\n'
+                     '20 V=VARPTR(P%(1))\n'
+                     '30 DATA 5,6,7\n'))
+        self.assertEqual(p.kind, 'candidate-ml')
+        p = only(run('5 DEFINT A-Z\n'
+                     '10 DIM US%(2):FOR B=0 TO 2:READ US%(B):NEXT\n'
+                     '20 DEF USR=VARPTR(US(0))\n'
+                     '30 DATA 5,6,7\n'), 'candidate-ml')
+        self.assertEqual(p.idiom, 'varptr-array')
+
     def test_varptr_entry_is_recorded_as_symbolic(self):
         rep = run('10 DIM US%(1):FOR X=0 TO 1:READ US%(X):NEXT\n'
                   '20 DEF USR=VARPTR(US%(0))\n'

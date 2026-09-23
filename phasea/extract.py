@@ -205,6 +205,24 @@ def varptr_strings(prog):
             if ident.upper() in alias:
                 out.add(alias[ident.upper()])
     return out
+ARRAY_VARPTR_RE = re.compile(r'VARPTR\s*\(\s*([A-Za-z][A-Za-z0-9]*)[%!#]?\s*\(', re.I)
+
+
+def varptr_arrays(prog):
+    """The arrays whose address the program takes: VARPTR of any element,
+    by the two-letter name Level II keeps (DEFINT makes US(0) and US%(0)
+    one array).  READ into an integer array is code only if something
+    takes its address -- a DEF USR, a POKE of a vector, a driver hooked
+    into a DCB (omnikey's VARPTR(P%(2)) has no USR at all); without that
+    it is a table of numbers (the 2026-09-19 audit, L-60)."""
+    out = set()
+    for _ln, _body, stmts in prog:
+        for st in stmts:
+            if not is_comment(st):
+                out.update(n[:2].upper() for n in ARRAY_VARPTR_RE.findall(st))
+    return out
+
+
 LOADER_SPAN = 4          # lines after the FOR in which its READ/POKE may sit
 DEFUSR_RE = re.compile(r'^\s*DEF\s*USR\s*(\d?)\s*=\s*(.+)$', re.I | re.S)
 VARPTR_RE = re.compile(r'VARPTR\s*\(\s*([A-Za-z][A-Za-z0-9]*[%!#$]?)\s*'
@@ -265,6 +283,7 @@ def find_loaders(path, prog, stream, table):
     payloads = []
     fname = os.path.basename(path)
     packed_ok = varptr_strings(prog)
+    arrays_ok = varptr_arrays(prog)
 
     # A RESTORE on the line BEFORE the loader redirects it too (REPLY 4
     # item c: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
@@ -372,8 +391,12 @@ def find_loaders(path, prog, stream, table):
                                  consumed)
                 vals, end, exact = take_from(stream, sp, count)
                 consumed.append((sp, end, _pinned(restore_target, consumed, sp)))
-                payloads.append(_make_varptr_payload(
-                    fname, arr, lineno, count, vals, exact, restore_target))
+                pl = _make_varptr_payload(fname, arr, lineno, count, vals,
+                                          exact, restore_target)
+                if arr.rstrip('%')[:2] not in arrays_ok:
+                    pl.kind = 'table-data'
+                    pl.flags.append('array-never-varptr')
+                payloads.append(pl)
                 continue
 
             if poke is None:
