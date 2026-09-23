@@ -68,7 +68,7 @@ from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from phasea.basic import is_comment, split_statements         # noqa: E402
-from phasea.extract import extract_file                        # noqa: E402
+from phasea.extract import extract_file, classify_destination  # noqa: E402
 from phasea.classify import classify                           # noqa: E402
 from z80.disasm import disassemble                             # noqa: E402
 
@@ -92,12 +92,9 @@ INTERP = os.path.join(OUT, 'trs80basic-oracle.awk')
 # keeps only the lines that start with '?', so nothing would say so.
 GAWK = ['gawk', '-b', '-f']
 
-# Video RAM and the other device windows the interpreter maps. A run landing
-# wholly inside video is screen data, not a routine -- FINDING 5's
-# discrimination, applied to dynamic output too.
-VIDEO = (15360, 16383)
+# The RND seed a listing pokes at run time: the one device window the
+# dynamic side adds to the extractor's (region_of).
 RNDPOKE = (16554, 16556)
-PRINTER = (14312, 14313)
 
 
 # --------------------------------------------------------------------
@@ -321,15 +318,16 @@ def runs_from_pokes(pokes, min_len=4):
 
 
 def region_of(base, data):
-    """FINDING 5's discrimination applied to a dynamic run."""
+    """FINDING 5's discrimination applied to a dynamic run: the static
+    extractor's own (classify_destination -- video RAM, the keyboard
+    matrix, the printer window, anything below 4000H), plus the RND seed
+    a listing pokes at run time.  It had only video, two printer bytes and
+    the seed, so a run below 4000H was candidate-ml here and a device
+    stream statically (the 2026-09-19 audit, L-62)."""
     end = base + len(data) - 1
-    if base >= VIDEO[0] and end <= VIDEO[1]:
-        return 'screen-data'
-    if base >= PRINTER[0] and end <= PRINTER[1] + 1:
-        return 'device-stream'
     if base >= RNDPOKE[0] and end <= RNDPOKE[1]:
         return 'device-stream'
-    return 'candidate-ml'
+    return classify_destination(base, len(data), None)[0]
 
 
 # --------------------------------------------------------------------

@@ -136,6 +136,17 @@ class TestRegionDiscrimination(unittest.TestCase):
     def test_ordinary_ram_is_candidate_ml(self):
         self.assertEqual(oracle.region_of(32740, bytes(27)), 'candidate-ml')
 
+    def test_the_static_discriminations_hold_dynamically(self):
+        # a run the static extractor calls a device stream is one here
+        # too: the whole printer window, the keyboard matrix, anything
+        # below 4000H (the 2026-09-19 audit, L-62)
+        self.assertEqual(oracle.region_of(0x37E0, bytes(8)), 'device-stream')
+        self.assertEqual(oracle.region_of(0x3800, bytes(8)), 'device-stream')
+        self.assertEqual(oracle.region_of(0x3000, bytes(64)), 'device-stream')
+        self.assertEqual(oracle.region_of(0x0100, bytes(16)), 'device-stream')
+        self.assertEqual(oracle.region_of(0x3FF0, bytes(32)), 'candidate-ml')
+        self.assertEqual(oracle.region_of(16554, bytes(3)), 'device-stream')
+
 
 class TestHangAnalysis(unittest.TestCase):
     """Whether a USR result gates a spin cycle, read from its source lines."""
