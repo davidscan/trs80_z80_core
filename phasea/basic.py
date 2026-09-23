@@ -30,7 +30,11 @@ def split_statements(body):
     """Split a line body on ':' outside quotes.
 
     REM / ' swallow the rest of the line. DATA does NOT -- a ':' ends a
-    DATA statement in Level II -- so DATA is split normally.
+    DATA statement in Level II -- so DATA is split normally.  And inside a
+    DATA statement REM and ' are not comments at all: the ROM's cruncher
+    leaves DATA text alone up to the next ':' outside quotes, so
+    `DATA IT'S,5` and `DATA PREMIUM,7` are two items each (the 2026-09-19
+    audit, L-58: 144 corpus DATA statements lost the items behind one).
     """
     out = []
     cur = []
@@ -48,7 +52,8 @@ def split_statements(body):
         elif not in_q:
             rest = body[i:]
             up = rest.upper()
-            if up.startswith('REM') or c == "'":
+            if ((up.startswith('REM') or c == "'")
+                    and not ''.join(cur).lstrip().upper().startswith('DATA')):
                 # comment to end of line; keep it as a statement so
                 # callers can see it, but stop splitting
                 if cur:

@@ -49,6 +49,22 @@ class TestBasicSurface(unittest.TestCase):
         self.assertEqual(data_items('DATA 1, 2 , 3'), [1, 2, 3])
         self.assertIsNone(data_items('PRINT 1'))
 
+    def test_rem_and_apostrophe_inside_data_are_items(self):
+        # The ROM's cruncher leaves a DATA statement's text alone up to the
+        # next ':' outside quotes, so REM and ' there are not comments: the
+        # items after them, and the statements behind the ':', are real
+        # (the 2026-09-19 audit, L-58).
+        self.assertEqual(split_statements("DATA IT'S,5:PRINT 1"),
+                         ["DATA IT'S,5", 'PRINT 1'])
+        self.assertEqual(split_statements('DATA PREMIUM,7:X=2'),
+                         ['DATA PREMIUM,7', 'X=2'])
+        self.assertEqual(data_items('DATA PREMIUM,7'), [None, 7])
+        self.assertEqual(split_statements("X=1:REM A:B"), ['X=1', 'REM A:B'])
+        self.assertEqual(split_statements("X=1:' A:B"), ['X=1', "' A:B"])
+        p = only(run("10 FOR I=0 TO 7:READ A:POKE 30000+I,A:NEXT\n"
+                     "20 DATA 33,0,60,62,'1':DATA 32,119,201\n"))
+        self.assertEqual(p.provenance['values_found'], 8)
+
     def test_eval_const(self):
         self.assertEqual(eval_const('16446'), 16446)
         self.assertEqual(eval_const('&HB000'), 0xB000)
