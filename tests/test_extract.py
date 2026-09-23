@@ -422,6 +422,25 @@ class TestUsrEvidence(unittest.TestCase):
         e = rep.usr_entries[0]
         self.assertEqual((e.kind, e.addr), ('vector-poke', 16446))
 
+    def test_the_vector_pair_across_lines_in_either_order_and_behind_if(self):
+        """The two vector POKEs are one entry wherever they stand: on two
+        lines, high byte first, behind THEN or ELSE -- and a DEF USR
+        behind ELSE is an entry too (the 2026-09-19 audit, L-56: only a
+        low-then-high pair on one line was joined; 17 of 64 vector-POKE
+        listings kept only `hi-only-N`)."""
+        def entries(src):
+            return [(e.kind, e.addr, e.symbol) for e in run(src).usr_entries]
+        self.assertEqual(entries('10 POKE 16526,0\n20 POKE 16527,125\n'),
+                         [('vector-poke', 32000, None)])
+        self.assertEqual(entries('10 POKE16527,125:POKE16526,0\n'),
+                         [('vector-poke', 32000, None)])
+        self.assertEqual(entries('10 IF A=1 THEN POKE16526,0:POKE16527,125\n'),
+                         [('vector-poke', 32000, None)])
+        self.assertEqual(entries('10 IF A=1 THEN 20 ELSE DEFUSR=&H7000\n'),
+                         [('def-usr', 0x7000, None)])
+        self.assertEqual(entries('10 POKE16527,125\n'),
+                         [('vector-poke', None, 'hi-only-125')])
+
     def test_def_usr_slots_and_hex(self):
         rep = run('10 DEF USR0=&HB000:DEF USR1=&HB00D\n')
         self.assertEqual({x.slot: x.addr for x in rep.usr_entries},

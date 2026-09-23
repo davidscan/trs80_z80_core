@@ -757,52 +757,83 @@ def find_poke_sequences(path, prog, table, min_run=8):
 # USR entry evidence
 # --------------------------------------------------------------------
 
+def _clauses(st):
+    """The statements inside one: an IF's THEN and ELSE clauses, and the
+    two sides of an ELSE that a ':' left in a statement of its own
+    (`IF A THEN POKE X,1:POKE Y,2 ELSE ...`).  Anything else is itself."""
+    if re.match(r'\s*IF', st, re.I):
+        m = re.search(r'THEN|GOTO', st, re.I)
+        st = st[m.end():] if m else ''
+    return re.split(r'ELSE', st, flags=re.I)
+
+
 def find_usr_evidence(prog, table):
+    """DEF USR and the 408EH vector POKEs.  The vector's two POKEs are one
+    entry wherever they stand -- on two lines, high byte first, behind
+    THEN or ELSE -- joined in program order, each high byte with the low
+    byte nearest before or after it (the 2026-09-19 audit, L-56: only a
+    low-then-high pair on one line was joined, and a DEF USR or a POKE
+    behind IF was not seen at all)."""
     entries = []
     usr_calls = 0
     system_calls = 0
-    pending_lo = {}
+    lo = hi = None                # the unpaired (value, line) of each half
+
+    def vector(lo_v, hi_v, line):
+        entries.append(UsrEntry('vector-poke', 0, (hi_v << 8) | lo_v, None, line))
+
     for lineno, body, stmts in prog:
         symbols = symbols_at(table, lineno)
-        for st in stmts:
-            if is_comment(st):
+        for whole in stmts:
+            if is_comment(whole):
                 # a REM can still contain the text 'USR(' -- ignore it
                 continue
-            usr_calls += len(USRCALL_RE.findall(st))
-            if re.search(r'\bSYSTEM\b', st, re.I):
+            usr_calls += len(USRCALL_RE.findall(whole))
+            if re.search(r'\bSYSTEM\b', whole, re.I):
                 system_calls += 1
+            for st in _clauses(whole):
+                m = DEFUSR_RE.match(st)
+                if m:
+                    slot = int(m.group(1)) if m.group(1) else 0
+                    rhs = m.group(2).strip()
+                    vm = VARPTR_RE.search(rhs)
+                    if vm:
+                        sym = 'VARPTR(%s%s)' % (
+                            vm.group(1).upper(),
+                            '(%s)' % vm.group(2) if vm.group(2) is not None else '')
+                        entries.append(UsrEntry('varptr', slot, None, sym, lineno))
+                    else:
+                        entries.append(UsrEntry('def-usr', slot,
+                                                to_addr(eval_const(rhs, symbols)),
+                                                None if eval_const(rhs, symbols)
+                                                is not None else rhs, lineno))
+                    continue
 
-            m = DEFUSR_RE.match(st)
-            if m:
-                slot = int(m.group(1)) if m.group(1) else 0
-                rhs = m.group(2).strip()
-                vm = VARPTR_RE.search(rhs)
-                if vm:
-                    sym = 'VARPTR(%s%s)' % (
-                        vm.group(1).upper(),
-                        '(%s)' % vm.group(2) if vm.group(2) is not None else '')
-                    entries.append(UsrEntry('varptr', slot, None, sym, lineno))
-                else:
-                    entries.append(UsrEntry('def-usr', slot,
-                                            to_addr(eval_const(rhs, symbols)),
-                                            None if eval_const(rhs, symbols)
-                                            is not None else rhs, lineno))
-                continue
-
-            pm = POKE_RE.match(st)
-            if pm:
+                pm = POKE_RE.match(st)
+                if not pm:
+                    continue
                 a = eval_const(pm.group(1), symbols)
                 v = eval_const(pm.group(2), symbols)
-                if a == USR_VECTOR_LO and v is not None:
-                    pending_lo[lineno] = v
-                elif a == USR_VECTOR_HI and v is not None:
-                    lo = pending_lo.pop(lineno, None)
-                    if lo is not None:
-                        entries.append(UsrEntry('vector-poke', 0,
-                                                (v << 8) | lo, None, lineno))
+                if v is None or a not in (USR_VECTOR_LO, USR_VECTOR_HI):
+                    continue
+                if a == USR_VECTOR_LO:
+                    if hi is not None:
+                        vector(v, hi[0], hi[1])
+                        hi = None
                     else:
+                        lo = (v, lineno)
+                else:
+                    if hi is not None:        # a high byte never paired
                         entries.append(UsrEntry('vector-poke', 0, None,
-                                                'hi-only-%d' % v, lineno))
+                                                'hi-only-%d' % hi[0], hi[1]))
+                        hi = None
+                    if lo is not None:
+                        vector(lo[0], v, lineno)
+                        lo = None
+                    else:
+                        hi = (v, lineno)
+    if hi is not None:
+        entries.append(UsrEntry('vector-poke', 0, None, 'hi-only-%d' % hi[0], hi[1]))
     return entries, usr_calls, system_calls
 
 
