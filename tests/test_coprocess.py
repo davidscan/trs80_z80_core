@@ -322,14 +322,14 @@ class TestTransport(unittest.TestCase):
 
     def test_hello_call_bye(self):
         out, err, rc = self.talk([
-            'HELLO proto=1 mhz=0 ramtop=65535',
+            'HELLO proto=2 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=21 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:205,127,10,41,195,154,10',       # CALL 0A7FH / ADD HL,HL / JP 0A9AH
             'GO',
             'BYE'])
         self.assertEqual(rc, 0)
         self.assertEqual(err, '')
-        self.assertTrue(out[0].startswith('Z80 proto=1 name=trs80_z80_core pid='), out)
+        self.assertTrue(out[0].startswith('Z80 proto=2 name=trs80_z80_core pid='), out)
         self.assertTrue(out[1].startswith('RET hl=42 result=1 cycles='), out)
         self.assertTrue(out[1].endswith(' break=0 writes=3'), out)
         # 0A9AH's own stores (type flag 40AFH, accumulator 4121H), then
@@ -338,7 +338,7 @@ class TestTransport(unittest.TestCase):
 
     def test_need_full_when_a_generation_is_missing(self):
         out, err, rc = self.talk([
-            'HELLO proto=1 mhz=0 ramtop=65535',
+            'HELLO proto=2 mhz=0 ramtop=65535',
             'CALL gen=2 full=0 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=0',
             'GO',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
@@ -350,7 +350,7 @@ class TestTransport(unittest.TestCase):
 
     def test_err_then_next_call_proceeds(self):
         out, err, rc = self.talk([
-            'HELLO proto=1 mhz=0 ramtop=65535',
+            'HELLO proto=2 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:205,0,0',
             'GO',
@@ -368,7 +368,7 @@ class TestTransport(unittest.TestCase):
         RAM, so it must reach the interpreter too -- as W lines ahead of the
         ERR -- or the two memories disagree from then on."""
         out, err, rc = self.talk([
-            'HELLO proto=1 mhz=0 ramtop=65535',
+            'HELLO proto=2 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:62,42,50,0,113,205,0,0',
             'GO',
@@ -377,12 +377,12 @@ class TestTransport(unittest.TestCase):
                                    'ERR rom called 0000H, no ROM here'])
 
     def test_exit_on_eof(self):
-        out, err, rc = self.talk(['HELLO proto=1 mhz=0 ramtop=65535'])
+        out, err, rc = self.talk(['HELLO proto=2 mhz=0 ramtop=65535'])
         self.assertEqual(rc, 0)
 
     def test_protocol_mismatch_answers_and_leaves(self):
-        out, err, rc = self.talk(['HELLO proto=2 mhz=0 ramtop=65535', 'BYE'])
-        self.assertTrue(out[0].startswith('Z80 proto=1'), out)
+        out, err, rc = self.talk(['HELLO proto=3 mhz=0 ramtop=65535', 'BYE'])
+        self.assertTrue(out[0].startswith('Z80 proto=2'), out)
         self.assertEqual(rc, 0)
 
 

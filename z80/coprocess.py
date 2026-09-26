@@ -1,4 +1,4 @@
-"""The USR coprocess -- the core's half of PROTOCOL.md, version 1.
+"""The USR coprocess -- the core's half of PROTOCOL.md, version 2.
 
 `trs80basic` runs this as a `|&` coprocess named by `TRS80_Z80` and
 drives it one USR call at a time: a frame of memory in, a write-set back,
@@ -50,7 +50,7 @@ import time
 from .cpu import Z80
 from .sound import from_env as sound_from_env
 
-PROTO = '1'
+PROTO = '2'
 NAME = 'trs80_z80_core'
 SENTINEL = 0x2FFD
 ROM_TOP = 0x3000

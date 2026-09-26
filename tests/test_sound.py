@@ -441,7 +441,7 @@ class TestTransport(unittest.TestCase):
 
     def test_protocol_identical_with_and_without_sound(self):
         code = routine(100)
-        lines = ['HELLO proto=1 mhz=0 ramtop=65535',
+        lines = ['HELLO proto=2 mhz=0 ramtop=65535',
                  'CALL gen=1 full=1 slot=0 entry=28928 arg=0 sp=65280 himem=65535 ramtop=65535 runs=1',
                  'M 28928:' + ','.join(str(b) for b in code),
                  'GO',
@@ -464,7 +464,7 @@ class TestTransport(unittest.TestCase):
         fd, path = tempfile.mkstemp(suffix='.wav')
         os.close(fd)
         self.addCleanup(os.unlink, path)
-        self.talk(['HELLO proto=1 mhz=0 ramtop=65535',
+        self.talk(['HELLO proto=2 mhz=0 ramtop=65535',
                    'CALL gen=1 full=1 slot=0 entry=28928 arg=0 sp=65280 himem=65535 ramtop=65535 runs=1',
                    'M 28928:62,1,211,255,201', 'GO'], {'TRS80_SOUND_WAV': path})   # no BYE: EOF
         hdr, pcm = wav_pcm(path)

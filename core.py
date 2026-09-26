@@ -3,7 +3,7 @@
 
     TRS80_Z80="python3 /path/to/trs80_z80_core/core.py" ../trs80basic/basic prog.bas
 
-Speaks PROTOCOL.md version 1 on stdin/stdout (see z80/coprocess.py).
+Speaks PROTOCOL.md version 2 on stdin/stdout (see z80/coprocess.py).
 `--fixture` adds the machine-code routines behind the stub's canned entry
 addresses so trs80basic's `sh programs/tests/z80.sh` can run against a
 real core (DD-17).
