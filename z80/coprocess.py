@@ -190,6 +190,13 @@ class Machine:
                 except ValueError:
                     pass
             raise CoreError('bad', 'expected K <value>, got %r' % line)
+        if a == 0x37E8 or a == 0x37E9:
+            # printer status, ready -- the read side's rule 2 (dopeek):
+            # the cell was plain RAM here, so a routine that wrote its
+            # character to 37E8H read the character back as the status
+            # and polled forever (ZL-6).  The write still lands in the
+            # write-set, where the interpreter's read-only rule drops it.
+            return 63
         return self.ram[a]
 
     def write(self, a, v):

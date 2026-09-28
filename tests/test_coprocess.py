@@ -378,6 +378,17 @@ class TestTransport(unittest.TestCase):
         # CALL's return address and the sentinel -- one coalesced run each
         self.assertEqual(out[2:5], ['W 16559:2', 'W 16669:0,0,0,0,42,0,0,0', 'W 61436:3,112,253,47'])
 
+    def test_printer_status_reads_ready_after_a_write(self):
+        """ZL-6: a routine prints by writing 37E8H and polls it for ready;
+        the written byte must not read back as the status."""
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
+            # LD A,65 / LD (37E8H),A / LD A,(37E8H) / LD L,A / LD H,0 / JP 0A9AH
+            'M 28672:62,65,50,232,55,58,232,55,111,38,0,195,154,10',
+            'GO', 'BYE'])
+        self.assertTrue(out[1].startswith('RET hl=63 result=1'), out)
+
     def test_0a7fh_rounds_a_double_to_a_single_first(self):
         """ZL-7: CINT(2.9999999#) is 3 on the ROM (0A7FH -> 0AB9H ->
         0796H), and 32767.9999999# rounds to 32768 and is ?OV."""
