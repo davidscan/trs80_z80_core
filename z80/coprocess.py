@@ -1,4 +1,4 @@
-"""The USR coprocess -- the core's half of PROTOCOL.md, version 2.
+"""The USR coprocess -- the core's half of PROTOCOL.md, version 3.
 
 `trs80basic` runs this as a `|&` coprocess named by `TRS80_Z80` and
 drives it one USR call at a time: a frame of memory in, a write-set back,
@@ -50,7 +50,7 @@ import time
 from .cpu import Z80
 from .sound import from_env as sound_from_env
 
-PROTO = '2'
+PROTO = '3'
 NAME = 'trs80_z80_core'
 SENTINEL = 0x2FFD
 ROM_TOP = 0x3000
@@ -62,7 +62,7 @@ VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
 KBD_LO, KBD_HI = 0x3800, 0x3900
 TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz
 TICK_SECONDS = 0.005           # ... and never more wall time than this at a slower clock
-CLS_A = 0x1C                   # the clear-screen control character
+CLS_A = 0x1F                   # A after the ROM's CLS: 01CEH LD A,1FH (clear-to-end), 01D0H JP 033AH returns with it (ZM-5's nit; 1CH is the HOME byte it sends first)
 
 # the machine code z80.sh expects to find behind the stub's canned entries
 # (PROTOCOL.md "Conformance").  Real code; only the addresses are the
@@ -95,6 +95,14 @@ FIXTURE = {
     # 700E: store 42 at the argument address, then CALL 0000H: the store
     # reaches the interpreter ahead of the ERR
     0x700E: bytes.fromhex('CD7F0A' '362A' 'CD0000'),
+    # 700F: a string argument (proto 3): DE = the descriptor at entry;
+    # read length and data address, overwrite the first data byte with
+    # 'Z' (5AH), HL = the length through 0A9AH
+    0x700F: bytes.fromhex('EB' '46' '23' '5E' '23' '56' '78' 'B7'
+                          '2803' '3E5A' '12' '68' '2600' 'C39A0A'),
+    # 7010: LD HL,(4121H) -- what WRA1 holds: the seeded argument image,
+    # a string's descriptor address, or what 0A7FH stored last
+    0x7010: bytes.fromhex('2A2141' 'C39A0A'),
     # anything else the stub answers with a plain RET
     0x7777: bytes.fromhex('C9'),
 }
@@ -301,16 +309,30 @@ class Machine:
             flag = self.read(0x403D) & 0xF7
             self.write(0x403D, flag)
             self.port_out(0xFF, flag)
+            # ... and zeroes the cursor COLUMN at 40A6H (0342H stores it on
+            # the home byte's way through the driver): without this the
+            # interpreter's TAB and POS pad from the stale pre-call column
+            # (the 2026-09-26 audit, M-18/ZM-5)
+            self.write(0x40A6, 0)
         elif pc == 0x0A7F:
-            # the ROM's CINT (0A7F-0AAF): the value is floored to an
-            # integer; an exponent past 16 bits goes to 0AA3H, which accepts
-            # exactly -32768 and otherwise exits through 07B2H, ?OV.  Sent
-            # as `ERR ov`, which the interpreter raises as BASIC's ?OV (the
-            # 2026-09-19 audit, L-43; ruled 2026-09-21).
+            # the ROM's CINT (0A7F-0AAF): a string is ?TM there (sent as
+            # `ERR tm`, proto 3); a number is floored to an integer, and an
+            # exponent past 16 bits goes to 0AA3H, which accepts exactly
+            # -32768 and otherwise exits through 07B2H, ?OV.  Sent as
+            # `ERR ov`, which the interpreter raises as BASIC's ?OV (the
+            # 2026-09-19 audit, L-43; ruled 2026-09-21).  On success the
+            # ROM leaves the integer in WRA1 with the type flag 2 and
+            # A = 2, ordinary stores that reach the write-set (ZM-4).
+            if self.argtype == 3:
+                raise CoreError('tm', 'USR argument is a string at 0A7FH')
             v = int(float(self.arg) // 1)
             if v < -32768 or v > 32767:
                 raise CoreError('ov', 'USR argument %s is outside -32768..32767 at 0A7FH' % self.arg)
             cpu.hl = v & 0xFFFF
+            self.write(0x4121, cpu.hl & 0xFF)
+            self.write(0x4122, cpu.hl >> 8)
+            cpu.a = 2
+            self.write(0x40AF, 2)
         elif pc == 0x0A9A:
             # HL to the result, then the RET below: JP 0A9AH pops the
             # sentinel and ends the call, CALL 0A9AH returns to the routine.
@@ -338,10 +360,11 @@ class Machine:
         cpu.sp = (sp + 2) & 0xFFFF
 
     # ---- one call ------------------------------------------------------------
-    def run(self, entry, arg, sp):
+    def run(self, entry, arg, sp, argtype=4, mbf=(0, 0, 0, 0, 0, 0, 0, 0)):
         cpu = self.cpu
         cpu.reset()
         self.arg = arg
+        self.argtype = argtype
         self.entry = entry
         self.result = 0
         self.ready = 0
@@ -352,6 +375,18 @@ class Machine:
         self.since_tick = 0
         self.wide = None
         self.wall0 = time.monotonic()
+        # the state the ROM's USR dispatch leaves at the jump (27FE-2818,
+        # proto 3 / ZM-4): A = the type from 40AFH (2 I, 3 $, 4 S, 8 D),
+        # DE = the string's descriptor address for a string, HL = the
+        # entry; the argument's WRA1 image (411D-4124H) and the type flag
+        # are its stores, made here so they reach the write-set like the
+        # 0A9AH trap's own.
+        cpu.hl = entry
+        cpu.a = argtype
+        cpu.de = (int(float(arg)) & 0xFFFF) if argtype == 3 else 0
+        self.write(0x40AF, argtype)
+        for i, b in enumerate(mbf[:8]):
+            self.write((0x411D + i) & 0xFFFF, b & 0xFF)
         cpu.sp = sp
         cpu.sp = (cpu.sp - 2) & 0xFFFF
         self.write((cpu.sp + 1) & 0xFFFF, SENTINEL >> 8)
@@ -496,6 +531,8 @@ def serve(m, recv, send, fixture):
             entry = int(h['entry'])
             arg = float(h['arg'])              # 0A7FH floors it; 2.7 and -2.7 must still differ there
             sp = int(h['sp'])
+            argtype = int(h.get('argtype', '4'))
+            mbf = tuple(int(b) for b in h.get('mbf', '0,0,0,0,0,0,0,0').split(','))
         except (KeyError, ValueError) as e:
             send('ERR bad CALL header: %s' % e)
             continue
@@ -523,7 +560,7 @@ def serve(m, recv, send, fixture):
             fixture.load(m)
             entry = fixture.entry.get(entry, entry)
         try:
-            m.run(entry, arg, sp)
+            m.run(entry, arg, sp, argtype, mbf)
         except CoreError as e:
             # The routine's stores up to the error stay in this RAM, and the
             # next frame is a delta of what the INTERPRETER changed: unsent,

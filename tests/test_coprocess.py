@@ -24,6 +24,11 @@ from z80.coprocess import Machine, Fixture, SENTINEL, TICK_TSTATES, CoreError   
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORE = os.path.join(ROOT, 'core.py')
 
+# the entry-time stores every call makes (proto 3): the type flag at 40AFH
+# and the WRA1 image at 411D-4124H, here with run()'s defaults (a single,
+# an all-zero image) -- first in every write-set, the runs being ascending
+SEED = ['16559:4', '16669:0,0,0,0,0,0,0,0']
+
 
 class Scripted:
     """send() collects lines; recv() pops scripted replies."""
@@ -65,8 +70,8 @@ class TestCalls(unittest.TestCase):
         m.run(0x7000, 5, 0xF000)
         r = sc.ret()
         self.assertEqual((r['result'], r['break']), ('0', '0'))
-        # the two sentinel bytes are the whole write-set
-        self.assertEqual(sc.writes(), ['%d:%d,%d' % (0xEFFE, SENTINEL & 0xFF, SENTINEL >> 8)])
+        # the entry seeding, then the two sentinel bytes: the whole write-set
+        self.assertEqual(sc.writes(), SEED + ['%d:%d,%d' % (0xEFFE, SENTINEL & 0xFF, SENTINEL >> 8)])
         self.assertEqual(int(r['cycles']), 10)
 
     def test_0a7f_then_0a9a_returns_a_value(self):
@@ -93,6 +98,40 @@ class TestCalls(unittest.TestCase):
                 m.run(0x7000, arg, 0xF000)
             self.assertEqual(cm.exception.code, 'ov', arg)
 
+    def test_0a7f_is_tm_for_a_string(self):
+        # 0A7FH (CINT) on a string argument is the machine's ?TM, sent as
+        # `ERR tm` (proto 3 / M-17)
+        m, sc = machine(bytes.fromhex('CD7F0A' 'C39A0A'))
+        with self.assertRaises(CoreError) as cm:
+            m.run(0x7000, 61437, 0xF000, argtype=3)
+        self.assertEqual(cm.exception.code, 'tm')
+
+    def test_entry_state_is_the_roms(self):
+        """The routine enters as 27FE-2818 leaves the machine (ZM-4):
+        HL = the entry, A = the type, DE = the descriptor for a string;
+        and the dispatch's stores (40AFH, WRA1) are in RAM and the
+        write-set.  LD (7100H),HL / LD (7102H),A / EX DE,HL /
+        LD (7103H),HL / RET."""
+        m, sc = machine(bytes.fromhex('220071' '320271' 'EB' '220371' 'C9'))
+        m.run(0x7000, 30000, 0xF000, argtype=3, mbf=(0, 0, 0, 0, 48, 117, 0, 0))
+        self.assertEqual((m.ram[0x7100], m.ram[0x7101]), (0x00, 0x70), 'HL = entry')
+        self.assertEqual(m.ram[0x7102], 3, 'A = the type')
+        self.assertEqual((m.ram[0x7103], m.ram[0x7104]), (48, 117), 'DE = the descriptor')
+        self.assertEqual(m.ram[0x40AF], 3)
+        self.assertEqual((m.ram[0x4121], m.ram[0x4122]), (48, 117))
+        self.assertIn('16559:3', sc.writes())
+        self.assertIn('16669:0,0,0,0,48,117,0,0', sc.writes())
+
+    def test_cls_zeroes_the_cursor_column_and_a_is_1f(self):
+        # CALL 01C9H / LD (7100H),A / RET: 0342H zeroes 40A6H (M-18/ZM-5)
+        # and the ROM's CLS leaves through 01CEH LD A,1FH / 01D0H JP 033AH
+        m, sc = machine(bytes.fromhex('CDC901' '320071' 'C9'))
+        m.ram[0x40A6] = 7
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x40A6], 0)
+        self.assertIn('16550:0', sc.writes())
+        self.assertEqual(m.ram[0x7100], 0x1F, 'A after CLS')
+
     def test_0a9a_by_call_returns_to_the_routine(self):
         """The ROM routine ends in a RET (the ROM CALLs it itself), so the
         code after CALL 0A9AH runs: LD HL,3 / CALL 0A9AH / LD A,42 /
@@ -117,8 +156,9 @@ class TestCalls(unittest.TestCase):
         self.assertEqual(m.ram[0x7100], 2, 'A on return')
         self.assertEqual((m.ram[0x7102], m.ram[0x7103]), (0x34, 0x12), 'read back from 4121H')
         self.assertEqual(m.ram[0x7104], 2, 'read back from 40AFH')
-        self.assertIn('%d:%d,%d' % (0x4121, 0x34, 0x12), sc.writes())
-        self.assertIn('%d:2' % 0x40AF, sc.writes())
+        # coalesced with the entry seeding's runs (proto 3)
+        self.assertIn('16669:0,0,0,0,%d,%d,0,0' % (0x34, 0x12), sc.writes())
+        self.assertIn('16559:2', sc.writes())
 
     def test_a_store_into_rom_space_changes_nothing(self):
         """0000-2FFFH is the ROM and PROTOCOL.md has it holding no bytes on
@@ -215,15 +255,15 @@ class TestCalls(unittest.TestCase):
         # LD A,1 / LD (7530H),A / LD A,2 / LD (7530H),A / LD (7531H),A / RET
         m, sc = machine(bytes.fromhex('3E01' '323075' '3E02' '323075' '323175' 'C9'))
         m.run(0x7000, 0, 0xF000)
-        self.assertEqual(sc.writes(), ['30000:2,2', '61438:253,47'])
-        self.assertEqual(sc.ret()['writes'], '2')
+        self.assertEqual(sc.writes(), SEED + ['30000:2,2', '61438:253,47'])
+        self.assertEqual(sc.ret()['writes'], '4')
 
     def test_video_is_streamed_not_written(self):
         # LD A,41H / LD (3C00H),A / LD (7530H),A / RET
         m, sc = machine(bytes.fromhex('3E41' '32003C' '323075' 'C9'))
         m.run(0x7000, 0, 0xF000)
         self.assertEqual(sc.video(), ['15360:65'])
-        self.assertEqual(sc.writes(), ['30000:65', '61438:253,47'])
+        self.assertEqual(sc.writes(), SEED + ['30000:65', '61438:253,47'])
         v_index = sc.out.index('V 15360:65')
         r_index = [i for i, l in enumerate(sc.out) if l.startswith('RET')][0]
         self.assertLess(v_index, r_index)
@@ -274,7 +314,7 @@ class TestCalls(unittest.TestCase):
         # the fixture's 7009 routine
         m, sc = machine(bytes.fromhex('D1' '213412' 'E5' 'E1' 'EB' 'E9'))
         m.run(0x7000, 0, 0xF000)
-        self.assertEqual(sc.writes(), ['61438:52,18'])
+        self.assertEqual(sc.writes(), SEED + ['61438:52,18'])
         self.assertEqual(sc.ret()['result'], '0')
 
 
@@ -306,7 +346,8 @@ class TestFixtureLayout(unittest.TestCase):
         fx = Fixture()
         self.assertEqual(sorted(fx.entry), sorted([0x7000, 0x7001, 0x7002, 0x7003,
                                                    0x7005, 0x7006, 0x7007, 0x7009,
-                                                   0x700A, 0x700B, 0x700C, 0x700D, 0x700E, 0x7777]))
+                                                   0x700A, 0x700B, 0x700C, 0x700D,
+                                                   0x700E, 0x700F, 0x7010, 0x7777]))
         addrs = sorted(fx.image)
         self.assertEqual(addrs, list(range(addrs[0], addrs[0] + len(addrs))))
 
@@ -322,23 +363,24 @@ class TestTransport(unittest.TestCase):
 
     def test_hello_call_bye(self):
         out, err, rc = self.talk([
-            'HELLO proto=2 mhz=0 ramtop=65535',
-            'CALL gen=1 full=1 slot=0 entry=28672 arg=21 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=21 argtype=2 mbf=0,0,0,0,21,0,0,0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:205,127,10,41,195,154,10',       # CALL 0A7FH / ADD HL,HL / JP 0A9AH
             'GO',
             'BYE'])
         self.assertEqual(rc, 0)
         self.assertEqual(err, '')
-        self.assertTrue(out[0].startswith('Z80 proto=2 name=trs80_z80_core pid='), out)
+        self.assertTrue(out[0].startswith('Z80 proto=3 name=trs80_z80_core pid='), out)
         self.assertTrue(out[1].startswith('RET hl=42 result=1 cycles='), out)
         self.assertTrue(out[1].endswith(' break=0 writes=3'), out)
-        # 0A9AH's own stores (type flag 40AFH, accumulator 4121H), then
-        # CALL's return address and the sentinel
-        self.assertEqual(out[2:5], ['W 16559:2', 'W 16673:42,0', 'W 61436:3,112,253,47'])
+        # the type flag (seeded 2, 0A7FH and 0A9AH store 2 again), the WRA1
+        # image with 0A9AH's accumulator over its 4121/4122H bytes, then
+        # CALL's return address and the sentinel -- one coalesced run each
+        self.assertEqual(out[2:5], ['W 16559:2', 'W 16669:0,0,0,0,42,0,0,0', 'W 61436:3,112,253,47'])
 
     def test_need_full_when_a_generation_is_missing(self):
         out, err, rc = self.talk([
-            'HELLO proto=2 mhz=0 ramtop=65535',
+            'HELLO proto=3 mhz=0 ramtop=65535',
             'CALL gen=2 full=0 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=0',
             'GO',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
@@ -346,11 +388,13 @@ class TestTransport(unittest.TestCase):
             'GO',
             'BYE'])
         self.assertEqual(out[1], 'NEED full')
-        self.assertTrue(out[2].startswith('RET hl=0 result=0'), out)
+        # result=0: hl is HL at the sentinel, which is the ENTRY since the
+        # routine never touched it (the ROM's register state, ZM-4)
+        self.assertTrue(out[2].startswith('RET hl=28672 result=0'), out)
 
     def test_err_then_next_call_proceeds(self):
         out, err, rc = self.talk([
-            'HELLO proto=2 mhz=0 ramtop=65535',
+            'HELLO proto=3 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:205,0,0',
             'GO',
@@ -358,31 +402,34 @@ class TestTransport(unittest.TestCase):
             'M 28672:201',
             'GO',
             'BYE'])
-        # the pushes (the sentinel, the CALL's return address) are stores too
-        self.assertEqual(out[1:3], ['W 61436:3,112,253,47',
+        # the seeding and the pushes (the sentinel, the CALL's return
+        # address) are stores too
+        self.assertEqual(out[1:5], ['W 16559:4', 'W 16669:0,0,0,0,0,0,0,0',
+                                    'W 61436:3,112,253,47',
                                     'ERR rom called 0000H, no ROM here'])
-        self.assertTrue(out[3].startswith('RET '), out)
+        self.assertTrue(out[5].startswith('RET '), out)
 
     def test_err_sends_the_stores_made_before_it(self):
         """LD A,42 / LD (7100H),A / CALL 0000H: the store stays in the core's
         RAM, so it must reach the interpreter too -- as W lines ahead of the
         ERR -- or the two memories disagree from then on."""
         out, err, rc = self.talk([
-            'HELLO proto=2 mhz=0 ramtop=65535',
+            'HELLO proto=3 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:62,42,50,0,113,205,0,0',
             'GO',
             'BYE'])
-        self.assertEqual(out[1:], ['W 28928:42', 'W 61436:8,112,253,47',
+        self.assertEqual(out[1:], ['W 16559:4', 'W 16669:0,0,0,0,0,0,0,0',
+                                   'W 28928:42', 'W 61436:8,112,253,47',
                                    'ERR rom called 0000H, no ROM here'])
 
     def test_exit_on_eof(self):
-        out, err, rc = self.talk(['HELLO proto=2 mhz=0 ramtop=65535'])
+        out, err, rc = self.talk(['HELLO proto=3 mhz=0 ramtop=65535'])
         self.assertEqual(rc, 0)
 
     def test_protocol_mismatch_answers_and_leaves(self):
-        out, err, rc = self.talk(['HELLO proto=3 mhz=0 ramtop=65535', 'BYE'])
-        self.assertTrue(out[0].startswith('Z80 proto=2'), out)
+        out, err, rc = self.talk(['HELLO proto=4 mhz=0 ramtop=65535', 'BYE'])
+        self.assertTrue(out[0].startswith('Z80 proto=3'), out)
         self.assertEqual(rc, 0)
 
 
