@@ -103,6 +103,35 @@ class TestLoaderIdioms(unittest.TestCase):
                          (32660, 4, 'high'))
         self.assertEqual(p.bytes, [62, 1, 211, 201])
 
+    def test_a_count_read_advances_the_pointer(self):
+        """polar2's shape: READ M feeds the loop bound above the loader,
+        so the count is not the first byte (ZM-8, H-18's sibling)."""
+        p = only(run('25 READ M\n'
+                     '27 FOR Y=1 TO M\n'
+                     '30 FOR X=0 TO 3:READ A:POKE 32545+X,A:NEXT\n'
+                     '40 NEXT Y\n'
+                     '90 DATA 2\n'
+                     '91 DATA 62,1,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
+    def test_a_sentinel_read_consumes_through_its_marker(self):
+        """debncejc's shape: READ J:IF J<>999 skips to the marker."""
+        p = only(run('10 READ J\n'
+                     '15 IF J<>999 THEN 10\n'
+                     '20 FOR I=0 TO 3:READ A:POKE 32713+I,A:NEXT\n'
+                     '90 DATA 7,8,999,62,1,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+        self.assertEqual(p.confidence, 'high')
+
+    def test_a_free_read_above_the_loader_is_not_trusted(self):
+        """GLOBE reads its display DATA on lines a GOSUB runs AFTER the
+        loader, so a READ that is neither a count nor a sentinel must not
+        shift the loader below it."""
+        p = only(run('10 READ Q\n'
+                     '20 FOR I=0 TO 3:READ A:POKE 32000+I,A:NEXT\n'
+                     '90 DATA 62,1,211,201,99\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
     def test_negative_addresses_wrap(self):
         p = only(run('10 FOR I=-54 TO -51:READ Y:POKE I,Y:NEXT\n'
                      '20 DATA 1,2,3,4\n'))

@@ -278,6 +278,39 @@ def symbols_at(table, lineno):
     return at(lineno) if at else table
 
 
+_SENTINEL_RE = re.compile(r'^\s*IF\s*([A-Za-z][A-Za-z0-9]*[%!#]?)\s*(?:<>|=)\s*'
+                          r'(\d+)\b', re.I)
+
+
+def _bare_read_count(prog, li, lineno, si, tvars, ntargets):
+    """Is this stand-alone READ one of the two shapes whose consumption
+    line order can be trusted with?  Returns ('count', n) for the loop
+    count (a FOR below whose bound names a read variable), ('sentinel', N)
+    for a marker search (the next statements test a read variable against
+    a number), or None."""
+    seen = 0
+    for lj in range(li, min(li + 1 + LOADER_SPAN, len(prog))):
+        _ln2, _b2, stmts2 = prog[lj]
+        for sj in range(si + 1 if lj == li else 0, len(stmts2)):
+            s2 = stmts2[sj]
+            if is_comment(s2):
+                continue
+            sm = _SENTINEL_RE.match(s2)
+            if seen < 2 and sm and sm.group(1).upper() in tvars:
+                return ('sentinel', int(sm.group(2)))
+            seen += 1
+            fm2 = FOR_RE.match(s2)
+            if fm2:
+                bounds = ' '.join(g for g in (fm2.group(2), fm2.group(3),
+                                              fm2.group(4)) if g)
+                ids = set(x.upper() for x in
+                          re.findall(r'[A-Za-z][A-Za-z0-9]*[%!#$]?', bounds))
+                if ids & tvars:
+                    return ('count', ntargets)
+                return None
+    return None
+
+
 def find_loaders(path, prog, stream, table):
     """FOR/READ/POKE loops and VARPTR-array loads."""
     payloads = []
@@ -298,6 +331,7 @@ def find_loaders(path, prog, stream, table):
     # ...` / `20 FOR ...` read the same block twice).
     prev_restore = None
     consumed = []                 # (start, end, pinned): what loaders above read
+    claimed = set()               # (line, si) of READs that belong to a loader
     for li, (lineno, _body, stmts) in enumerate(prog):
         symbols = symbols_at(table, lineno)
         carried = prev_restore    # from the line before; None once taken
@@ -310,8 +344,56 @@ def find_loaders(path, prog, stream, table):
         taken = set()             # the RESTOREs a loader here has consumed
 
         for si, st in enumerate(stmts):
+            if is_comment(st):
+                continue
             fm = FOR_RE.match(st)
-            if not fm or is_comment(st):
+            if not fm:
+                # A stand-alone READ advances the ONE pointer too (ZM-8,
+                # H-18's sibling) -- but only two shapes are recorded,
+                # because line order is not flow (GLOBE reads its display
+                # DATA on lines ABOVE the loader that a GOSUB runs first,
+                # and polar2's `1 RUN 400` resets the pointer under its
+                # skip loop, so a skip loop or a free READ recorded here
+                # broke payloads that come out right today):
+                #   - the count in front of its loop: `READ N` with a FOR
+                #     below whose bound names N consumes its items;
+                #   - the sentinel search: `READ J:IF J<>999 ...` consumes
+                #     through the first item that equals the marker.
+                rm = READ_RE.match(st)
+                if rm and (lineno, si) not in claimed:
+                    tvars = set()
+                    for t in split_args(rm.group(1)):
+                        mv = re.match(r'\s*([A-Za-z][A-Za-z0-9]*[%!#$]?)', t)
+                        if mv:
+                            tvars.add(mv.group(1).upper())
+                    ncount = _bare_read_count(prog, li, lineno, si, tvars,
+                                              len(split_args(rm.group(1))))
+                    if ncount:
+                        kind2, n2 = ncount
+                        before = [r for r in restores if r[0] < si]
+                        if before:
+                            rsi = before[-1][0]
+                            rtarget = before[-1][1] if rsi not in taken else None
+                        else:
+                            rsi = None
+                            rtarget = carried
+                        sp = _data_start(stream, rtarget, lineno, si, consumed)
+                        if kind2 == 'sentinel':
+                            rend = sp
+                            while rend < len(stream):
+                                rend += 1
+                                if stream[rend - 1][2] == n2:
+                                    break
+                        else:
+                            _rv, rend, _rx = take_from(stream, sp, n2)
+                        consumed.append((sp, rend,
+                                         _pinned(rtarget, consumed, sp)))
+                        if rsi is None:
+                            carried = None
+                        else:
+                            taken.add(rsi)
+                            if rsi == restores[-1][0]:
+                                prev_restore = None
                 continue
             before = [r for r in restores if r[0] < si]
             if before:
@@ -346,6 +428,7 @@ def find_loaders(path, prog, stream, table):
                         if rm:
                             read_targets = split_args(rm.group(1))
                             read_si, read_line = sj, ln2
+                            claimed.add((ln2, sj))
                             continue
                         if FOR_RE.match(s2) or NEXT_RE.match(s2):
                             done = True
