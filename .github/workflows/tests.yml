@@ -1,6 +1,8 @@
 # The test suite on every push and pull request, on GitHub's Ubuntu image.
 # The third-party CPU vector suites are fetched, never committed, so those
 # tests skip here; so do the anchor tests, which read the local-only corpus.
+# tests/test_flags.py is the committed, hand-written CPU check that always
+# runs, so CI is never entirely without a semantic net over z80/cpu.py.
 name: tests
 
 on:
