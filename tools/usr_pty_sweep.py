@@ -2,7 +2,7 @@
 recommendation).  Batch cannot reach a USR call that sits behind an INKEY$
 menu -- INKEY$ reads whole lines there and a matrix poll sees nothing -- so
 this drives each listing the way a person would: the interpreter's
-interactive prompt on a pty, ENTER at MEMORY SIZE?, CLOAD, RUN, then a
+interactive prompt on a pty, ENTER at MEM SIZE?, CLOAD, RUN, then a
 keystroke script (digits, ENTER, Y, N, space) for a fixed span, the core's
 protocol logged per file.  What it measures is whether the routine was
 REACHED and what happened to it; the output is not compared.

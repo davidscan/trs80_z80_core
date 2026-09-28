@@ -176,7 +176,7 @@ def interactive(basic, passes, log, mhz):
         os.write(fd, s.encode())
         time.sleep(0.05)
 
-    until(b'MEMORY SIZE', 15)
+    until(b'MEM SIZE', 15)
     send('\r')
     until(b'READY', 15)
     for ln in program(passes):

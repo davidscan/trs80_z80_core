@@ -265,7 +265,7 @@ class Tty:
 def session(basic, env, lines, cwd):
     """trs80basic at its READY prompt with `lines` typed in (plain output)."""
     t = Tty([os.path.join(basic, 'basic')], env, cwd)
-    t.until(b'MEMORY SIZE', 15)
+    t.until(b'MEM SIZE', 15)
     t.send('\r')
     t.until(b'READY', 15)
     for ln in lines:
