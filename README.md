@@ -113,7 +113,7 @@ the way `USR` calls a routine, with the same three ROM entries served and
 memory and are printed afterwards as the 16 by 64 screen. It prints how
 the run ended, HL, the T-states and the seconds of Model I time they
 represent. Exit status 0 when the program returned or reached 0A9AH, 1 on
-an error, 2 when the T-state budget stopped it. **Writes:** nothing.
+an error, 3 when the T-state budget stopped it (2 is a usage error). **Writes:** nothing.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|

@@ -15,14 +15,15 @@ bytes land in memory and are printed afterwards as the 16 by 64 screen,
 and every keyboard-matrix read sees no key.  The tick that would poll
 BREAK counts the budget instead: --cycles T-states (default 20 million,
 about 11 seconds of the Model I) end a program that never returns, with
-exit status 2.
+exit status 3.
 
 What it prints: how the run ended (returned, 0A9AH with HL, HALT, a ROM
 call with no ROM here, the budget), HL, the T-states and the seconds of
 emulated time they are at 1.77408 MHz, then the screen if the program
 wrote to it (--screen forces it, --no-screen suppresses it), the
 registers with --regs, and any --dump ranges as hex.  Exit status 0 when
-the program returned or reached 0A9AH, 1 on an error, 2 on the budget.
+the program returned or reached 0A9AH, 1 on an error, 3 on the budget
+(2 is argparse's own usage-error status, so the two no longer collide).
 Standard library only.
 """
 import argparse
@@ -166,6 +167,23 @@ def parse_range(s):
         raise argparse.ArgumentTypeError('expected ADDR,LEN, got %r' % s)
 
 
+def parse_arg(s):
+    """--arg: parse_addr's forms, plus a negative integer as USR takes one.
+    The trap wants the SIGNED value, so 0FFFDH and -3 both reach 0A7FH as
+    0FFFDH in HL."""
+    t = s.strip()
+    if t.startswith('-'):
+        try:
+            v = int(t)
+        except ValueError:
+            raise argparse.ArgumentTypeError('not a number: %r' % s)
+        if v < -32768:
+            raise argparse.ArgumentTypeError('%r is below -32768' % s)
+        return v
+    v = parse_addr(t)
+    return v - 65536 if v > 32767 else v
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='python3 -m z80.run',
                                  description='Run a machine-language program in the core, headless.')
@@ -174,8 +192,9 @@ def main(argv=None):
                     help='the load address of a .bin file, or of .asm source with no ORG')
     ap.add_argument('--entry', type=parse_addr, metavar='ADDR',
                     help='where to start (default: the file\'s transfer address, else its first block)')
-    ap.add_argument('--arg', type=parse_addr, default=0, metavar='N',
-                    help='the USR argument a CALL 0A7FH fetches into HL (default 0)')
+    ap.add_argument('--arg', type=parse_arg, default=0, metavar='N',
+                    help='the USR argument a CALL 0A7FH fetches into HL '
+                         '(default 0; -32768..65535, a negative as its 16-bit form)')
     ap.add_argument('--sp', type=parse_addr, default=None, metavar='ADDR',
                     help='the stack pointer at entry (default 0FF00H, or just under the '
                          'program when it is loaded there)')
@@ -219,7 +238,7 @@ def main(argv=None):
     sys.stdout.write('\n'.join(out) + ('\n' if out else ''))
     if how in ('ret', 'result'):
         return 0
-    return 2 if how == 'budget' else 1
+    return 3 if how == 'budget' else 1
 
 
 if __name__ == '__main__':

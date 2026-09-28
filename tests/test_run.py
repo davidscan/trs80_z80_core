@@ -187,8 +187,15 @@ class TestCommandLine(unittest.TestCase):
             with open(loop, 'w') as f:
                 f.write('  ORG 8000H\nLOOP JP LOOP\n')
             rc, out = self.main(loop, '--cycles', '1000')
-            self.assertEqual(rc, 2)
+            self.assertEqual(rc, 3)          # 2 is argparse's usage error (ZL-4)
             self.assertIn('budget', out)
+            # --arg takes a negative as USR does: -3 reaches 0A7FH as 0FFFDH
+            neg = os.path.join(d, 'neg.asm')
+            with open(neg, 'w') as f:
+                f.write('  ORG 8000H\n  CALL 0A7FH\n  JP 0A9AH\n')
+            rc, out = self.main(neg, '--arg', '-3')
+            self.assertEqual(rc, 0, out)
+            self.assertIn('HL = 65533 (FFFDH)', out)
             # a program loaded where the default stack is: the sentinel push
             # must not land on it (0FEFEH holds the RET this routine jumps to)
             high = os.path.join(d, 'high.asm')
