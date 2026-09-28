@@ -122,6 +122,25 @@ class TestTableRoundTrip(unittest.TestCase):
             self.assertEqual(len(e), 1, d)
             self.assertIn('at least one item', e[0][1])
 
+    def test_the_exact_jr_and_index_displacement_limits(self):
+        """ZL-10: the boundaries themselves, so a mutant off by one fails."""
+        # JR e: -128..+127 from the byte after the instruction
+        self.assertEqual(one('  ORG 0\n  JR $+129\n').segments[0][1].hex(), '187f')
+        self.assertEqual(one('  ORG 0\n  JR $-126\n').segments[0][1].hex(), '1880')
+        for bad in ('  JR $+130\n', '  JR $-127\n'):
+            e = assemble('  ORG 0\n' + bad).errors
+            self.assertEqual(len(e), 1, bad)
+            self.assertIn('relative jump out of range', e[0][1])
+        # (IX+d): -128..+127
+        self.assertEqual(one('  ORG 0\n  LD A,(IX+127)\n').segments[0][1].hex(),
+                         'dd7e7f')
+        self.assertEqual(one('  ORG 0\n  LD A,(IX-128)\n').segments[0][1].hex(),
+                         'dd7e80')
+        for bad in ('  LD A,(IX+128)\n', '  LD A,(IX-129)\n'):
+            e = assemble('  ORG 0\n' + bad).errors
+            self.assertEqual(len(e), 1, bad)
+            self.assertIn('index displacement out of range', e[0][1])
+
     def test_a_register_or_flag_name_is_not_a_label(self):
         """`I EQU 10 / LD A,I` assembled the register form ED 57 with the
         label silently unread."""
