@@ -378,6 +378,22 @@ class TestTransport(unittest.TestCase):
         # CALL's return address and the sentinel -- one coalesced run each
         self.assertEqual(out[2:5], ['W 16559:2', 'W 16669:0,0,0,0,42,0,0,0', 'W 61436:3,112,253,47'])
 
+    def test_an_entry_off_the_map_is_an_err_not_a_crash(self):
+        """ZL-5: entry=70000 raised IndexError and killed the core."""
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=70000 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'M 28672:201',
+            'GO',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'M 28672:201',
+            'GO',
+            'BYE'])
+        self.assertEqual(rc, 0)
+        self.assertEqual(err, '')
+        self.assertTrue(out[1].startswith('ERR bad CALL header'), out)
+        self.assertTrue(out[2].startswith('RET '), out)
+
     def test_need_full_when_a_generation_is_missing(self):
         out, err, rc = self.talk([
             'HELLO proto=3 mhz=0 ramtop=65535',

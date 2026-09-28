@@ -536,6 +536,10 @@ def serve(m, recv, send, fixture):
         except (KeyError, ValueError) as e:
             send('ERR bad CALL header: %s' % e)
             continue
+        if not (0 <= entry <= 0xFFFF and 0 <= sp <= 0xFFFF):
+            # an address off the map crashed the core with IndexError (ZL-5)
+            send('ERR bad CALL header: entry/sp out of range: %d/%d' % (entry, sp))
+            continue
         if not full and gen != m.gen + 1:
             send('NEED full')
             continue
