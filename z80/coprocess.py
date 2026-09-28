@@ -6,7 +6,7 @@ video streamed and the keyboard served live during the call.  This
 module is the machine around the pure CPU in `z80.cpu`: 64K of RAM that
 reads 255 wherever no frame defined a byte, the address-dispatched
 handling of program-counter entry into ROM space (the sentinel 2FFDH
-ends the call, three documented entry points are served as HLE traps,
+ends the call, four documented entry points are served as HLE traps,
 anything else is `ERR rom`), ticks for BREAK and pacing, and the
 line-oriented transport.
 
@@ -21,14 +21,17 @@ the RET the ROM routine would have.
     01C9H  CLS: the screen is filled with spaces and the cursor homed
            (4020H/4021H <- 3C00H).  A is used, as the ROM's is.
     0A7FH  the USR argument as a 16-bit integer in HL (the number the
-           frame carried in `arg=`, truncated toward zero exactly as the
-           reference stub truncates it).
+           frame carried in `arg=`, rounded to a 24-bit single and then
+           floored, as the ROM's CINT does -- the reference stub
+           converts the same way).
     0A9AH  HL becomes the value of the USR expression (`result=1`), and
            the trap RETs to its caller as the ROM routine does (it ends
            in a plain RET; the ROM itself CALLs it).  The usual exit,
            JP 0A9AH, ends the call because that RET pops the sentinel;
            after a CALL 0A9AH the routine runs on, and the value stays
            the HL it handed over -- the last one, if it calls twice.
+    1A19H  the ROM's READY entry: the call ends and the reply carries
+           `ready=1`, so BASIC ends the program at the prompt.
 
 Port FFH reads 127 (the 64-character mode value the interpreter's INP
 returns) and every other port 255.  OUT (FFH) has two effects and the
