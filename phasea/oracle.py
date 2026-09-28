@@ -575,6 +575,15 @@ def payload_verdict(want_data, want_base, pokes, late_pokes):
     if any(a in span for a, _b in pokes):
         return 'contradiction'
     if not any(a in span for a, _b in late_pokes):
+        # The same bytes poked at ANOTHER base are a wrong-base
+        # extraction, not a payload this run never loaded (ZL-1: the
+        # 54e96dc split scored them 'unreached').  Four bytes is the
+        # runs' own floor, below which a match is coincidence.
+        if len(want_data) >= 4:
+            blob = bytes(b & 0xFF for b in want_data)
+            for _gb, got_run in runs_from_pokes(pokes + late_pokes):
+                if blob in bytes(b & 0xFF for b in got_run):
+                    return 'contradiction'
         return 'unreached'
     v = best_verdict(want_data, want_base, runs_from_pokes(pokes + late_pokes))
     return 'after-usr' if v != 'contradiction' else 'contradiction'

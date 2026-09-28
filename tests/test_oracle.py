@@ -140,8 +140,15 @@ class TestAfterTheFirstUsr(unittest.TestCase):
         self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, late), 'after-usr')
 
     def test_never_loaded_is_unreached(self):
-        pre = self.pokes(30000, self.CODE)
+        pre = self.pokes(30000, bytes([1, 2, 3, 4, 5, 6, 7, 8]))
         self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, []), 'unreached')
+
+    def test_the_same_bytes_at_another_base_are_a_contradiction(self):
+        """A wrong-base extraction is what the oracle exists to catch; the
+        54e96dc split scored it 'unreached' (ZL-1)."""
+        pre = self.pokes(30000, self.CODE)
+        self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, []),
+                         'contradiction')
 
     def test_other_bytes_before_the_usr_still_contradict(self):
         pre = self.pokes(31000, bytes(8))
