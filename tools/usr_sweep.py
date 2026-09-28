@@ -45,15 +45,12 @@ def population():
 # TRS80_PRINTER collected every LPRINT in the corpus into one file (the
 # 2026-09-19 audit, L-65).  tools/kbd_probe.py has stripped them from the
 # start; phasea/oracle.py does since L-64.
-SWEEP_DROP = ('TRS80_USR', 'TRS80_USR_TRACE', 'TRS80_SOUND', 'TRS80_SOUND_WAV',
-              'TRS80_SOUND_WAV_APPEND', 'TRS80_PRINTER', 'TRS80_EXT',
-              'TRS80_MANFILE', 'TRS80_OLLAMA_CURL', 'TRS80_MEMSIZE',
-              'TRS80_KMHOLD', 'TRS80_KBPROTO', 'TRS80_MHZ')
-
-
 def sweep_env(**over):
+    # A denylist rots as the interpreter grows knobs (ZL-8: TRS80_MEMORY,
+    # the memory-host switch, was not on it), so every TRS80_* is dropped
+    # and the measurement sets the ones it means.
     env = dict(os.environ, LC_ALL='C')
-    for v in SWEEP_DROP:
+    for v in [k for k in env if k.startswith('TRS80_')]:
         env.pop(v, None)
     env.update(over)
     return env

@@ -119,7 +119,9 @@ def program(passes):
 def env_for(basic, log, mhz):
     core = 'python3 %s --proxy %s -- python3 %s' % (
         os.path.abspath(__file__), log, os.path.join(ROOT, 'core.py'))
-    return dict(os.environ, TRS80_Z80=core, TRS80_MHZ=mhz, TRS80_DUMB='1', TERM='xterm')
+    env = {k: v for k, v in os.environ.items() if not k.startswith('TRS80_')}
+    env.update(TRS80_Z80=core, TRS80_MHZ=mhz, TRS80_DUMB='1', TERM='xterm')
+    return env
 
 
 # ---- 2. batch --------------------------------------------------------------------

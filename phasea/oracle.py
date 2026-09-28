@@ -218,17 +218,15 @@ DETERMINISTIC = {
     'TRS80_MHZ': '0',         # no throttle
     'LC_ALL': 'C',
 }
-# stripped rather than set: any value at all changes what is measured
-DROPPED = ('TRS80_USR', 'TRS80_USR_TRACE', 'TRS80_SOUND', 'TRS80_SOUND_WAV',
-           'TRS80_SOUND_WAV_APPEND', 'TRS80_PRINTER', 'TRS80_EXT',
-           'TRS80_KMHOLD', 'TRS80_KBPROTO', 'TRS80_MANFILE',
-           'TRS80_OLLAMA_CURL', 'TRS80_MEMSIZE')
+# Stripped rather than set: any value at all changes what is measured.
+# Every TRS80_* goes, not a denylist -- a list rots as the interpreter
+# grows knobs (ZL-8: TRS80_MEMORY, the memory-host switch, was not on
+# it); DETERMINISTIC then sets the ones the oracle means.
 
 
 def base_env(**extra):
-    env = dict(os.environ, **DETERMINISTIC)
-    for v in DROPPED:
-        env.pop(v, None)
+    env = {k: v for k, v in os.environ.items() if not k.startswith('TRS80_')}
+    env.update(DETERMINISTIC)
     env.update(extra)
     return env
 

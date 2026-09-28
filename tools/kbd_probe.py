@@ -179,9 +179,9 @@ def load(log, wait=10.0):
 
 
 def base_env():
-    env = dict(os.environ, TRS80_MHZ='0', TRS80_DUMB='1', TERM='xterm', TRS80_Z80='')
-    for v in ('TRS80_SOUND', 'TRS80_SOUND_WAV', 'TRS80_KMHOLD', 'TRS80_USR'):
-        env.pop(v, None)
+    # every TRS80_* dropped, then the ones this measurement means (ZL-8)
+    env = {k: v for k, v in os.environ.items() if not k.startswith('TRS80_')}
+    env.update(TRS80_MHZ='0', TRS80_DUMB='1', TERM='xterm', TRS80_Z80='')
     return env
 
 
