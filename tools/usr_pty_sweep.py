@@ -15,7 +15,7 @@ Reads out/usr_sweep/results.json (tools/usr_sweep.py) for the population
 unless --files is given; writes out/usr_pty_sweep/results.json and the
 per-file protocol logs under out/usr_pty_sweep/runs/.
 """
-import argparse, glob, json, os, pty, re, select, signal, sys, time
+import argparse, glob, json, os, pty, re, select, shutil, signal, sys, time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -79,6 +79,10 @@ def drive(path):
     rel = os.path.relpath(path, CORPUS)
     tag = rel.replace('/', '__')
     clear_logs(os.path.join(RUNS, tag))
+    # a fresh cwd per listing: files one wrote reached the next (ZL-9)
+    cwd = os.path.join(CWD, tag)
+    shutil.rmtree(cwd, ignore_errors=True)
+    os.makedirs(cwd)
     env = sweep_env(TRS80_Z80='sh %s %s' % (CORELOG, os.path.join(RUNS, tag)),
                     TERM='xterm', LINES='24', COLUMNS='80')
     env.pop('TRS80_DUMB', None)          # this sweep wants the real grid
@@ -88,7 +92,7 @@ def drive(path):
         # exec fails it is a copy of this sweep, thread pool and all, and
         # would carry on driving listings. 127 is the shell's "not found".
         try:
-            os.chdir(CWD)
+            os.chdir(cwd)
             os.execvpe(os.path.join(BASIC, 'basic'), ['basic'], env)
         finally:
             os._exit(127)

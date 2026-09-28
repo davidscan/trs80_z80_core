@@ -16,7 +16,7 @@ USR notices dropped before comparing, cwd outside both repos.  Batch has
 no keyboard: a routine that polls the matrix sees 0 and, at the end of
 stdin, BREAK; a program's INKEY$ menu gets "1".
 """
-import glob, json, os, re, signal, subprocess, sys, time
+import glob, json, os, re, shutil, signal, subprocess, sys, time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,11 +56,16 @@ def sweep_env(**over):
     return env
 
 
-def run(path, z80):
+def run(path, z80, cwd):
+    # each run gets a FRESH cwd: a high-score or data file a listing wrote
+    # reached the next run under the shared one, so the stub/core/control
+    # comparison measured leftovers, not the build (ZL-9)
+    shutil.rmtree(cwd, ignore_errors=True)
+    os.makedirs(cwd)
     env = sweep_env(TRS80_Z80=z80, TRS80_DUMB='1')
     t0 = time.monotonic()
     p = subprocess.Popen([BASIC, '--seed', '1', path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, env=env, cwd=CWD, start_new_session=True)
+                         stderr=subprocess.PIPE, env=env, cwd=cwd, start_new_session=True)
     try:
         out, err = p.communicate(FEED, timeout=TIMEOUT); rc = p.returncode; to = False
     except subprocess.TimeoutExpired:
@@ -87,9 +92,9 @@ def one(path):
     rel = os.path.relpath(path, CORPUS)
     tag = rel.replace('/', '__')
     clear_logs(RUNS + '/' + tag)
-    stub = run(path, '')
-    core = run(path, 'sh %s %s' % (CORELOG, RUNS + '/' + tag))
-    ctrl = run(path, CORE)
+    stub = run(path, '', CWD + '/' + tag)
+    core = run(path, 'sh %s %s' % (CORELOG, RUNS + '/' + tag), CWD + '/' + tag)
+    ctrl = run(path, CORE, CWD + '/' + tag)
     log = ''
     try: log = open(RUNS + '/' + tag + '.out', 'rb').read().decode('latin-1')
     except OSError: pass

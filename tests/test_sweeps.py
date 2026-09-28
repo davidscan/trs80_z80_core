@@ -33,7 +33,7 @@ class TestStaleLogs(unittest.TestCase):
             saved = (usr_sweep.CORPUS, usr_sweep.RUNS, usr_sweep.run)
             usr_sweep.CORPUS, usr_sweep.RUNS = os.path.join(d, 'corpus'), os.path.join(d, 'runs')
             # a run that never reaches USR: the core is not started, nothing is logged
-            usr_sweep.run = lambda path, z80: dict(rc=0, timeout=False, out='HELLO\n', err='', secs=0.0)
+            usr_sweep.run = lambda path, z80, cwd: dict(rc=0, timeout=False, out='HELLO\n', err='', secs=0.0)
             try:
                 seed(usr_sweep.RUNS, 'runnable__x.bas')
                 r = usr_sweep.one(os.path.join(usr_sweep.CORPUS, 'runnable', 'x.bas'))
