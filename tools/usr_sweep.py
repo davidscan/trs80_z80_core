@@ -31,12 +31,12 @@ FEED = ('1\n' * 400).encode()
 TIMEOUT = 10.0
 
 def population():
+    # USR named in code, not in a message string or a REM (ZM-9: the
+    # substring search counted 41 non-callers into the published 606)
+    sys.path.insert(0, HERE)
+    from phasea.basic import has_usr
     files = sorted(glob.glob(CORPUS + '/runnable/*.bas') + glob.glob(CORPUS + '/blocked/*/*.bas'))
-    keep = []
-    for f in files:
-        if re.search(rb'(?i)USR', open(f, 'rb').read()):
-            keep.append(f)
-    return keep
+    return [f for f in files if has_usr(f)]
 
 # A sweep is a MEASUREMENT, so the environment it runs listings in cannot
 # be whoever's shell started it.  Both sweeps inherited it whole, so a

@@ -24,7 +24,8 @@ import re
 from dataclasses import dataclass, field, asdict
 
 from .basic import (parse_program, read_source, is_comment, data_items,
-                    eval_const, constant_symbols, parse_number, to_addr)
+                    eval_const, constant_symbols, parse_number, to_addr,
+                    strip_quoted)
 
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x3FFF
 KBD_LO, KBD_HI = 0x3800, 0x38FF
@@ -182,7 +183,7 @@ def varptr_strings(prog):
                     derived.append((m.group(1).upper(), set(
                         x.upper() for x in
                         re.findall(r'[A-Za-z][A-Za-z0-9]*[%!#]?', m.group(2)))))
-            if USR_SINK_RE.search(st):
+            if USR_SINK_RE.search(strip_quoted(st)):
                 sinks.append(st)
     # A variable computed from an aliased one is an alias too, to a fixed
     # point: the hops need not be in program order (a subroutine below the
@@ -894,8 +895,9 @@ def find_usr_evidence(prog, table):
             if is_comment(whole):
                 # a REM can still contain the text 'USR(' -- ignore it
                 continue
-            usr_calls += len(USRCALL_RE.findall(whole))
-            if re.search(r'\bSYSTEM\b', whole, re.I):
+            bare = strip_quoted(whole)
+            usr_calls += len(USRCALL_RE.findall(bare))
+            if re.search(r'\bSYSTEM\b', bare, re.I):
                 system_calls += 1
             for st in _clauses(whole):
                 m = DEFUSR_RE.match(st)

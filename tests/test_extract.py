@@ -94,6 +94,29 @@ class TestBasicSurface(unittest.TestCase):
         self.assertEqual([ln for ln, _b, _s in prog], [10])
 
 
+class TestUsrPopulation(unittest.TestCase):
+    """ZM-9: the sweeps' population is USR named in code, not in text."""
+
+    def probe(self, src):
+        from phasea.basic import has_usr
+        with tempfile.NamedTemporaryFile('w', suffix='.bas', delete=False) as fh:
+            fh.write(src)
+            path = fh.name
+        try:
+            return has_usr(path)
+        finally:
+            os.unlink(path)
+
+    def test_usr_in_code_counts(self):
+        self.assertTrue(self.probe('10 DEFUSR=32000\n20 X=USR(0)\n'))
+
+    def test_usr_in_a_string_or_rem_does_not(self):
+        self.assertFalse(self.probe('10 IF LEFT$(A$,3)="USR" THEN 60\n'))
+        self.assertFalse(self.probe("10 'DEF USR=-578:B=USR(2500)\n"))
+        self.assertFalse(self.probe('10 PRINT"  20 A%=USR(A%)"\n'))
+        self.assertFalse(self.probe('990 DATA"KRULDS USRUK LURDS"\n'))
+
+
 class TestLoaderIdioms(unittest.TestCase):
 
     def test_literal_range_loader(self):
