@@ -122,6 +122,16 @@ class TestTableRoundTrip(unittest.TestCase):
             self.assertEqual(len(e), 1, d)
             self.assertIn('at least one item', e[0][1])
 
+    def test_an_indented_word_is_an_opcode_never_a_label(self):
+        """Barden p.40-42: the label field ends where the indentation
+        begins, so a misspelled mnemonic is an error, not a silent label."""
+        for bad in ('  RETT\n', '  HLT\n', '00100   ENDZAP\n'):
+            e = assemble('  ORG 0\n' + bad).errors
+            self.assertEqual(len(e), 1, bad)
+            self.assertIn('unknown instruction', e[0][1])
+        r = assemble('  ORG 0\nSTART NOP\nLOOP: JR LOOP\n  END START')
+        self.assertEqual(r.errors, [])
+
     def test_ddcb_displacement_sits_before_the_last_opcode_byte(self):
         b = one('  ORG 0\n  BIT 0,(IX+3)\n  SET 7,(IY-1)\n  RLC (IX+7FH)').segments[0][1]
         self.assertEqual(b.hex(), 'ddcb0346' 'fdcbfffe' 'ddcb7f06')

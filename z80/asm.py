@@ -319,13 +319,19 @@ def split_fields(line, lineno):
             up.append(ch.upper())
         prev = ch
     body = ''.join(up)
+    # An indented word is an op-code, a word at the start of the field a
+    # label (Barden, More TRS-80 Assembly-Language Programming, p.40-42);
+    # a misspelled mnemonic used to become a label silently.  A ':' makes
+    # a label wherever it stands.
+    indented = body[:1].isspace()
     parts = body.split(None, 1)
     if not parts:
         return None
     first = parts[0]
     rest = parts[1] if len(parts) > 1 else ''
     label = None
-    if first.endswith(':') or (first not in MNEMONICS and first not in DIRECTIVES):
+    if first.endswith(':') or (not indented
+                               and first not in MNEMONICS and first not in DIRECTIVES):
         label = first.rstrip(':')
         if not re.match(r'^[A-Z_@?][A-Z0-9_@?$]*$', label):
             raise AsmError(lineno, 'bad label or unknown instruction %r' % first)
