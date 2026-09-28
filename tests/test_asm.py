@@ -122,6 +122,18 @@ class TestTableRoundTrip(unittest.TestCase):
             self.assertEqual(len(e), 1, d)
             self.assertIn('at least one item', e[0][1])
 
+    def test_edtasm_ampersand_and_shift_operators(self):
+        """Barden p.47: EDTASM's own operators are +, -, & and <."""
+        b = one('  ORG 0\n'
+                'HEADA EQU 1234H\n'
+                '  DEFB HEADA&0FFH\n'
+                '  LD A,1<3\n'
+                '  DEFB 300H<-4\n').segments[0][1]
+        self.assertEqual(b.hex(), '34' '3e08' '30')
+        e = assemble('  ORG 0\n  DEFB 1<17\n').errors
+        self.assertEqual(len(e), 1)
+        self.assertIn('shift count', e[0][1])
+
     def test_an_indented_word_is_an_opcode_never_a_label(self):
         """Barden p.40-42: the label field ends where the indentation
         begins, so a misspelled mnemonic is an error, not a silent label."""

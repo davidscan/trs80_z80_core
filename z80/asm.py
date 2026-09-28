@@ -163,7 +163,7 @@ def tokenize(text, lineno):
                 raise AsmError(lineno, 'unknown operator at %r' % text[i:i + 6])
             out.append(('op', '.' + text[i + 1:j] + '.'))
             i = j + 1
-        elif c in '+-*/()':
+        elif c in '+-*/()&<':
             out.append(('op', c))
             i += 1
         else:
@@ -208,8 +208,10 @@ class Expr:
             v = (v | w) if o == '.OR.' else (v ^ w)
 
     def _and(self):
+        # EDTASM's own operator set is +, -, & and < (Barden, More TRS-80
+        # Assembly-Language Programming, p.47): & is AND, < is the shift.
         v = self._add()
-        while self._take('.AND.'):
+        while self._take('.AND.', '&'):
             v &= self._add()
         return v
 
@@ -225,7 +227,7 @@ class Expr:
     def _mul(self):
         v = self._unary()
         while True:
-            o = self._take('*', '/', '.MOD.', '.SHL.', '.SHR.')
+            o = self._take('*', '/', '.MOD.', '.SHL.', '.SHR.', '<')
             if not o:
                 return v
             w = self._unary()
@@ -239,6 +241,14 @@ class Expr:
                 if w == 0:
                     raise AsmError(self.lineno, 'division by zero')
                 v %= w
+            elif o == '<':
+                # EDTASM's shift: left by w, a negative count shifts right
+                if not -16 <= w <= 16:
+                    raise AsmError(self.lineno, 'shift count out of range: %d' % w)
+                if w >= 0:
+                    v = ((v & 0xFFFF) << w) & 0xFFFF
+                else:
+                    v = (v & 0xFFFF) >> -w
             elif not 0 <= w <= 16:
                 raise AsmError(self.lineno, 'shift count out of range: %d' % w)
             elif o == '.SHL.':
