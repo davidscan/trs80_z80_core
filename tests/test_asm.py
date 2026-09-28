@@ -427,10 +427,14 @@ class TestOutputs(unittest.TestCase):
         self.assertIn('20 E=32000:C=0', bas)
         self.assertIn('30 FOR I=0 TO 5:READ B:POKE E+I,B:C=C+B:NEXT', bas)
         self.assertIn('40 IF C<>%d THEN' % sum(r.segments[0][1]), bas)
-        self.assertIn('50 DEFUSR=32000', bas)
+        self.assertIn('50 POKE 16526,0:POKE 16527,125', bas)
         self.assertIn('1000 DATA 33,52,18,195,154,10', bas)
         with self.assertRaises(ValueError):
             one('  ORG 0\n  NOP\n  ORG 10H\n  NOP\n').to_bas('two')
+        # above 7FFFH the loader uses the signed POKE idiom (Level II)
+        hi = one('  ORG 0A000H\n  RET\n  END 0A000H\n').to_bas('hi')
+        self.assertIn('20 E=-24576:C=0', hi)
+        self.assertIn('50 POKE 16526,0:POKE 16527,160', hi)
 
     def test_the_core_runs_what_was_assembled(self):
         r = one(TINY)

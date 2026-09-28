@@ -422,10 +422,10 @@ def listing(code, org, delay, fps):
     out = ['10 REM CATCH -- A MACHINE-LANGUAGE REFLEX TEST FOR THE Z80 CORE',
            '20 REM ARROWS MOVE THE PADDLE, SPACE QUITS, THREE MISSES END IT',
            '30 REM SET THE CLOCK FIRST AT THE PROMPT:  speed 1.77',
-           '40 E=%d : C=0' % org,
+           '40 E=%d : C=0' % (org - 65536 if org > 32767 else org),
            '50 FOR I=0 TO %d : READ B : POKE E+I,B : C=C+B : NEXT' % (len(code) - 1),
            '60 IF C<>%d THEN PRINT "BAD DATA -- CHECK THE DATA LINES" : END' % total,
-           '70 DEFUSR=E',
+           '70 POKE 16526,%d : POKE 16527,%d' % (org & 0xFF, (org >> 8) & 0xFF),
            '80 CLS : PRINT @ 540, "CATCH -- PRESS ENTER TO PLAY";',
            '90 INPUT A$',
            '100 S = USR(0)',
@@ -507,7 +507,11 @@ def main():
     ap.add_argument('--frames', type=int, default=400, help='frames for --selftest')
     a = ap.parse_args()
 
+    if not 0 <= a.org <= 65535:
+        ap.error('--org is an address, 0-65535')
     asm, code, delay, per_turn = build(a.org, a.fps, a.scan)
+    if a.org + len(code) > 65536:
+        ap.error('--org %d leaves no room for the %d-byte routine' % (a.org, len(code)))
     if a.disasm:
         print(disasm(code, a.org))
         return 0

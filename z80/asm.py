@@ -58,8 +58,9 @@ Outputs (`-o` picks the format from the extension, `--format` overrides):
        zero leader, A5H, 55H, the six-character name, 3CH data blocks with
        a checksum, 78H and the entry address;
   bas  a BASIC listing in the magazines' shape: a DATA block with a
-       checksum, a POKE loop, DEFUSR at the entry and `PRINT USR(0)` on
-       line 60 for the user to replace.  One contiguous ORG block only.
+       checksum, a POKE loop, the entry POKEd to 16526/16527 (Level II's
+       own form -- DEFUSR is Disk BASIC's) and `PRINT USR(0)` on line 60
+       for the user to replace.  One contiguous ORG block only.
 With no -o the listing goes to stdout (`--list FILE` writes it as well).
 The entry address is the END operand, else --entry, else the first ORG.
 Errors are reported as `file:line: message`, all of them, exit status 1.
@@ -654,12 +655,17 @@ class Result:
             raise ValueError('the DATA loader needs one contiguous ORG block, not %d'
                              % len(self.segments))
         org, code = self.segments[0]
+        # Level II only: POKE takes an address above 7FFFH as its negative
+        # (the 16K signed idiom), and the entry goes to 16526/16527 -- DEFUSR
+        # is Disk BASIC's (Level II manual p.8-9).
+        e = org - 65536 if org > 32767 else org
         lines = ['10 REM %s -- %d BYTES AT %d (%04XH), ENTRY %d (%04XH)'
                  % (name.upper(), len(code), org, org, self.entry, self.entry),
-                 '20 E=%d:C=0' % org,
+                 '20 E=%d:C=0' % e,
                  '30 FOR I=0 TO %d:READ B:POKE E+I,B:C=C+B:NEXT' % (len(code) - 1),
                  '40 IF C<>%d THEN PRINT "BAD DATA -- CHECK THE DATA LINES":END' % sum(code),
-                 '50 DEFUSR=%d' % self.entry,
+                 '50 POKE 16526,%d:POKE 16527,%d'
+                 % (self.entry & 0xFF, (self.entry >> 8) & 0xFF),
                  '60 PRINT USR(0)']
         ln = 1000
         for i in range(0, len(code), 16):
