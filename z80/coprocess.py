@@ -42,6 +42,7 @@ reading port FFH in 32-character mode sees 127 here where BASIC's
 INP(255) would say 63 -- recorded as the one known divergence.
 """
 
+import math
 import os
 import signal
 import sys
@@ -53,6 +54,23 @@ from .sound import from_env as sound_from_env
 PROTO = '3'
 NAME = 'trs80_z80_core'
 SENTINEL = 0x2FFD
+
+
+def csng(x):
+    """The ROM's round to a 24-bit single (0796H, half up at the guard):
+    a double is a single FIRST on its way to 16 bits (0A7FH -> 0AB9H), so
+    CINT(2.9999999#) is 3, not 2 (ZL-7; the interpreter's sround)."""
+    if x == 0:
+        return 0.0
+    ax = abs(x)
+    e = math.floor(math.log2(ax))
+    if 2.0 ** e > ax:
+        e -= 1
+    elif 2.0 ** (e + 1) <= ax:
+        e += 1
+    q = 2.0 ** (e - 23)
+    r = math.floor(ax / q + 0.5) * q
+    return -r if x < 0 else r
 ROM_TOP = 0x3000
 # The ROM entry points rom_entry() serves as traps (the sentinel apart):
 # the USR argument and result exchange, CLS, and READY.  tools/romcalls.py
@@ -325,7 +343,7 @@ class Machine:
             # A = 2, ordinary stores that reach the write-set (ZM-4).
             if self.argtype == 3:
                 raise CoreError('tm', 'USR argument is a string at 0A7FH')
-            v = int(float(self.arg) // 1)
+            v = int(csng(float(self.arg)) // 1)
             if v < -32768 or v > 32767:
                 raise CoreError('ov', 'USR argument %s is outside -32768..32767 at 0A7FH' % self.arg)
             cpu.hl = v & 0xFFFF

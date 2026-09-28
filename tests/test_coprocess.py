@@ -378,6 +378,20 @@ class TestTransport(unittest.TestCase):
         # CALL's return address and the sentinel -- one coalesced run each
         self.assertEqual(out[2:5], ['W 16559:2', 'W 16669:0,0,0,0,42,0,0,0', 'W 61436:3,112,253,47'])
 
+    def test_0a7fh_rounds_a_double_to_a_single_first(self):
+        """ZL-7: CINT(2.9999999#) is 3 on the ROM (0A7FH -> 0AB9H ->
+        0796H), and 32767.9999999# rounds to 32768 and is ?OV."""
+        prog = 'M 28672:205,127,10,195,154,10'   # CALL 0A7FH / JP 0A9AH
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=2.9999999 argtype=8 sp=61440 himem=65535 ramtop=65535 runs=1',
+            prog, 'GO',
+            'CALL gen=2 full=0 slot=0 entry=28672 arg=32767.9999999 argtype=8 sp=61440 himem=65535 ramtop=65535 runs=1',
+            prog, 'GO',
+            'BYE'])
+        self.assertTrue(out[1].startswith('RET hl=3 result=1'), out)
+        self.assertTrue(any(l.startswith('ERR ov') for l in out[2:]), out)
+
     def test_an_entry_off_the_map_is_an_err_not_a_crash(self):
         """ZL-5: entry=70000 raised IndexError and killed the core."""
         out, err, rc = self.talk([
