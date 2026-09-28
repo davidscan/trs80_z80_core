@@ -638,6 +638,18 @@ def build_table():
     for pfx, ireg in ((0xDD, 'IX'), (0xFD, 'IY')):
         t.update(_build_main(prefix=(pfx,), idx_reg=ireg))
         t.update(_build_cb(prefix=(pfx, 0xCB), idx_reg=ireg))
+    # A DD/FD form the prefix does not touch (DD 00 is NOP with a wasted
+    # prefix, DD 41 is LD B,C) is not in Zilog's published set: the prefix
+    # merely costs four T-states.  These 334 no-effect forms carried
+    # undoc=False (ZL-3), so the documented count claimed them.  The test:
+    # the prefixed entry renders exactly as the plain one.
+    from dataclasses import replace as _replace
+    for pfx in ((0xDD,), (0xFD,)):
+        for opb in range(256):
+            a, b = t.get(pfx + (opb,)), t.get((opb,))
+            if (a is not None and b is not None and not a.undoc
+                    and a.mnemonic == b.mnemonic and a.operands == b.operands):
+                t[pfx + (opb,)] = _replace(a, undoc=True)
     return t
 
 

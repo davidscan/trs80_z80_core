@@ -543,16 +543,24 @@ class TestUndocumentedAgainstTheReferenceCard(unittest.TestCase):
         self.assertTrue(dis1('DDCB0136').op.undoc)      # SLL (IX+1)
 
     def test_documented_undocumented_split(self):
-        """Pinned so the split cannot drift silently.  1032/748 as of
-        2026-09-11, when the IM undocumented set was found inverted (three
-        documented IM encodings flagged undocumented, two undocumented
-        duplicates flagged documented -- net one more undocumented).
-        Before that 1033/747 (2026-09-07, SLL corrected), and 1043/737
+        """Pinned so the split cannot drift silently.  698/1082 as of
+        2026-09-28 (ZL-3): the 334 no-effect DD/FD forms -- a prefix on an
+        instruction with no index operand, DD 00 is NOP plus four T-states
+        -- are not in Zilog's published set and moved to undocumented.
+        Before that 1032/748 (2026-09-11, the IM undocumented set found
+        inverted), 1033/747 (2026-09-07, SLL corrected), and 1043/737
         while SLL was misflagged."""
         undoc = [op for op in TABLE.values() if op.undoc]
         self.assertEqual(len(TABLE), 1780)
-        self.assertEqual(len(undoc), 748)
-        self.assertEqual(len(TABLE) - len(undoc), 1032)
+        self.assertEqual(len(undoc), 1082)
+        self.assertEqual(len(TABLE) - len(undoc), 698)
+        # the boundary itself: a no-effect prefix is undocumented, a form
+        # the prefix rewrites is not
+        self.assertTrue(TABLE[(0xDD, 0x00)].undoc)      # NOP with a prefix
+        self.assertTrue(TABLE[(0xDD, 0x41)].undoc)      # LD B,C with a prefix
+        self.assertFalse(TABLE[(0xDD, 0x21)].undoc)     # LD IX,nn
+        self.assertFalse(TABLE[(0xDD, 0x7E)].undoc)     # LD A,(IX+d)
+        self.assertFalse(TABLE[(0xDD, 0xE9)].undoc)     # JP (IX)
 
     def test_unassigned_ed_opcodes_behave_as_a_nop(self):
         """The card lists the unassigned ED page as NOP.  The table names
