@@ -122,6 +122,15 @@ class TestTableRoundTrip(unittest.TestCase):
             self.assertEqual(len(e), 1, d)
             self.assertIn('at least one item', e[0][1])
 
+    def test_a_register_or_flag_name_is_not_a_label(self):
+        """`I EQU 10 / LD A,I` assembled the register form ED 57 with the
+        label silently unread."""
+        for bad in ('I EQU 10\n', 'C EQU 20H\n', 'NZ EQU 5\n', 'B NOP\n',
+                    'HL: NOP\n'):
+            e = assemble('  ORG 0\n' + bad).errors
+            self.assertEqual(len(e), 1, bad)
+            self.assertIn('register or flag name', e[0][1])
+
     def test_edtasm_ampersand_and_shift_operators(self):
         """Barden p.47: EDTASM's own operators are +, -, & and <."""
         b = one('  ORG 0\n'

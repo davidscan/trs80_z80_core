@@ -684,6 +684,10 @@ def assemble(text, org=None, entry=None):
         """One definition per label, however it is made: an instruction or
         data label, EQU, or the label on an ORG.  `X NOP / X EQU 5` used to
         assemble, and LD HL,X took the 5."""
+        if label in REGS or label in CONDS:
+            # `I EQU 10 / LD A,I` assembled the register form ED 57 and
+            # took the label for defined silently
+            raise AsmError(lineno, '%s is a register or flag name, not a label' % label)
         if label in labels:
             raise AsmError(lineno, 'duplicate label %s' % label)
         labels.add(label)
