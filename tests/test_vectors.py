@@ -159,12 +159,16 @@ class TestFetchedVectorShape(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # Z80_VECTORS_REQUIRE=1 turns the skips into failures, as in
+        # tests/test_cpu_vectors.py (the 2026-09-30 audit, ZM-10)
+        absent = unittest.SkipTest
+        if os.environ.get('Z80_VECTORS_REQUIRE') == '1':
+            absent = AssertionError
         if not os.path.isdir(V1):
-            raise unittest.SkipTest(
-                'no fetched vectors (run tools/fetch_vectors.py --pages main)')
+            raise absent('no fetched vectors (run tools/fetch_vectors.py --pages main)')
         cls.files = sorted(n for n in os.listdir(V1) if n.endswith('.json'))
         if not cls.files:
-            raise unittest.SkipTest('tests/vectors/v1 is empty')
+            raise absent('tests/vectors/v1 is empty')
 
     def test_sampled_file_has_the_documented_shape(self):
         path = os.path.join(V1, self.files[0])

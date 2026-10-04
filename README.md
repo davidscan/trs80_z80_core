@@ -137,11 +137,14 @@ interpreter, when `../trs80basic` is present.
 |---|---|---|---|
 | `Z80_VECTORS` | 40 cases per vector file | `all` runs every case of the CPU test vectors (about 20 s) | after any change to `z80/cpu.py` or `z80/table.py` |
 | `Z80_VECTORS_FILES` | every file | comma-separated vector files, by name without `.json` (`ed b2`) or by prefix (`cb`) | reproducing one failure by the case name it printed |
+| `Z80_VECTORS_REQUIRE` | unset | `1` makes missing vectors a failure instead of a skip, and asks for all 1604 files | before trusting a run as a check of the CPU |
 
 Test groups skip when their input is missing: the CPU vectors until
 `tools/fetch_vectors.py` has run, the anchor tests without the listing
 archive, and the oracle tests without `../trs80basic` and gawk. A good run
-ends in `OK (skipped=N)`.
+ends in `OK (skipped=N)`. Fetched vectors are checked against the pin
+first: a file that does not hash to it, a file it does not name, or an
+empty `tests/vectors/v1/` fails the run.
 
 ### `python3 tools/fetch_vectors.py`
 
