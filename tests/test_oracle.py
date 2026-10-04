@@ -13,6 +13,7 @@ corpus sibling.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -283,6 +284,37 @@ class TestPatchPoints(unittest.TestCase):
         for gate in ('TRS80_POKELOG', 'TRS80_CASSETTE', 'TRS80_LINELOG'):
             self.assertNotIn(gate, text,
                              'instrumentation leaked into the interpreter repo')
+
+
+@unittest.skipUnless(HAVE_INTERP and HAVE_GAWK, 'needs interpreter sources + gawk')
+class TestTheCachedBuildFollowsTheSource(unittest.TestCase):
+    """The default run reused out/'s instrumented build because it existed:
+    with the p80 anchor line edited, it printed a full report from the
+    pre-edit interpreter, exit 0 (the 2026-09-30 audit, XM-12)."""
+
+    def test_an_edited_source_rebuilds_and_a_moved_anchor_stops_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 'src')
+            shutil.copytree(oracle.SRC, src)
+            saved = oracle.SRC, oracle.OUT, oracle.INTERP
+            oracle.SRC, oracle.OUT = src, os.path.join(d, 'out')
+            oracle.INTERP = os.path.join(oracle.OUT, 'o.awk')
+            try:
+                first = oracle.build()
+                stamp = os.stat(first).st_mtime_ns
+                self.assertEqual(os.stat(oracle.build()).st_mtime_ns, stamp,
+                                 'an unchanged source was rebuilt')
+                p80 = os.path.join(src, 'p80_stmt.awk')
+                with open(p80) as f:
+                    text = f.read()
+                with open(p80, 'w') as f:
+                    f.write(text.replace('    b = byteconv(num(v)); if (E) return\n',
+                                         '    b = byteconv(num(v)); if (E) return  # moved\n'))
+                with self.assertRaises(SystemExit) as cm:
+                    oracle.build()
+                self.assertIn('matched 0 times', str(cm.exception))
+            finally:
+                oracle.SRC, oracle.OUT, oracle.INTERP = saved
 
 
 @unittest.skipUnless(HAVE_INTERP and HAVE_GAWK, 'needs interpreter sources + gawk')

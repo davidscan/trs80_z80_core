@@ -56,6 +56,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -158,14 +159,33 @@ PATCHES = [
 ]
 
 
+def source_key(mods):
+    """What the instrumented build is made of: the sources and PATCHES."""
+    h = hashlib.sha1(repr(PATCHES).encode())
+    for name in mods:
+        with open(os.path.join(SRC, name), 'rb') as f:
+            h.update(name.encode() + b'\0' + f.read() + b'\0')
+    return h.hexdigest()
+
+
 def build(force=False):
-    """Concatenate an instrumented interpreter into out/. Returns its path."""
-    if os.path.exists(INTERP) and not force:
-        return INTERP
-    os.makedirs(OUT, exist_ok=True)
-    mods = sorted(n for n in os.listdir(SRC) if n.endswith('.awk'))
+    """Concatenate an instrumented interpreter into out/. Returns its path.
+
+    The cached build is reused only while its key (source_key) matches:
+    reused on existence alone, it ran a pre-edit interpreter with the
+    anchors never re-checked, exit 0 (the 2026-09-30 audit, XM-12)."""
+    mods = sorted(n for n in os.listdir(SRC) if n.endswith('.awk')) if os.path.isdir(SRC) else []
     if not mods:
         sys.exit('no interpreter sources at %s' % SRC)
+    key = source_key(mods)
+    keyfile = INTERP + '.key'
+    if os.path.exists(INTERP) and not force and os.path.exists(keyfile):
+        with open(keyfile) as f:
+            if f.read().strip() == key:
+                return INTERP
+    os.makedirs(OUT, exist_ok=True)
+    if os.path.exists(keyfile):
+        os.remove(keyfile)
 
     applied = 0
     chunks = []
@@ -191,6 +211,8 @@ def build(force=False):
         f.write(''.join(chunks))
     subprocess.run(GAWK + [INTERP, '--', '-h'],
                    capture_output=True, check=False)
+    with open(keyfile, 'w') as f:
+        f.write(key + '\n')
     return INTERP
 
 
