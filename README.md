@@ -585,6 +585,8 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 | `corpus` | a link to the local listing archive | you | yes; the corpus tools then refuse to run |
 | `PROTOCOL.md` | the wire contract between interpreter and core; a mirror of trs80basic's copy, kept identical | trs80basic | no |
 | `LICENSE` | GNU GPL v3 | you | no |
+| `SECURITY.md` | what machine code and loaded files can and cannot do, and how to report a problem | you | no |
+| `CONTRIBUTING.md` | how to report a bug, run the tests and send a change | you | no |
 
 ## License
 
