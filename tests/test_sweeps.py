@@ -4,6 +4,9 @@ that never reaches one leaves no log; the one a previous sweep left under
 the same name must not be read in its place (the 2026-09-19 audit, H-22).
 No corpus and no interpreter are needed: the runs are stood in for."""
 
+import contextlib
+import hashlib
+import io
 import os
 import stat
 import sys
@@ -14,6 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from tools import usr_sweep, usr_pty_sweep   # noqa: E402
+from phasea import sweep                     # noqa: E402
 
 STALE_IN = 'HELLO proto=1\nCALL gen=1 full=1 slot=0 entry=32000 arg=0 sp=1 himem=1 ramtop=1 runs=0\nGO\n'
 STALE_OUT = 'Z80 proto=1\nERR rom called 0033H, no ROM here\n'
@@ -121,6 +125,60 @@ class TestTheSweepEnvironmentIsItsOwn(unittest.TestCase):
         """PATH and HOME are not the sweep's business to remove."""
         for env in self.envs():
             self.assertIn('PATH', env)
+
+
+def tree(d, names):
+    """A stand-in corpus programs/ holding these listings."""
+    for n in names:
+        path = os.path.join(d, n)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write('10 X=USR(0)\n' if 'usr' in n else '10 PRINT 1\n')
+    return d
+
+
+class TestTheInputSetIsPinned(unittest.TestCase):
+    """One stray file in runnable/ moved every published F28 number and
+    the sweep printed them with exit 0 (XM-13, the 2026-09-30 audit)."""
+
+    NAMES = ['runnable/a.bas', 'runnable/usr1.bas', 'blocked/gfx/usr2.bas']
+
+    def test_the_fingerprint_is_the_shells(self):
+        with tempfile.TemporaryDirectory() as d:
+            tree(d, self.NAMES)
+            paths = [os.path.join(d, n) for n in self.NAMES]
+            lines = ''
+            for n in sorted(self.NAMES):
+                with open(os.path.join(d, n), 'rb') as f:
+                    lines += hashlib.sha1(f.read()).hexdigest() + '  ' + n + '\n'
+            self.assertEqual(sweep.fingerprint(paths, d),
+                             hashlib.sha1(lines.encode()).hexdigest())
+
+    def test_a_stray_file_or_an_empty_tree_is_named(self):
+        with tempfile.TemporaryDirectory() as d:
+            tree(d, self.NAMES)
+            paths = [os.path.join(d, n) for n in self.NAMES]
+            pin = (3, sweep.fingerprint(paths, d))
+            self.assertIsNone(sweep.input_set_problem(paths, d, pin))
+            tree(d, ['runnable/GLOBE.bas'])
+            self.assertIn('not the pinned',
+                          sweep.input_set_problem(paths + [os.path.join(d, 'runnable/GLOBE.bas')], d, pin))
+            self.assertIn('empty', sweep.input_set_problem([], d, pin))
+
+    def test_the_sweep_refuses_a_changed_set(self):
+        with tempfile.TemporaryDirectory() as d:
+            progs = tree(os.path.join(d, 'programs'), self.NAMES)
+            saved = sweep.PROGRAMS, sweep.INPUT_SET
+            sweep.PROGRAMS, sweep.INPUT_SET = progs, (3, 'f' * 40)
+            out = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out):
+                    rc = sweep.main(['--skip-gate', '--json', os.path.join(d, 'm.json')])
+            finally:
+                sweep.PROGRAMS, sweep.INPUT_SET = saved
+            self.assertEqual(rc, 2)
+            self.assertIn('REFUSING TO PUBLISH COUNTS', out.getvalue())
+            self.assertFalse(os.path.exists(os.path.join(d, 'm.json')))
 
 
 if __name__ == '__main__':

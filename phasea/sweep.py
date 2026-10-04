@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -75,6 +76,41 @@ def input_files():
                 if n.lower().endswith('.bas'):
                     out.append((os.path.join(cd, n), 'blocked', cat))
     return out
+
+
+# The input set, pinned 2026-10-03 (XM-13, the 2026-09-30 audit): a stray
+# copy of one listing in runnable/ moved every F28 number and the sweep
+# still printed them with exit 0.  The set is unchanged since 2026-08-14
+# and reproduces F28.  A run on any other set refuses unless told to
+# accept it; re-pin only with the corpus change recorded beside the
+# numbers.  The fingerprint is shasum's over the files input_files() reads;
+# today those are exactly the shell's, so it can be checked by hand:
+#   cd corpus/programs && LC_ALL=C find runnable blocked -type f \( -iname '*.bas' \
+#     -o -iname '*.txt' \) -print0 | LC_ALL=C sort -z | xargs -0 shasum | shasum
+INPUT_SET = (4339, 'cbdf3348f32f01e12a0f24da773bc91e0d383625')
+
+
+def fingerprint(paths, root=None):
+    """sha1 of `shasum`'s lines for these files, paths relative to root."""
+    root = root or PROGRAMS
+    lines = b''
+    for p in sorted(paths, key=lambda q: os.fsencode(os.path.relpath(q, root))):
+        with open(p, 'rb') as fh:
+            h = hashlib.sha1(fh.read()).hexdigest()
+        lines += h.encode() + b'  ' + os.fsencode(os.path.relpath(p, root)) + b'\n'
+    return hashlib.sha1(lines).hexdigest()
+
+
+def input_set_problem(paths, root=None, pinned=None):
+    """Why this input set is not the pinned one, or None."""
+    pinned = pinned or INPUT_SET
+    if not paths:
+        return 'the input set is empty (a corpus link that names the wrong tree?)'
+    got = (len(paths), fingerprint(paths, root))
+    if got != pinned:
+        return ('the input set is %d listings %s, not the pinned %d %s'
+                % (got + pinned))
+    return None
 
 
 def entry_offsets(rep, payload):
@@ -157,12 +193,14 @@ def random_baseline(lengths, n=1500, seed=20260813):
             'strict_filter_false_positive_rate': round(strict / n, 3)}
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--json', default='out/manifest.json')
+    ap.add_argument('--accept-input-set', action='store_true',
+                    help='count a set other than the pinned one (say why beside the numbers)')
     ap.add_argument('--skip-gate', action='store_true',
                     help=argparse.SUPPRESS)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     if not os.path.isdir(PROGRAMS):
         sys.exit('no corpus archive at %s: link the listing archive as `corpus` at this '
                  "repo's root, or set TRS80_CORPUS (README, Commands)" % os.path.dirname(PROGRAMS))
@@ -177,7 +215,15 @@ def main():
             return 2
 
     files = input_files()
-    print('input set: %d listings' % len(files))
+    fp = fingerprint([f for f, _, _ in files]) if files else ''
+    print('input set: %d listings  %s' % (len(files), fp))
+    why = input_set_problem([f for f, _, _ in files])
+    if why and (not files or not args.accept_input_set):
+        print('\nREFUSING TO PUBLISH COUNTS: %s.  --accept-input-set counts a '
+              'changed set; an empty one is never counted.' % why)
+        return 2
+    if why:
+        print('ACCEPTED A CHANGED INPUT SET: ' + why)
 
     manifest = []
     stats = Counter()
@@ -308,6 +354,8 @@ def main():
     baseline = random_baseline(raw_lengths)
 
     report = {
+        'input_set': {'listings': len(files), 'fingerprint': fp,
+                      'pinned': not why},
         'input_files': len(files),
         'stats': dict(stats),
         'quality_filter_baseline': baseline,
