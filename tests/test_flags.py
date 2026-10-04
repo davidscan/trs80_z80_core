@@ -1,9 +1,11 @@
-"""A hand-written flag and cycle fixture that ALWAYS runs -- CI's CPU net.
+"""A hand-written flag and cycle fixture that ALWAYS runs -- the CPU net
+that needs no fetched data.
 
 The single-step vector suites (tests/test_cpu_vectors.py) are fetched,
-never committed, so CI has no semantic check of the CPU at all: a
-half-carry mutant passed the vector-less suite (audit 2026-09-26 ZM-7).
-This file is that check.  Every case here is this project's own,
+never committed, so a checkout without them has no other semantic check
+of the CPU: a half-carry mutant passed the vector-less suite (audit
+2026-09-26 ZM-7). CI fetches and runs every vector case since 2026-10-04;
+this file is still the check wherever they are absent.  Every case here is this project's own,
 hand-written against the Zilog manual's flag rules (and, for the
 undocumented X/Y bits, the NMOS behavior the fetched vectors pin), so it
 can be committed; it is a pin, not a re-derivation -- the fetched

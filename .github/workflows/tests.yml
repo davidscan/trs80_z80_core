@@ -1,8 +1,11 @@
 # The test suite on every push and pull request, on GitHub's Ubuntu image.
-# The third-party CPU vector suites are fetched, never committed, so those
-# tests skip here; so do the anchor tests, which read the local-only corpus.
-# tests/test_flags.py is the committed, hand-written CPU check that always
-# runs, so CI is never entirely without a semantic net over z80/cpu.py.
+# The third-party CPU vector suites are fetched, never committed: CI fetches
+# them at the pinned SHA (tools/vectors.lock), caches them under that pin,
+# and runs every case (about 1.6M; 35 s on a Mac) with Z80_VECTORS_REQUIRE=1, so a
+# missing, partial or altered set fails instead of skipping. Every case, not
+# the 40-per-file sample: some defects pass the sample (the 2026-09-30
+# audit's DAA at 99H and CPIR mutants). The anchor tests still skip: they
+# read the local-only corpus.
 name: tests
 
 on:
@@ -16,9 +19,22 @@ permissions:
 jobs:
   unittest:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Version
         run: python3 --version
+      # keyed on the lock alone: a re-pin gets a fresh cache, never an old one
+      - name: Restore the CPU vectors
+        uses: actions/cache@v4
+        with:
+          path: tests/vectors
+          key: z80-vectors-${{ hashFiles('tools/vectors.lock') }}
+      # a no-op on a warm cache (every file is still hashed against the pin)
+      - name: Fetch the CPU vectors
+        run: python3 tools/fetch_vectors.py --all
       - name: Run the suite
+        env:
+          Z80_VECTORS: all
+          Z80_VECTORS_REQUIRE: '1'
         run: python3 -m unittest discover -s tests
