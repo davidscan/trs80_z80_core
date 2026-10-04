@@ -10,6 +10,7 @@ budget; on the screen it prints; and on its command line.
 """
 import io
 import os
+import signal
 import sys
 import tempfile
 import unittest
@@ -44,7 +45,24 @@ def asm(src, **kw):
     return r
 
 
-class TestReaders(unittest.TestCase):
+
+
+class Bounded(unittest.TestCase):
+    """Each test fails after 30 s instead of hanging the suite.  The budget
+    ends a loop only through the tick's BREAK reply; with that reply
+    ignored, the loop cases here ran for ever (the 2026-09-30 audit, BM-12)."""
+
+    LIMIT = 30
+
+    def setUp(self):
+        def fire(*_):
+            raise AssertionError('still running after %d s' % self.LIMIT)
+        old = signal.signal(signal.SIGALRM, fire)
+        signal.alarm(self.LIMIT)
+        self.addCleanup(signal.signal, signal.SIGALRM, old)
+        self.addCleanup(signal.alarm, 0)
+
+class TestReaders(Bounded):
     def test_cmd_round_trip_with_a_256_byte_record(self):
         r = asm('  ORG 7000H\n  DEFS 253,1\n  ORG 8000H\n  DEFS 256,2\n  DEFS 3,3\n  END 7005H\n')
         # the writer keeps records to 253 bytes; make one of exactly 256 by hand
@@ -127,7 +145,7 @@ class TestReaders(unittest.TestCase):
                 load_file(os.path.join(d, 'bad.asm'))
 
 
-class TestHeadless(unittest.TestCase):
+class TestHeadless(Bounded):
     def run_src(self, src, arg=0, cycles=1_000_000):
         r = asm(src)
         h = run.Headless(cycles)
@@ -162,7 +180,7 @@ class TestHeadless(unittest.TestCase):
         self.assertEqual((how, h.machine.cpu.hl), ('result', 0))
 
 
-class TestCommandLine(unittest.TestCase):
+class TestCommandLine(Bounded):
     def main(self, *argv):
         out = io.StringIO()
         with redirect_stdout(out):
@@ -216,7 +234,7 @@ class TestCommandLine(unittest.TestCase):
             self.assertEqual(rc, 1)
 
 
-class TestDiagnosticsNameTheRightPlace(unittest.TestCase):
+class TestDiagnosticsNameTheRightPlace(Bounded):
     """Two messages that pointed somewhere else (the 2026-09-19 audit, L-55)."""
 
     def test_a_short_transfer_record_names_its_own_offset(self):
