@@ -6,13 +6,20 @@
 # the 40-per-file sample: some defects pass the sample (the 2026-09-30
 # audit's DAA at 99H and CPIR mutants). The anchor tests still skip: they
 # read the local-only corpus.
+#
+# The interpreter is checked out beside this repo, as on a developer's
+# machine, so the tests that drive it (the oracle's text anchors into its
+# source, the BASIC loader, PROTOCOL.md's mirror and version) run here too;
+# Z80_INTERP_REQUIRE=1 makes its absence a failure, not a skip (the
+# 2026-09-30 audit, XM-3). The interpreter's commit is written to the job
+# summary, so a run says which pair it tested.
 name: tests
 
 on:
   push:
   pull_request:
 
-# the job only reads the checkout; say so, rather than the default token
+# the job only reads the checkouts; say so, rather than the default token
 permissions:
   contents: read
 
@@ -20,16 +27,29 @@ jobs:
   unittest:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: trs80_z80_core
     steps:
       - uses: actions/checkout@v4
-      - name: Version
-        run: python3 --version
+        with:
+          path: trs80_z80_core
+      - uses: actions/checkout@v4
+        with:
+          repository: davidscan/trs80basic
+          path: trs80basic
+      - name: Install gawk
+        run: sudo apt-get update -q && sudo apt-get install -y -q gawk
+      - name: Versions
+        run: |
+          python3 --version && gawk --version | head -1
+          echo "trs80basic at $(git -C ../trs80basic log --oneline -1)" | tee -a "$GITHUB_STEP_SUMMARY"
       # keyed on the lock alone: a re-pin gets a fresh cache, never an old one
       - name: Restore the CPU vectors
         uses: actions/cache@v4
         with:
-          path: tests/vectors
-          key: z80-vectors-${{ hashFiles('tools/vectors.lock') }}
+          path: trs80_z80_core/tests/vectors
+          key: z80-vectors-${{ hashFiles('trs80_z80_core/tools/vectors.lock') }}
       # a no-op on a warm cache (every file is still hashed against the pin)
       - name: Fetch the CPU vectors
         run: python3 tools/fetch_vectors.py --all
@@ -37,4 +57,5 @@ jobs:
         env:
           Z80_VECTORS: all
           Z80_VECTORS_REQUIRE: '1'
+          Z80_INTERP_REQUIRE: '1'
         run: python3 -m unittest discover -s tests

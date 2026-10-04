@@ -344,7 +344,8 @@ class Machine:
             self.write(0x40A6, 0)
         elif pc == 0x0A7F:
             # the ROM's CINT (0A7F-0AAF): a string is ?TM there (sent as
-            # `ERR tm`, proto 3); a number is floored to an integer, and an
+            # `ERR tm`, proto 3); a number is rounded to single first (a
+            # double goes through 0AB9H at 0A87H), then floored, and an
             # exponent past 16 bits goes to 0AA3H, which accepts exactly
             # -32768 and otherwise exits through 07B2H, ?OV.  Sent as
             # `ERR ov`, which the interpreter raises as BASIC's ?OV (the
