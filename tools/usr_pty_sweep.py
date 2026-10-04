@@ -44,6 +44,21 @@ def population(cls, files):
     return [os.path.join(CORPUS, r['file']) for r in res if r['cls'] == cls]
 
 
+def population_problem(cls, files, pop):
+    """Why this population must not be measured, or None (ZM-11's sibling:
+    an empty one printed DONE and overwrote results.json with [])."""
+    if cls == 'all' and not files:
+        sys.path.insert(0, HERE)
+        from phasea.sweep import input_set_problem
+        why = input_set_problem(sorted(glob.glob(CORPUS + '/runnable/*.bas') +
+                                       glob.glob(CORPUS + '/blocked/*/*.bas')), CORPUS)
+        if why:
+            return why
+    if not pop:
+        return 'the population is empty (class %r of the batch sweep\'s results.json)' % cls
+    return None
+
+
 def clear_logs(base):
     """Remove base.in and base.out before a logged run.  The interpreter
     starts the core at the first USR call, so a listing that never reaches
@@ -186,13 +201,20 @@ def main():
     os.makedirs(RUNS, exist_ok=True); os.makedirs(CWD, exist_ok=True)
     pop = population(a.cls, a.files)
     print('population', len(pop), flush=True)
+    why = population_problem(a.cls, a.files, pop)
+    if why:
+        print('REFUSING TO MEASURE: %s; results.json is left as it was.' % why, flush=True)
+        return 2
     res = []
     with ThreadPoolExecutor(a.workers) as ex:
         for i, r in enumerate(ex.map(drive, pop)):
             res.append(r)
             if i % 20 == 0:
                 print(i, r['file'], r['cls'], r['calls'], flush=True)
-    json.dump(res, open(OUT + '/results.json', 'w'), indent=1)
+    tmp = OUT + '/results.json.tmp'           # whole or not at all, as usr_sweep
+    with open(tmp, 'w') as fh:
+        json.dump(res, fh, indent=1)
+    os.replace(tmp, OUT + '/results.json')
     failed = sum(1 for r in res if r['cls'] == 'launch-failed')
     if failed:
         sys.exit('%d of %d runs never started the interpreter (%s): no counts'
@@ -208,4 +230,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

@@ -139,7 +139,9 @@ def tree(d, names):
 
 class TestTheInputSetIsPinned(unittest.TestCase):
     """One stray file in runnable/ moved every published F28 number and
-    the sweep printed them with exit 0 (XM-13, the 2026-09-30 audit)."""
+    the sweep printed them with exit 0 (XM-13, the 2026-09-30 audit); a
+    tree with no listings gave usr_sweep population 0, DONE, exit 0 and
+    an emptied results.json (ZM-11)."""
 
     NAMES = ['runnable/a.bas', 'runnable/usr1.bas', 'blocked/gfx/usr2.bas']
 
@@ -179,6 +181,47 @@ class TestTheInputSetIsPinned(unittest.TestCase):
             self.assertEqual(rc, 2)
             self.assertIn('REFUSING TO PUBLISH COUNTS', out.getvalue())
             self.assertFalse(os.path.exists(os.path.join(d, 'm.json')))
+
+    def run_usr_sweep(self, d, names):
+        """usr_sweep.main on a stand-in corpus, with a results.json already
+        in place; returns (rc, the output, results.json afterwards)."""
+        m = usr_sweep
+        saved = m.CORPUS, m.OUT, m.RUNS, m.CWD
+        m.CORPUS = tree(os.path.join(d, 'programs'), names)
+        os.makedirs(m.CORPUS, exist_ok=True)
+        m.OUT = os.path.join(d, 'out')
+        m.RUNS, m.CWD = m.OUT + '/runs', m.OUT + '/cwd'
+        os.makedirs(m.OUT)
+        with open(m.OUT + '/results.json', 'w') as f:
+            f.write('[{"file": "earlier"}]')
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                rc = m.main([])
+        finally:
+            with open(m.OUT + '/results.json') as f:
+                kept = f.read()
+            m.CORPUS, m.OUT, m.RUNS, m.CWD = saved
+        return rc, out.getvalue(), kept
+
+    def test_usr_sweep_refuses_an_empty_population_and_keeps_its_results(self):
+        with tempfile.TemporaryDirectory() as d:
+            rc, out, kept = self.run_usr_sweep(d, [])
+        self.assertEqual(rc, 2)
+        self.assertIn('REFUSING', out)
+        self.assertNotIn('DONE', out)
+        self.assertEqual(kept, '[{"file": "earlier"}]')
+
+    def test_usr_sweep_refuses_a_set_that_is_not_the_pinned_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            rc, out, kept = self.run_usr_sweep(d, self.NAMES)
+        self.assertEqual(rc, 2)
+        self.assertIn('not the pinned', out)
+        self.assertEqual(kept, '[{"file": "earlier"}]')
+
+    def test_pty_sweep_refuses_an_empty_population(self):
+        self.assertIn('empty', usr_pty_sweep.population_problem('no-usr-reached', None, []))
+        self.assertIsNone(usr_pty_sweep.population_problem('x', ['a.bas'], ['a']))
 
 
 if __name__ == '__main__':

@@ -10,6 +10,9 @@ frame it was given and the calls it made can be read afterwards.
 
     python3 tools/usr_sweep.py            # ~10 minutes; writes out/usr_sweep/
 
+It refuses (exit 2, results.json untouched) on an empty population or an
+input set that is not phasea/sweep.py's pinned one (--accept-input-set).
+
 Controls (the corpus measurement traps): --seed 1, the oracle's stdin feed
 of 400 "1" lines, a same-build control run, gawk diagnostics and the two
 USR notices dropped before comparing, cwd outside both repos.  Batch has
@@ -30,13 +33,37 @@ RUNS, CWD = OUT + '/runs', OUT + '/cwd'
 FEED = ('1\n' * 400).encode()
 TIMEOUT = 10.0
 
-def population():
+def listings():
+    return sorted(glob.glob(CORPUS + '/runnable/*.bas') + glob.glob(CORPUS + '/blocked/*/*.bas'))
+
+
+def population(files=None):
     # USR named in code, not in a message string or a REM (ZM-9: the
     # substring search counted 41 non-callers into the published 606)
     sys.path.insert(0, HERE)
     from phasea.basic import has_usr
-    files = sorted(glob.glob(CORPUS + '/runnable/*.bas') + glob.glob(CORPUS + '/blocked/*/*.bas'))
-    return [f for f in files if has_usr(f)]
+    return [f for f in (listings() if files is None else files) if has_usr(f)]
+
+
+def refusal(files, pop, accept=False):
+    """Why this run must not publish, or None.  A tree with no listings
+    gave population 0, "DONE", exit 0 and overwrote results.json with []
+    (ZM-11); the listings are phasea/sweep.py's pinned input set."""
+    sys.path.insert(0, HERE)
+    from phasea.sweep import input_set_problem
+    why = input_set_problem(files, CORPUS)
+    if not files or not pop:
+        return why or 'no listing in the input set calls USR'
+    return None if accept else why
+
+
+def publish(res, path):
+    """Write results.json whole or not at all: usr_pty_sweep reads it as
+    its population, and out/ is not versioned."""
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as fh:
+        json.dump(res, fh, indent=1)
+    os.replace(tmp, path)
 
 # A sweep is a MEASUREMENT, so the environment it runs listings in cannot
 # be whoever's shell started it.  Both sweeps inherited it whole, so a
@@ -122,19 +149,26 @@ def one(path):
                 rc=[stub['rc'], core['rc'], ctrl['rc']], timeout=[stub['timeout'], core['timeout'], ctrl['timeout']],
                 secs=[stub['secs'], core['secs'], ctrl['secs']], equal=equal, stable=stable)
 
-if __name__ == '__main__':
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
     if not os.path.isdir(CORPUS):
         sys.exit('no corpus archive at %s: link the listing archive as `corpus` at this '
                  "repo's root, or set TRS80_CORPUS (README, Commands)" % os.path.dirname(CORPUS))
+    files = listings()
+    pop = population(files)
+    print('population', len(pop), 'of', len(files), 'listings', flush=True)
+    why = refusal(files, pop, '--accept-input-set' in argv)
+    if why:
+        print('REFUSING TO MEASURE: %s.  --accept-input-set runs a changed (non-empty) set; '
+              'results.json is left as it was.' % why, flush=True)
+        return 2
     os.makedirs(RUNS, exist_ok=True); os.makedirs(CWD, exist_ok=True)
-    pop = population()
-    print('population', len(pop), flush=True)
     res = []
     with ThreadPoolExecutor(6) as ex:
         for i, r in enumerate(ex.map(one, pop)):
             res.append(r)
             if i % 25 == 0: print(i, r['file'], r['cls'], flush=True)
-    json.dump(res, open(OUT + '/results.json', 'w'), indent=1)
+    publish(res, OUT + '/results.json')
     print(Counter(r['cls'] for r in res))
     roms = Counter()
     for r in res:
@@ -143,3 +177,8 @@ if __name__ == '__main__':
             roms[m.group(1) if m else e] += 1
     print('ROM entries reached (first ERR per file):', roms.most_common())
     print('DONE', flush=True)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
