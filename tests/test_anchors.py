@@ -4,10 +4,10 @@ The ANCHORS BEFORE TRUST rule: the classifier must bucket the two
 ground-truth anchors correctly BEFORE its corpus-wide counts mean
 anything.
 
-The anchors live in the corpus archive's OCRsamples/, a LOCAL-ONLY
-repository (reached through the `corpus` link at this repo's root, or
-TRS80_CORPUS) holding transcriptions of copyrighted magazine listings. They
-are read IN PLACE by path and never copied into this repo. If the sibling is absent these tests skip rather
+The anchors live in a LOCAL-ONLY folder of transcriptions of copyrighted
+magazine listings, reached through the `ocr` link at this repo's root (or
+TRS80_OCR). They are read IN PLACE by path and never copied into this
+repo. If the folder is absent these tests skip rather
 than fail, so the suite stays green on a machine without the corpus --
 but the sweep refuses to publish counts if they did not run.
 
@@ -33,7 +33,7 @@ from phasea.classify import classify                         # noqa: E402
 from z80.disasm import disassemble                           # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OCR = os.path.join(os.environ.get('TRS80_CORPUS') or os.path.join(HERE, 'corpus'), 'OCRsamples')
+OCR = os.environ.get('TRS80_OCR') or os.path.join(HERE, 'ocr')
 SPACECHASE = os.path.join(OCR, 'spacechase.transcribed.bas')
 ENDGAME = os.path.join(OCR, 'endgame.transcribed.cleaned.bas')
 ENDGAME_RAW = os.path.join(OCR, 'endgame.transcribed.bas')
@@ -43,7 +43,7 @@ def ml_payloads(rep):
     return [p for p in rep.payloads if p.kind == 'candidate-ml']
 
 
-@unittest.skipUnless(os.path.exists(SPACECHASE), 'OCRsamples not present')
+@unittest.skipUnless(os.path.exists(SPACECHASE), 'the ocr transcriptions are not present')
 class TestSpaceChaseAnchor(unittest.TestCase):
     """Sound-only USR. Should run under Stage 1 with sound swallowed."""
 
@@ -89,7 +89,7 @@ class TestSpaceChaseAnchor(unittest.TestCase):
         self.assertGreater(self.rep.usr_calls, 30)
 
 
-@unittest.skipUnless(os.path.exists(ENDGAME), 'OCRsamples not present')
+@unittest.skipUnless(os.path.exists(ENDGAME), 'the ocr transcriptions are not present')
 class TestEndgameAnchor(unittest.TestCase):
     """The FINDING 29 lock: count-, address- and entry-offset-checked."""
 

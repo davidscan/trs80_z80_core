@@ -583,6 +583,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 | `PREFIX.in`, `PREFIX.out` | a session's protocol, both directions | `corelog.sh` | yes |
 | the `TRS80_SOUND_WAV` file | routines' audio | the core | yes |
 | `corpus` | a link to the local listing archive | you | yes; the corpus tools then refuse to run |
+| `ocr` | a link to the local folder of transcribed listings the anchor tests read (or `TRS80_OCR`) | you | yes; the anchor tests then skip |
 | `PROTOCOL.md` | the wire contract between interpreter and core; a mirror of trs80basic's copy, kept identical | trs80basic | no |
 | `LICENSE` | GNU GPL v3 | you | no |
 | `SECURITY.md` | what machine code and loaded files can and cannot do, and how to report a problem | you | no |

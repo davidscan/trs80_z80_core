@@ -18,3 +18,5 @@ __pycache__/
 
 # The corpus archive, a local-only sibling reached through this link (see phasea/sweep.py).
 corpus
+# The local-only transcriptions the anchor tests read (see tests/test_anchors.py).
+ocr
