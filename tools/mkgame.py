@@ -46,7 +46,7 @@ PADROW = VIDEO + 15 * ROWLEN         # 3FC0H, the bottom row
 BALLROW = VIDEO + ROWLEN             # 3C40H, row 1
 KBD_ROW6 = 0x3840                    # ENTER CLEAR BREAK UP DOWN LEFT RIGHT SPACE
 K_LEFT, K_RIGHT, K_SPACE = 32, 64, 128
-CLS, ARG_HL, HL_RESULT = 0x01C9, 0x0A7F, 0x0A9A     # the three served ROM traps
+CLS, ARG_HL, HL_RESULT = 0x01C9, 0x0A7F, 0x0A9A     # three of the four served ROM traps
 SOLID, HALF_LOW, BLANK, DASH = 191, 176, 32, 45     # 191 = all six pixels, 176 = lower half
 PAD_WIDTH = 4
 PAD_STEP = 2

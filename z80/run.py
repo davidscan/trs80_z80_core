@@ -9,7 +9,7 @@ FILE is a .cmd load module, a .cas SYSTEM tape, raw .bin bytes (then
 --org is required) or .asm source, which is assembled first.  The
 program is loaded into the core's RAM and called the way `USR` calls a
 routine: the sentinel return address on the stack, the argument (--arg)
-answered at 0A7FH, HL back through 0A9AH, the three served ROM entries
+answered at 0A7FH, HL back through 0A9AH, the four served ROM entries
 and `ERR rom` for any other.  There is no screen and no keyboard: video
 bytes land in memory and are printed afterwards as the 16 by 64 screen,
 and every keyboard-matrix read sees no key.  The tick that would poll

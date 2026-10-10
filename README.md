@@ -43,7 +43,7 @@ file named by `TRS80_SOUND_WAV`.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
-| `--fixture` | off | adds machine-code routines behind the interpreter's reference stub's canned entry addresses (7000H-700AH) | running trs80basic's conformance suite against the real core: `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh` |
+| `--fixture` | off | adds machine-code routines behind the interpreter's reference stub's canned entry addresses (7000H-7010H and 7777H) | running trs80basic's conformance suite against the real core: `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh` |
 
 The core reads these from the environment it inherits from the interpreter:
 
@@ -82,7 +82,8 @@ Editor/Assembler listings: an optional line number, a label (colon
 optional), the instruction, `;` comments; hex with a trailing `H` and a
 leading digit (`0FFH`), octal `Q`, binary `B`, `'A'` characters, `$` for
 the location counter; `+ - * /` and `.AND. .OR. .XOR. .NOT. .MOD. .SHL.
-.SHR.`; `ORG`, `EQU`, `DEFB`/`DB`, `DEFW`/`DW`, `DEFM`/`DM`, `DEFS`/`DS`,
+.SHR.`, `&` for `.AND.` and EDTASM's `<` shift (left, or right for a
+negative count); `ORG`, `EQU`, `DEFB`/`DB`, `DEFW`/`DW`, `DEFM`/`DM`, `DEFS`/`DS`,
 `END entry`. Every instruction comes from the same opcode table the core
 executes and the disassembler prints from, so a disassembly listing is
 valid source again: assembled at the same address it gives the same bytes
@@ -96,7 +97,7 @@ file; with neither, the listing goes to stdout.
 |---|---|---|---|
 | `SOURCE` | required | the source file | always |
 | `-o OUT` | none | where the object goes; the extension picks the format: `.bin`, `.cmd`, `.cas`, `.bas` | producing something to load or run |
-| `--format {bin,cmd,cas,bas}` | from the extension, else `bin` | `bin` a raw image (gaps between `ORG` blocks zero-filled); `cmd` a TRS-80 load module; `cas` a Model I SYSTEM tape as a byte stream; `bas` a BASIC `DATA`/`POKE` loader with a checksum, `DEFUSR` and `PRINT USR(0)` on line 60 | an output name without a telling extension |
+| `--format {bin,cmd,cas,bas}` | from the extension, else `bin` | `bin` a raw image (gaps between `ORG` blocks zero-filled); `cmd` a TRS-80 load module; `cas` a Model I SYSTEM tape as a byte stream; `bas` a BASIC `DATA`/`POKE` loader with a checksum, the entry POKEd to 16526/16527 (Level II's own form; `DEFUSR` is Disk BASIC's) and `PRINT USR(0)` on line 60 | an output name without a telling extension |
 | `--name NAME` | the source file's name | the six-character program name inside a `cmd` or `cas` file | matching what a listing expects |
 | `--org ADDR` | none | the load address when the source has no `ORG` (`32000` or `7D00H`) | a fragment without one |
 | `--entry ADDR` | the first `ORG` | the entry address when `END` names none | a routine whose entry is not its first byte |
@@ -108,7 +109,7 @@ file; with neither, the listing goes to stdout.
 Runs a machine-language program in the core with no screen and no
 keyboard: a `.cmd` load module, a `.cas` SYSTEM tape, raw `.bin` bytes
 (with `--org`) or `.asm` source, assembled first. The program is called
-the way `USR` calls a routine, with the same three ROM entries served and
+the way `USR` calls a routine, with the same four ROM entries served and
 `ERR rom` for any other. Keyboard reads see no key; video bytes land in
 memory and are printed afterwards as the 16 by 64 screen. It prints how
 the run ended, HL, the T-states and the seconds of Model I time they
@@ -504,8 +505,9 @@ back and the core executes.
   LEVEL II ROM routine to work. Actually it stops with `?FC` and
   `USR CORE: rom called 0500H, no ROM here`. The ROM is copyrighted and not
   distributed, so ROM services are rewritten from their documentation one
-  at a time. Three are provided: 01C9H (CLS), 0A7FH (the `USR` argument
-  into HL) and 0A9AH (HL back to BASIC as the result). Code that reads ROM
+  at a time. Four are provided: 01C9H (CLS), 0A7FH (the `USR` argument
+  into HL), 0A9AH (HL back to BASIC as the result) and 1A19H (READY: the
+  call ends and BASIC ends the program at the prompt). Code that reads ROM
   bytes gets nothing meaningful either.
 - **Empty memory reads FFH, which is `RST 38H`.** You might expect a call to
   an address nothing was loaded at to fail at that address. Actually the
@@ -555,13 +557,13 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 
 ### Not supported
 
-- ROM routines other than the three listed above, and code that reads the
+- ROM routines other than the four listed above, and code that reads the
   ROM.
 - Interrupts. A routine that `HALT`s to wait for one stops with `?FC`.
-- Cassette and disk I/O from machine code. Port FFH output is sound only.
-- Running machine code outside a BASIC program. The core runs only routines
-  a program calls with `USR`; the disassembler is the one standalone tool.
-- An assembler.
+- Cassette and disk I/O from machine code. Port FFH output is sound and the
+  32/64-column latch only.
+- Running machine code interactively outside a BASIC program. `z80.run` is
+  headless: no keyboard, and the screen is printed after the run.
 
 ## Files and logs
 
