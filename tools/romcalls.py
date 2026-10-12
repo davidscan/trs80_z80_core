@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """tools/romcalls.py -- which ROM entry points do a library's listings call?
 
-    python3 tools/romcalls.py FILE... [--top N] [-v]
+    python3 tools/romcalls.py FILE... [--from LIST] [--record OUT.json] [--top N] [-v]
 
 The trap measurement.  The core holds no ROM (the never-commit-ROM rule),
 so a routine that calls into 0000H-2FFFH gets a trap that reimplements the
@@ -25,10 +25,20 @@ two-witness lines, how many more from one-column lines, how many files,
 and whether the core serves it today (z80.coprocess.SERVED).  The last
 lines give the totals and the served share.  Exit status 0; 2 if no file
 held a listing.
+
+--record writes the measurement with its inputs: every file read and
+its sha1, the set's fingerprint, the core's commit, and the table.  The
+2026-09-17 tally could not be rebuilt (the 2026-09-30 audit, ZM-7): its
+"251" counted part files nobody listed, and the books left out were
+named nowhere.  --from reads the file list from a file, one path a line.
 """
 import argparse
+import hashlib
+import json
 import os
+import subprocess
 import sys
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -150,19 +160,65 @@ def report(table, top=None, out=sys.stdout):
               % (calls, len(table), alone, len(served), len(table), served_calls, calls))
 
 
+def inputs(paths):
+    """The input set: each file's path and sha1, and their fingerprint (the
+    sha1 of the `sha1  path` lines in the order given)."""
+    files = []
+    for p in paths:
+        with open(p, 'rb') as f:
+            files.append({'path': p, 'sha1': hashlib.sha1(f.read()).hexdigest()})
+    lines = ''.join('%s  %s\n' % (x['sha1'], x['path']) for x in files)
+    try:
+        core = subprocess.run(['git', '-C', ROOT, 'rev-parse', '--short', 'HEAD'],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        if subprocess.run(['git', '-C', ROOT, 'status', '--porcelain', '--untracked-files=no'],
+                          capture_output=True, text=True).stdout.strip():
+            core += '+dirty'
+    except (OSError, subprocess.CalledProcessError):
+        core = '?'
+    return {'core': core, 'files': len(files),
+            'fingerprint': hashlib.sha1(lines.encode()).hexdigest(),
+            'when': time.strftime('%Y-%m-%dT%H:%M:%S'), 'list': files}
+
+
+def record(path, paths, table, seen):
+    rows = [{'entry': '%04XH' % t, 'name': NAMES.get(t), 'calls': r['calls'],
+             'alone': r['alone'], 'files': len(r['files']), 'served': t in coprocess.SERVED,
+             'by': sorted(r['ops'])}
+            for t, r in sorted(table.items(),
+                               key=lambda kv: (-(kv[1]['calls'] + kv[1]['alone']), kv[0]))]
+    meta = inputs(paths)
+    meta['files_with_a_listing'] = seen
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump({'inputs': meta, 'table': rows}, f, indent=1)
+    os.replace(tmp, path)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog='python3 tools/romcalls.py',
         description='Tally the ROM entry points the listings in these files call.')
-    ap.add_argument('files', nargs='+', metavar='FILE', help='text holding scanned listings')
+    ap.add_argument('files', nargs='*', metavar='FILE', help='text holding scanned listings')
+    ap.add_argument('--from', dest='list', metavar='LIST',
+                    help='read more FILE paths from LIST, one a line')
+    ap.add_argument('--record', metavar='OUT', help='write the inputs and the table as JSON')
     ap.add_argument('--top', type=int, metavar='N', help='print the N most called entries only')
     ap.add_argument('-v', '--verbose', action='store_true', help='one line per file on stderr')
     a = ap.parse_args(argv)
-    table, seen = tally(a.files, a.verbose)
+    files = list(a.files)
+    if a.list:
+        with open(a.list) as f:
+            files += [l.rstrip('\n') for l in f if l.strip()]
+    if not files:
+        ap.error('no FILE given')
+    table, seen = tally(files, a.verbose)
     if not seen:
         sys.stderr.write('no listing in any file\n')
         return 2
     report(table, a.top)
+    if a.record:
+        record(a.record, files, table, seen)
     return 0
 
 

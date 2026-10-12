@@ -300,7 +300,7 @@ every `CALL`, `JP`, `JR` and `RST` whose target lies in ROM. Lines read
 off one object column alone are counted apart and never decide the order;
 data lines (`DEFB`, `DEFW`) are not calls; a branch that lands inside the
 listing itself (relocatable code assembled at a low address) is not a ROM
-call. **Writes:** nothing; the table goes to stdout.
+call. **Writes:** the table to stdout; with `--record`, a JSON file too.
 
 Give it the programming books, not the ROM disassemblies. One row per
 entry point, most called first: the address, the name the period manuals
@@ -312,6 +312,8 @@ share. Exit 0; 2 if no file held a listing.
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
 | `FILE...` | none | texts holding scanned listings | the pages of a book, or a whole library |
+| `--from LIST` | none | reads more FILE paths from LIST, one a line | a library too big for one command line |
+| `--record OUT` | none | writes every input file with its sha1, the set's fingerprint, the core's commit and the table as JSON | a measurement someone must be able to rebuild |
 | `--top N` | all | print the N most called entries only | the short list |
 | `-v` | off | every call on stderr with its scanned line, and one line per file | judging a reading, finding the page |
 

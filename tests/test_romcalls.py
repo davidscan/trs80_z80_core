@@ -1,6 +1,7 @@
 """tools/romcalls.py: the ROM entry points a listing calls, tallied from
 what hexcheck settled -- two-witness lines counted, one-column lines
 counted apart, data lines not at all."""
+import contextlib
 import io
 import os
 import sys
@@ -98,6 +99,33 @@ class RomCalls(unittest.TestCase):
         self.assertRegex(text, r'0A7FH .* yes ')
         self.assertRegex(text, r'0033H .* no ')
         self.assertIn('the core serves 3 of the 5 entries, 3 of the 6 calls', text)
+
+    def test_the_record_names_every_input(self):
+        """ZM-7: the 2026-09-17 tally named no input file, so it could not
+        be rebuilt."""
+        import hashlib
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 'book.txt')
+            with open(src, 'w') as f:
+                f.write('A page of prose.\n\n' + self.listing + '\n')
+            lst = os.path.join(d, 'list.txt')
+            with open(lst, 'w') as f:
+                f.write(src + '\n')
+            rec = os.path.join(d, 'rec.json')
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(romcalls.main(['--from', lst, '--record', rec]), 0)
+            with open(rec) as f:
+                got = json.load(f)
+            with open(src, 'rb') as f:
+                sha = hashlib.sha1(f.read()).hexdigest()
+        self.assertEqual(got['inputs']['list'], [{'path': src, 'sha1': sha}])
+        self.assertEqual(got['inputs']['fingerprint'],
+                         hashlib.sha1(('%s  %s\n' % (sha, src)).encode()).hexdigest())
+        self.assertEqual(got['inputs']['files_with_a_listing'], 1)
+        self.assertIn({'entry': '0033H', 'name': 'DSP display char', 'calls': 2, 'alone': 0,
+                       'files': 1, 'served': False, 'by': ['CALL']},
+                      got['table'])
 
     def test_no_listing_exits_2(self):
         with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
