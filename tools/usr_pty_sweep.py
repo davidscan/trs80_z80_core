@@ -41,6 +41,8 @@ def population(cls, files):
                                   glob.glob(CORPUS + '/blocked/*/*.bas'))
                 if has_usr(f)]
     res = json.load(open(os.path.join(HERE, 'out', 'usr_sweep', 'results.json')))
+    if isinstance(res, dict):        # {inputs, results} since ZM-8
+        res = res['results']
     return [os.path.join(CORPUS, r['file']) for r in res if r['cls'] == cls]
 
 

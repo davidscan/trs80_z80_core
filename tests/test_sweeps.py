@@ -153,6 +153,52 @@ class TestEachRunHasAFreshCwd(unittest.TestCase):
         self.assertEqual(second['out'], '')
 
 
+class TestTheSweepSaysHowARunStopped(unittest.TestCase):
+    """ZM-8: no-usr-reached hid 194 interpreter error stops, and nothing
+    recorded which build or load produced the classes."""
+
+    def test_the_stop_line_skips_diagnostics(self):
+        r = dict(err='gawk: warning: x\nUSR STUB: 0 CALLS\n?OV ERROR IN 12\n')
+        self.assertEqual(usr_sweep.stop(r), '?OV ERROR IN 12')
+        self.assertEqual(usr_sweep.stop(dict(err='')), '')
+
+    def test_an_error_stop_is_its_own_class(self):
+        for line in ('?OV ERROR IN 12', '?SN ERROR', '?/0 ERROR IN 5'):
+            self.assertTrue(usr_sweep.BASIC_ERROR_RE.match(line), line)
+        self.assertFalse(usr_sweep.BASIC_ERROR_RE.match('BREAK IN 20'))
+
+    def test_the_inputs_name_both_builds_and_the_set(self):
+        with tempfile.TemporaryDirectory() as d:
+            progs = tree(d, ['runnable/usr1.bas'])
+            files = [os.path.join(progs, 'runnable/usr1.bas')]
+            saved = usr_sweep.CORPUS
+            usr_sweep.CORPUS = progs
+            try:
+                meta = usr_sweep.inputs(files, files)
+            finally:
+                usr_sweep.CORPUS = saved
+            fp = sweep.fingerprint(files, progs)
+        for k in ('core', 'interpreter', 'interpreter_version', 'corpus', 'input_set',
+                  'listings', 'population', 'timeout_s', 'workers', 'load_start'):
+            self.assertIn(k, meta)
+        self.assertEqual(meta['input_set'], fp)
+
+    def test_the_pty_sweep_reads_the_new_results_shape(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'out', 'usr_sweep')
+            os.makedirs(out)
+            with open(os.path.join(out, 'results.json'), 'w') as f:
+                f.write('{"inputs": {}, "results": [{"file": "runnable/a.bas", "cls": "no-usr-reached"},'
+                        ' {"file": "runnable/b.bas", "cls": "err"}]}')
+            saved = usr_pty_sweep.HERE, usr_pty_sweep.CORPUS
+            usr_pty_sweep.HERE, usr_pty_sweep.CORPUS = d, '/c'
+            try:
+                pop = usr_pty_sweep.population('no-usr-reached', None)
+            finally:
+                usr_pty_sweep.HERE, usr_pty_sweep.CORPUS = saved
+        self.assertEqual(pop, ['/c/runnable/a.bas'])
+
+
 def tree(d, names):
     """A stand-in corpus programs/ holding these listings."""
     for n in names:

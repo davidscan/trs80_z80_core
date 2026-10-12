@@ -353,10 +353,14 @@ extraction cannot resolve. **Writes:** `out/oracle/`, plus the `--json` file.
 
 #### `python3 tools/usr_sweep.py`
 
-Runs every archive listing that mentions `USR` three ways in batch mode:
+Runs every archive listing that uses `USR` (a call, a `DEF USR` or a
+vector `POKE`, as the extractor finds them) three ways in batch mode:
 without a core, with the core, and with the core again as a control. Each
-run is classified by what the core changed. It takes about ten minutes.
-**Writes:** `out/usr_sweep/`. It has no arguments.
+run is classified by what the core changed, and `results.json` records
+the inputs beside the classes: both builds, the corpus commit and
+fingerprint, the controls and the host load. It takes about ten minutes.
+**Writes:** `out/usr_sweep/`. Its one argument, `--accept-input-set`,
+runs a set that is not the pinned one.
 
 #### `python3 tools/usr_pty_sweep.py`
 
@@ -533,8 +537,8 @@ back and the core executes.
   write to the terminal. The WAV carries on.
 - **`core.py` has no `--help`.** Started by hand, it silently waits for the
   interpreter's first message. Leave with Ctrl-D.
-- **`tools/usr_sweep.py` ignores its arguments.** `--help` starts the
-  ten-minute sweep.
+- **`tools/usr_sweep.py` ignores any argument but `--accept-input-set`.**
+  `--help` starts the ten-minute sweep.
 
 ### Undo / recovery
 

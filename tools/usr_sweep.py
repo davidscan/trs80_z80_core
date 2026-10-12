@@ -13,6 +13,15 @@ frame it was given and the calls it made can be read afterwards.
 It refuses (exit 2, results.json untouched) on an empty population or an
 input set that is not phasea/sweep.py's pinned one (--accept-input-set).
 
+results.json is {"inputs": ..., "results": [...]}: the inputs are the
+core's and the interpreter's commits (+dirty), the interpreter's
+--version, the corpus commit, the input-set fingerprint, the controls,
+the worker count and the host load at start and end; each result names
+its class and how each of the three runs stopped (`stop`).  A run that
+reached no USR is `error-before-usr` when the stub run stopped on an
+interpreter error, `no-usr-reached` otherwise (INPUT ran dry, a CMD, a
+menu, a quiet end).
+
 Controls (the corpus measurement traps): --seed 1, the oracle's stdin feed
 of 400 "1" lines, a same-build control run, gawk diagnostics and the two
 USR notices dropped before comparing, cwd outside both repos.  Batch has
@@ -32,6 +41,7 @@ OUT = os.path.join(HERE, 'out', 'usr_sweep')
 RUNS, CWD = OUT + '/runs', OUT + '/cwd'
 FEED = ('1\n' * 400).encode()
 TIMEOUT = 10.0
+WORKERS = 6
 
 def listings():
     return sorted(glob.glob(CORPUS + '/runnable/*.bas') + glob.glob(CORPUS + '/blocked/*/*.bas'))
@@ -100,6 +110,50 @@ def run(path, z80, cwd):
         os.killpg(p.pid, signal.SIGKILL); out, err = p.communicate(); rc, to = 124, True
     return dict(rc=rc, timeout=to, out=out.decode('latin-1'), err=err.decode('latin-1'), secs=round(time.monotonic() - t0, 2))
 
+def stop(r):
+    """How the run ended, as the interpreter said it on stderr: its first
+    line that is not a gawk diagnostic or a USR notice ('?OV ERROR IN 12'),
+    or '' for a quiet end."""
+    for l in r['err'].splitlines():
+        if l.strip() and not l.startswith(('gawk:', 'USR STUB:', 'USR CORE:')):
+            return l.strip()
+    return ''
+
+
+BASIC_ERROR_RE = re.compile(r'^\?[A-Z/0-9]{2} ERROR')
+
+
+def git_state(repo):
+    """'<commit>' or '<commit>+dirty' for the repo at `repo`; '?' if none."""
+    try:
+        head = subprocess.run(['git', '-C', repo, 'rev-parse', '--short', 'HEAD'],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        dirty = subprocess.run(['git', '-C', repo, 'status', '--porcelain', '--untracked-files=no'],
+                               capture_output=True, text=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return '?'
+    return head + ('+dirty' if dirty else '')
+
+
+def inputs(files, pop):
+    """What this measurement ran on, recorded beside its numbers (ZM-8:
+    the class table could not be reproduced, and nothing said which
+    interpreter, core, corpus or host load had produced it)."""
+    sys.path.insert(0, HERE)
+    from phasea.sweep import fingerprint
+    try:
+        version = subprocess.run([BASIC, '--version'], capture_output=True, text=True,
+                                 env=sweep_env(), timeout=30).stdout.strip().splitlines()[0]
+    except (OSError, IndexError, subprocess.TimeoutExpired):
+        version = '?'
+    return dict(core=git_state(HERE), interpreter=git_state(os.path.dirname(BASIC)),
+                interpreter_version=version, corpus=git_state(os.path.dirname(CORPUS)),
+                listings=len(files), input_set=fingerprint(files, CORPUS), population=len(pop),
+                seed=1, feed='400 lines of "1"', timeout_s=TIMEOUT, workers=WORKERS,
+                python=sys.version.split()[0], started=time.strftime('%Y-%m-%dT%H:%M:%S'),
+                load_start=[round(x, 2) for x in os.getloadavg()])
+
+
 def norm(r):
     lines = (r['out'] + '\n--stderr--\n' + r['err']).splitlines()
     return '\n'.join(l for l in lines if not l.startswith(('gawk:', 'USR STUB:', 'USR CORE:')))
@@ -141,6 +195,8 @@ def one(path):
     if errs: cls = 'err'
     elif core['timeout'] and not stub['timeout']: cls = 'timeout-core-only'
     elif core['timeout']: cls = 'timeout-both'
+    elif calls == 0 and tally == 0 and BASIC_ERROR_RE.match(stop(stub)):
+        cls = 'error-before-usr'      # the run stopped on an interpreter error (ZM-8)
     elif calls == 0 and tally == 0: cls = 'no-usr-reached'
     elif calls == 0 and tally > 0: cls = 'stub-only-reached'
     elif equal: cls = 'identical'
@@ -148,7 +204,8 @@ def one(path):
     else: cls = 'differs-noise'
     return dict(file=rel, cls=cls, tally=tally, calls=calls, rets=rets, errs=errs, notices=notices, K=ks, V=vs, MODE=modes,
                 rc=[stub['rc'], core['rc'], ctrl['rc']], timeout=[stub['timeout'], core['timeout'], ctrl['timeout']],
-                secs=[stub['secs'], core['secs'], ctrl['secs']], equal=equal, stable=stable)
+                secs=[stub['secs'], core['secs'], ctrl['secs']], equal=equal, stable=stable,
+                stop=[stop(stub), stop(core), stop(ctrl)])
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
@@ -164,12 +221,16 @@ def main(argv=None):
               'results.json is left as it was.' % why, flush=True)
         return 2
     os.makedirs(RUNS, exist_ok=True); os.makedirs(CWD, exist_ok=True)
+    meta = inputs(files, pop)
+    print('inputs', json.dumps(meta), flush=True)
     res = []
-    with ThreadPoolExecutor(6) as ex:
+    with ThreadPoolExecutor(WORKERS) as ex:
         for i, r in enumerate(ex.map(one, pop)):
             res.append(r)
             if i % 25 == 0: print(i, r['file'], r['cls'], flush=True)
-    publish(res, OUT + '/results.json')
+    meta.update(finished=time.strftime('%Y-%m-%dT%H:%M:%S'),
+                load_end=[round(x, 2) for x in os.getloadavg()])
+    publish(dict(inputs=meta, results=res), OUT + '/results.json')
     print(Counter(r['cls'] for r in res))
     roms = Counter()
     for r in res:
