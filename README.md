@@ -109,7 +109,7 @@ file; with neither, the listing goes to stdout.
 Runs a machine-language program in the core with no screen and no
 keyboard: a `.cmd` load module, a `.cas` SYSTEM tape, raw `.bin` bytes
 (with `--org`) or `.asm` source, assembled first. The program is called
-the way `USR` calls a routine, with the same four ROM entries served and
+the way `USR` calls a routine, with the same five ROM entries served and
 `ERR rom` for any other. Keyboard reads see no key; video bytes land in
 memory and are printed afterwards as the 16 by 64 screen. It prints how
 the run ended, HL, the T-states and the seconds of Model I time they
@@ -511,9 +511,10 @@ back and the core executes.
   LEVEL II ROM routine to work. Actually it stops with `?FC` and
   `USR CORE: rom called 0500H, no ROM here`. The ROM is copyrighted and not
   distributed, so ROM services are rewritten from their documentation one
-  at a time. Four are provided: 01C9H (CLS), 0A7FH (the `USR` argument
-  into HL), 0A9AH (HL back to BASIC as the result) and 1A19H (READY: the
-  call ends and BASIC ends the program at the prompt). Code that reads ROM
+  at a time. Five are provided: 01C9H (CLS), 0A7FH (the `USR` argument
+  into HL), 0A9AH (HL back to BASIC as the result), 1A19H (READY: the
+  call ends and BASIC ends the program at the prompt) and 002BH (the
+  keyboard scan: the code of a key pressed since the last scan, else 0). Code that reads ROM
   bytes gets nothing meaningful either.
 - **Empty memory reads FFH, which is `RST 38H`.** You might expect a call to
   an address nothing was loaded at to fail at that address. Actually the
@@ -563,7 +564,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 
 ### Not supported
 
-- ROM routines other than the four listed above, and code that reads the
+- ROM routines other than the five listed above, and code that reads the
   ROM.
 - Interrupts. A routine that `HALT`s to wait for one stops with `?FC`.
 - Cassette and disk I/O from machine code. Port FFH output is sound and the

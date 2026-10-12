@@ -6,7 +6,7 @@ video streamed and the keyboard served live during the call.  This
 module is the machine around the pure CPU in `z80.cpu`: 64K of RAM that
 reads 255 wherever no frame defined a byte, the address-dispatched
 handling of program-counter entry into ROM space (the sentinel 2FFDH
-ends the call, four documented entry points are served as HLE traps,
+ends the call, five documented entry points are served as HLE traps,
 anything else is `ERR rom`), ticks for BREAK and pacing, and the
 line-oriented transport.
 
@@ -32,6 +32,10 @@ the RET the ROM routine would have.
            the HL it handed over -- the last one, if it calls twice.
     1A19H  the ROM's READY entry: the call ends and the reply carries
            `ready=1`, so BASIC ends the program at the prompt.
+    002BH  the keyboard scan: A = the ASCII code of a key pressed since
+           the last scan, else 0, through the work area at 4036H-403CH
+           (Machine.scan_keyboard).  Built 2026-10-12 for Defense
+           Command's high-score entry.
 
 Port FFH reads 127 (the 64-character mode value the interpreter's INP
 returns) and every other port 255.  OUT (FFH) has two effects and the
@@ -76,9 +80,15 @@ def csng(x):
     return -r if x < 0 else r
 ROM_TOP = 0x3000
 # The ROM entry points rom_entry() serves as traps (the sentinel apart):
-# the USR argument and result exchange, CLS, and READY.  tools/romcalls.py
-# reads this to say which of a library's ROM calls the core answers.
-SERVED = (0x0A7F, 0x0A9A, 0x01C9, 0x1A19)
+# the USR argument and result exchange, CLS, READY and the keyboard scan.
+# tools/romcalls.py reads this to say which of a library's ROM calls the
+# core answers.
+SERVED = (0x0A7F, 0x0A9A, 0x01C9, 0x1A19, 0x002B)
+# 002BH's last row, (unshifted, shifted): ENTER CLEAR BREAK UP DOWN LEFT
+# RIGHT SPACE (scan_keyboard)
+KEY_ROW6 = ((0x0D, 0x0D), (0x1F, 0x1F), (0x01, 0x01), (0x5B, 0x1B),
+            (0x0A, 0x1A), (0x08, 0x18), (0x09, 0x19), (0x20, 0x20))
+KEY_DEBOUNCE = (0x0DAC - 1) * 26 + 17      # 90,991 T-states, ~51 ms
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
 KBD_LO, KBD_HI = 0x3800, 0x3900
 TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz
@@ -362,6 +372,8 @@ class Machine:
             self.write(0x4122, cpu.hl >> 8)
             cpu.a = 2
             self.write(0x40AF, 2)
+        elif pc == 0x002B:
+            self.scan_keyboard()
         elif pc == 0x0A9A:
             # HL to the result, then the RET below: JP 0A9AH pops the
             # sentinel and ends the call, CALL 0A9AH returns to the routine.
@@ -387,6 +399,71 @@ class Machine:
         sp = cpu.sp
         cpu.pc = cpu.wz = self.ram[sp] | (self.ram[(sp + 1) & 0xFFFF] << 8)
         cpu.sp = (sp + 2) & 0xFFFF
+
+    def scan_keyboard(self):
+        """002BH, the Level II keyboard scan (Farvour, "Scan Keyboard", p.15,
+        and the driver at 03E3H-0457H): one instantaneous pass over rows
+        3801H-3840H.  A key counts only when it was up at the previous scan:
+        each row's bits are XORed with the copy in the work area at
+        4036H-403CH, the row is stored there, and the first row with a new
+        key -- lowest bit first -- ends the pass (later rows keep their old
+        copies).  No new key: A = 0, and the flags the driver's last RLC C
+        leaves (S only).  A new key: A = its code and the flags of CP 01H,
+        after the 20 ms debounce the ROM waits.  BREAK (01H) goes through
+        RST 28H, which returns at once on a machine without a DOS, so the
+        caller gets 01H.  The driver restores BC, DE, HL and IX.
+
+        The code is row * 8 + column + 40H, then:
+          @ A-Z      SHIFT adds 20H (lower case); SHIFT with DOWN-ARROW held
+                     subtracts 60H more (a control code)
+          0-9 : ;    30H-3BH; SHIFT flips bit 4 (SHIFT-0 is a space)
+          , - . /    2CH-2FH; SHIFT gives 3CH-3FH (< = > ?)
+          last row   ENTER 0DH, CLEAR 1FH, BREAK 01H, UP 5BH, DOWN 0AH,
+                     LEFT 08H, RIGHT 09H, SPACE 20H; SHIFT changes only the
+                     arrows, to 1BH 1AH 18H 19H (the codes the Level II
+                     manual gives; Farvour does not print the table)
+
+        The interpreter's PEEK of 4036H-403CH reads 255 where the machine's
+        start-up zeroed it, so the first scan of a session can miss a key
+        already down; the stores reach the write-set, and later calls see
+        the copies."""
+        cpu = self.cpu
+        code = None
+        for r in range(7):
+            row = self.read(0x3800 | (1 << r))
+            new = (row ^ self.ram[0x4036 + r]) & row
+            self.write(0x4036 + r, row)
+            if new:
+                col = (new & -new).bit_length() - 1
+                code = r * 8 + col + 0x40
+                break
+        if code is None:
+            cpu.a = 0
+            cpu.f = 0x80
+            return
+        shift = self.read(0x3880) & 1
+        if code < 0x60:                         # @ A-Z
+            if shift:
+                code += 0x20
+                if self.read(0x3840) & 0x10:    # DOWN-ARROW held
+                    code -= 0x60
+        elif code < 0x70:                       # 0-9 : ; , - . /
+            code -= 0x30
+            if code >= 0x3C:
+                code ^= 0x10
+            if shift:
+                code ^= 0x10
+        else:                                   # the last row
+            code = KEY_ROW6[code - 0x70][shift]
+        # the debounce: 0060H with BC = 0DACH, ((BC - 1) * 26 + 17) T-states
+        # by Farvour's formula (his comment says 20 ms; the loop is ~51 ms)
+        self.cycles += KEY_DEBOUNCE
+        self.since_tick += KEY_DEBOUNCE
+        cpu.a = code
+        r = (code - 1) & 0x1FF
+        cpu.f = ((r & 0x80) | (0x40 if (r & 0xFF) == 0 else 0) | 0x02
+                 | ((code ^ 1 ^ r) & 0x10) | (0x01 if code < 1 else 0)
+                 | (0x04 if ((code ^ 1) & (code ^ r) & 0x80) else 0))
 
     # ---- one call ------------------------------------------------------------
     def run(self, entry, arg, sp, argtype=4, mbf=(0, 0, 0, 0, 0, 0, 0, 0)):

@@ -340,6 +340,128 @@ class TestCalls(unittest.TestCase):
         self.assertIn('16445:0', sc.writes())
 
 
+class Keyboard(Scripted):
+    """Scripted, but a K request is answered from a matrix: {row: bits},
+    row 7 being SHIFT; a composite select ORs its rows, as the bus does."""
+
+    def __init__(self, rows):
+        Scripted.__init__(self)
+        self.rows = rows
+
+    def recv(self):
+        last = self.out[-1]
+        if last.startswith('K '):
+            sel = int(last[2:])
+            v = 0
+            for r in range(8):
+                if sel & (1 << r):
+                    v |= self.rows.get(r, 0)
+            return 'K %d' % v
+        return 'OK'
+
+
+# LD BC,1234H / LD DE,5678H / LD HL,9ABCH / CALL 002BH / LD (7100H),A /
+# LD (7104H),BC / LD (7106H),DE / LD (7108H),HL / PUSH AF / POP HL /
+# LD (710AH),HL / RET
+SCAN = bytes.fromhex('013412' '117856' '21BC9A' 'CD2B00' '320071'
+                     'ED430471' 'ED530671' '220871' 'F5' 'E1' '220A71' 'C9')
+
+
+def scan(rows, area=(0,) * 7):
+    """One call of SCAN with the matrix `rows` and the work area 4036H-403CH
+    holding `area`; returns (machine, A, F)."""
+    sc = Keyboard(rows)
+    m = Machine(sc.send, sc.recv)
+    m.ram[0x7000:0x7000 + len(SCAN)] = SCAN
+    m.known[0x7000:0x7000 + len(SCAN)] = b'\x01' * len(SCAN)
+    m.ram[0x4036:0x403D] = bytes(area)
+    m.run(0x7000, 0, 0xF000)
+    return m, m.ram[0x7100], m.ram[0x710A]
+
+
+class TestKeyboardScan(unittest.TestCase):
+    """002BH (Farvour p.15 and the driver at 03E3H): a key pressed since the
+    last scan, its code, and the work area that remembers the rows."""
+
+    def code(self, rows):
+        return scan(rows)[1]
+
+    def test_no_key_is_zero_and_the_registers_are_kept(self):
+        m, a, f = scan({})
+        self.assertEqual(a, 0)
+        self.assertEqual(f, 0x80, "the flags of the driver's last RLC C")
+        self.assertEqual(m.ram[0x7104:0x710A], bytes.fromhex('34127856BC9A'))
+
+    def test_a_letter_unshifted_and_shifted(self):
+        self.assertEqual(self.code({0: 0x02}), 0x41)                 # A
+        self.assertEqual(self.code({0: 0x02, 7: 1}), 0x61)           # SHIFT-A
+        self.assertEqual(self.code({0: 0x01}), 0x40)                 # @
+        self.assertEqual(self.code({3: 0x04, 7: 1}), 0x7A)           # SHIFT-Z
+
+    def test_shift_and_down_arrow_with_a_letter_is_a_control_code(self):
+        self.assertEqual(self.code({0: 0x08, 6: 0x10, 7: 1}), 0x03)  # C
+
+    def test_digits_and_punctuation(self):
+        for row, bit, plain, shifted in ((4, 0x01, 0x30, 0x20),     # 0, SHIFT-0 a space
+                                         (4, 0x02, 0x31, 0x21),     # 1 !
+                                         (5, 0x02, 0x39, 0x29),     # 9 )
+                                         (5, 0x04, 0x3A, 0x2A),     # : *
+                                         (5, 0x08, 0x3B, 0x2B),     # ; +
+                                         (5, 0x10, 0x2C, 0x3C),     # , <
+                                         (5, 0x20, 0x2D, 0x3D),     # - =
+                                         (5, 0x80, 0x2F, 0x3F)):    # / ?
+            self.assertEqual(self.code({row: bit}), plain, hex(plain))
+            self.assertEqual(self.code({row: bit, 7: 1}), shifted, hex(shifted))
+
+    def test_the_last_row(self):
+        for bit, plain, shifted in ((0x01, 0x0D, 0x0D), (0x02, 0x1F, 0x1F),
+                                    (0x08, 0x5B, 0x1B), (0x10, 0x0A, 0x1A),
+                                    (0x20, 0x08, 0x18), (0x40, 0x09, 0x19),
+                                    (0x80, 0x20, 0x20)):
+            self.assertEqual(self.code({6: bit}), plain, hex(plain))
+            self.assertEqual(self.code({6: bit, 7: 1}), shifted, hex(shifted))
+
+    def test_break_returns_01_with_z(self):
+        m, a, f = scan({6: 0x04})
+        self.assertEqual(a, 0x01)
+        self.assertTrue(f & 0x40, 'CP 01H left Z')
+
+    def test_a_key_is_nz(self):
+        self.assertFalse(scan({0: 0x02})[2] & 0x40)
+
+    def test_a_held_key_is_reported_once(self):
+        m, a, f = scan({0: 0x02}, area=(0x02, 0, 0, 0, 0, 0, 0))
+        self.assertEqual(a, 0)
+        m, a, f = scan({0: 0x06}, area=(0x02, 0, 0, 0, 0, 0, 0))
+        self.assertEqual(a, 0x42, 'B, pressed while A is held')
+
+    def test_the_work_area_keeps_the_rows_up_to_the_key(self):
+        m, a, f = scan({0: 0x02, 2: 0x01}, area=(0, 0, 0x55, 0, 0, 0, 0))
+        self.assertEqual(a, 0x41, 'the first row with a new key wins')
+        self.assertEqual(m.ram[0x4036], 0x02)
+        self.assertEqual(m.ram[0x4038], 0x55, 'rows after the key keep their copies')
+        m, a, f = scan({1: 0x01})
+        self.assertEqual(list(m.ram[0x4036:0x403D]), [0, 1, 0, 0, 0, 0, 0])
+
+    def test_the_work_area_reaches_the_write_set(self):
+        sc = Keyboard({1: 0x01})
+        m = Machine(sc.send, sc.recv)
+        m.ram[0x7000:0x7004] = bytes.fromhex('CD2B00C9')
+        m.known[0x7000:0x7004] = b'\x01' * 4
+        m.ram[0x4036:0x403D] = bytes(7)
+        m.run(0x7000, 0, 0xF000)
+        self.assertIn('16438:0,1', sc.writes())
+
+    def test_a_key_costs_the_debounce(self):
+        quiet = scan({})[0].cycles
+        key = scan({0: 0x02})[0].cycles
+        self.assertGreaterEqual(key - quiet, 90991)
+
+    def test_002bh_is_served(self):
+        from z80.coprocess import SERVED
+        self.assertIn(0x002B, SERVED)
+
+
 class TestFixtureLayout(unittest.TestCase):
 
     def test_routines_do_not_overlap_and_map_every_entry(self):
