@@ -2,9 +2,13 @@
 
 Input set:
     programs/runnable/   +   programs/blocked/   (all categories)
-  skipped: Model1/ and the zip archive (same content re-organised --
-  double-counts), dialect/ (non-Level-II), the large collection's
-  Detokenized/ (empty). The anchors in OCRsamples/ are read IN PLACE, never copied.
+  The set is PARTIAL, by ruling (2026-08-13, kept 2026-10-03 for
+  comparability): Model1/ is not swept.  Every listing measured here is
+  also in Model1/, but Model1/ holds about 1,600 to 1,800 distinct
+  listings that are in no measurement (the count depends on the dedup
+  filter; the 2026-09-30 audit, XM-16).  Also skipped: the zip archive,
+  dialect/ (non-Level-II), the large collection's Detokenized/ (empty).
+  The anchors in OCRsamples/ are read IN PLACE, never copied.
 
 THE SWEEP REFUSES TO PUBLISH COUNTS UNLESS BOTH ANCHOR SUITES PASS.
 The counting rule: "A count produced without both checks passing is not a
