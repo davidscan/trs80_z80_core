@@ -99,23 +99,6 @@ def strip_quoted(stmt):
     return ''.join(out)
 
 
-def has_usr(path):
-    """Does this listing name USR in CODE -- outside quoted strings and
-    comments?  The sweeps' population test (the 2026-09-26 audit, ZM-9:
-    a substring search counted 'USR' in message strings and REMs)."""
-    try:
-        prog = parse_program(read_source(path))
-    except Exception:
-        return False
-    for _lineno, _body, stmts in prog:
-        for st in stmts:
-            if is_comment(st):
-                continue
-            if 'USR' in strip_quoted(st).upper():
-                return True
-    return False
-
-
 def is_comment(stmt):
     s = stmt.lstrip()
     return s.startswith("'") or s[:3].upper() == 'REM'

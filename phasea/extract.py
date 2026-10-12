@@ -988,6 +988,21 @@ def count_nonprintable(text):
 # Top level
 # --------------------------------------------------------------------
 
+def has_usr_evidence(rep):
+    """THE definition of "this listing uses USR": a USR call, a DEF USR or
+    a 408EH vector POKE.  The gate (phasea/sweep.py) and both USR sweeps
+    count by it.  The sweeps once had their own substring test, which
+    took USR in DATA keyword tables and in damaged-byte text: 586 files
+    against this set's 559 (the 2026-09-30 audit, ZM-9)."""
+    return rep.usr_calls > 0 or bool(rep.usr_entries)
+
+
+def has_usr(path):
+    """has_usr_evidence() of the listing at `path`: the USR sweeps'
+    population test."""
+    return has_usr_evidence(extract_file(path))
+
+
 def extract_file(path):
     fname = os.path.basename(path)
     rep = FileReport(file=fname)

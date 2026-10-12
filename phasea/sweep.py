@@ -24,7 +24,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from phasea.extract import extract_file                        # noqa: E402
+from phasea.extract import extract_file, has_usr_evidence      # noqa: E402
 from phasea.classify import classify, ROM_NAMES                # noqa: E402
 
 # The corpus archive. The interpreter is NOT here any more (it moved to
@@ -250,7 +250,7 @@ def main(argv=None):
         rep, results = analyse(path)
         stats['files'] += 1
 
-        has_usr = rep.usr_calls > 0 or bool(rep.usr_entries)
+        has_usr = has_usr_evidence(rep)
         if has_usr:
             stats['files_with_usr'] += 1
             per_half[half]['files_with_usr'] += 1

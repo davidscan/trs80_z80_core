@@ -95,10 +95,11 @@ class TestBasicSurface(unittest.TestCase):
 
 
 class TestUsrPopulation(unittest.TestCase):
-    """ZM-9: the sweeps' population is USR named in code, not in text."""
+    """ZM-9: the sweeps' population is the extractor's USR evidence, the
+    gate's own definition: not USR in text, a DATA table or damaged bytes."""
 
     def probe(self, src):
-        from phasea.basic import has_usr
+        from phasea.extract import has_usr
         with tempfile.NamedTemporaryFile('w', suffix='.bas', delete=False) as fh:
             fh.write(src)
             path = fh.name
@@ -115,6 +116,14 @@ class TestUsrPopulation(unittest.TestCase):
         self.assertFalse(self.probe("10 'DEF USR=-578:B=USR(2500)\n"))
         self.assertFalse(self.probe('10 PRINT"  20 A%=USR(A%)"\n'))
         self.assertFalse(self.probe('990 DATA"KRULDS USRUK LURDS"\n'))
+
+    def test_usr_in_a_data_table_does_not(self):
+        # a keyword table in DATA, unquoted (BEECONV's shape)
+        self.assertFalse(self.probe('10 READ K$\n900 DATA PEEK,POKE,USR,VARPTR\n'))
+
+    def test_a_usr_entry_without_a_call_counts(self):
+        self.assertTrue(self.probe('10 DEF USR1=&H7F00\n'))
+        self.assertTrue(self.probe('10 POKE 16526,0:POKE 16527,127\n'))
 
 
 class TestLoaderIdioms(unittest.TestCase):

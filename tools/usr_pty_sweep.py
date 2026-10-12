@@ -34,9 +34,9 @@ def population(cls, files):
     if files:
         return [os.path.join(CORPUS, f) for f in files]
     if cls == 'all':
-        # USR named in code, not in a string or a REM (ZM-9)
+        # the extractor's USR evidence, as usr_sweep (ZM-9)
         sys.path.insert(0, HERE)
-        from phasea.basic import has_usr
+        from phasea.extract import has_usr
         return [f for f in sorted(glob.glob(CORPUS + '/runnable/*.bas') +
                                   glob.glob(CORPUS + '/blocked/*/*.bas'))
                 if has_usr(f)]

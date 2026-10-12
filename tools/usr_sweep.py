@@ -1,5 +1,5 @@
-"""The corpus USR sweep (FINDING 25): every listing that
-mentions USR, run three ways in batch -- no core, the real core, and the
+"""The corpus USR sweep (FINDING 25): every listing with USR evidence
+(a call, a DEF USR or a vector POKE: phasea.extract.has_usr), run three ways in batch -- no core, the real core, and the
 real core again as the same-build control -- and classified by what the
 core changed.  Measurement, not emulator: the corpus is read in place
 (the archive's programs/, runnable/ and blocked/*, through the `corpus`
@@ -38,10 +38,11 @@ def listings():
 
 
 def population(files=None):
-    # USR named in code, not in a message string or a REM (ZM-9: the
-    # substring search counted 41 non-callers into the published 606)
+    # the extractor's USR evidence, the gate's own definition (ZM-9: a
+    # substring search put 20 non-callers into the published 606, and
+    # 28 more, USR in DATA tables and damaged bytes, into the 586 after it)
     sys.path.insert(0, HERE)
-    from phasea.basic import has_usr
+    from phasea.extract import has_usr
     return [f for f in (listings() if files is None else files) if has_usr(f)]
 
 
