@@ -16,17 +16,18 @@ re-derive an encoding by hand.
 Every entry carries: mnemonic, operand pattern, encoding, length,
 cycle cost, flag effects, and the memory/port access it performs.
 
-CYCLE COSTS ARE CARRIED BUT LARGELY UNVALIDATED. Nothing in the Phase
-A gate measurement depends on them; they exist because the ruling
-requires the column and because omitting them would design out the
-offline sound-synthesis option. They are
-validated when the core is built against the single-step vectors.
-ONE PARTIAL EXTERNAL CHECK EXISTS (2026-09-07, FINDING 21): the Nano
-Systems reference card states that every index-half
-instruction costs its H/L-operand equivalent plus 4 T-states, and all
-92 of them satisfy that (tests/test_table.py). That is a rule holding
-over 92 entries, not a per-opcode table; the other 1688 are still
-unchecked against anything outside this file.
+CYCLE COSTS ARE VALIDATED BY THE SINGLE-STEP VECTORS, WITH TWO GAPS.
+The core returns these costs from every step, and
+tests/test_cpu_vectors.py compares each case's T-state count with
+len(case['cycles']) (all cases with Z80_VECTORS=all, as CI runs it).
+That checks 1604 of the 1780 entries, both costs of a conditional
+where the cases take both paths. Not checked against anything outside
+this file: the 176 'invalid' ED entries (upstream ships no tests for
+them), and the 16 T-state exit of LDIR, LDDR, CPDR and OTDR, which no
+upstream case reaches (every case repeats). An earlier, narrower check
+(2026-09-07, FINDING 21) still stands in tests/test_table.py: the Nano
+Systems reference card's rule that every index-half instruction costs
+its H/L-operand equivalent plus 4 T-states holds for all 92 of them.
 
 The `undoc` flag means "not in Zilog's published instruction set", and
 it is load-bearing: the inverse (assembler) index prefers a documented

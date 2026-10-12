@@ -18,9 +18,10 @@ WHAT THIS VALIDATES THAT PHASE A COULD NOT. FINDING 1 validated the
 table's STRUCTURE -- 185 hand-authored vectors (six lists in
 tests/test_table.py; the count read 176 until 2026-09-11), mnemonics,
 declared-length-equals-consumed, inverse round-trip -- and recorded
-that cycle costs are carried but UNVALIDATED. These vectors validate
+that cycle costs were carried but unvalidated. These vectors validate
 execution semantics, every flag bit, and (via len(cycles)) the cost
-column.
+column, which tests/test_cpu_vectors.py checks; the two gaps no
+upstream case reaches are listed in z80/table.py's docstring.
 
 PINNED TO A SHA. The upstream repo is live and its tests get corrected
 over time ("Re-generate the tests." is the pinned commit's own

@@ -24,11 +24,12 @@ Z80 instruction space landing on the same set.
 The 176 entries our table marks 'invalid' are all on the ED page, and
 are exactly the ED opcodes upstream ships no tests for.
 
-CYCLE COSTS ARE STILL UNVALIDATED HERE. This file pins the SHAPE of
-the agreement (which encodings exist), not the SEMANTICS (what they
-do). FINDING 1's open item -- the unvalidated cycle-cost column --
-closes when the core actually runs these vectors, not before. Nothing
-in this file should be read as validating execution.
+THIS FILE VALIDATES NO CYCLE COST. It pins the SHAPE of the agreement
+(which encodings exist), not the SEMANTICS (what they do). Execution
+and the cost column are validated where the core runs the cases,
+tests/test_cpu_vectors.py; what that leaves unchecked is listed in
+z80/table.py's docstring. Nothing in this file should be read as
+validating execution.
 """
 
 import json
