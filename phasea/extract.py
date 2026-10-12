@@ -229,7 +229,36 @@ DEFUSR_RE = re.compile(r'^\s*DEF\s*USR\s*(\d?)\s*=\s*(.+)$', re.I | re.S)
 VARPTR_RE = re.compile(r'VARPTR\s*\(\s*([A-Za-z][A-Za-z0-9]*[%!#$]?)\s*'
                        r'(?:\(\s*([^)]*)\s*\))?\s*\)', re.I)
 USRCALL_RE = re.compile(r'\bUSR\s*\d?\s*\(', re.I)
-ARRAY_READ_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9]*%)\s*\(\s*([^)]+)\s*\)\s*$')
+# one subscript: READ OB(O,K) fills a 2-D table, never a linear block
+ARRAY_READ_RE = re.compile(r'^\s*([A-Za-z][A-Za-z0-9]*%?)\s*\(\s*([^),]+)\s*\)\s*$')
+DEFTYPE_RE = re.compile(r'^\s*DEF\s*(INT|SNG|DBL|STR)\s*(.+)$', re.I | re.S)
+
+
+def defint_letters(prog):
+    """The first letters a DEFINT leaves integer, in program order (a later
+    DEFSNG, DEFDBL or DEFSTR takes a letter back).  An array named without
+    a suffix is integer only under one of them; otherwise its elements are
+    4-byte singles, not the VARPTR-array idiom's 2-byte words."""
+    out = set()
+    for _ln, _body, stmts in prog:
+        for whole in stmts:
+            if is_comment(whole):
+                continue
+            for st in _clauses(whole):
+                m = DEFTYPE_RE.match(st)
+                if not m:
+                    continue
+                letters = set()
+                for part in m.group(2).split(','):
+                    r = re.match(r'\s*([A-Za-z])\s*(?:-\s*([A-Za-z]))?\s*$', part)
+                    if r:
+                        a, b = r.group(1).upper(), (r.group(2) or r.group(1)).upper()
+                        letters.update(chr(c) for c in range(ord(a), ord(b) + 1))
+                if m.group(1).upper() == 'INT':
+                    out |= letters
+                else:
+                    out -= letters
+    return out
 
 
 def split_args(s):
@@ -318,6 +347,7 @@ def find_loaders(path, prog, stream, table):
     fname = os.path.basename(path)
     packed_ok = varptr_strings(prog)
     arrays_ok = varptr_arrays(prog)
+    int_letters = defint_letters(prog)
 
     # A RESTORE on the line BEFORE the loader redirects it too (REPLY 4
     # item c: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
@@ -462,6 +492,9 @@ def find_loaders(path, prog, stream, table):
 
             # ---- VARPTR-array idiom: READ straight into an integer array
             am = ARRAY_READ_RE.match(read_targets[0]) if read_targets else None
+            if (am and not am.group(1).endswith('%')
+                    and am.group(1)[0].upper() not in int_letters):
+                am = None          # a single-precision array (ZL-9)
             if poke is None and am and len(read_targets) == 1:
                 arr = am.group(1).upper()
                 if start is None or end is None or step in (None, 0):

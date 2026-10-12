@@ -486,6 +486,29 @@ class TestVarptrIdiom(unittest.TestCase):
                      '30 DATA 5,6,7\n'), 'candidate-ml')
         self.assertEqual(p.idiom, 'varptr-array')
 
+    def test_an_array_defint_makes_integer_is_read_too(self):
+        """ZL-9: DOSCHECK's `READ US(X)` under DEFINT A-Z is the same idiom
+        as `READ US%(X)`; a single-precision array is not (4-byte elements)."""
+        p = only(run('10 DEFINT A-Z:DIM US(2):FOR X=0 TO 2:READ US(X):NEXT\n'
+                     '20 DEF USR 9=VARPTR(US(0))\n'
+                     '30 DATA 32717,258,-1\n'), 'candidate-ml')
+        self.assertEqual(p.idiom, 'varptr-array')
+        self.assertEqual(p.bytes, [0xCD, 0x7F, 0x02, 0x01, 0xFF, 0xFF])
+        rep = run('10 DIM US(2):FOR X=0 TO 2:READ US(X):NEXT\n'
+                  '20 DEF USR=VARPTR(US(0))\n'
+                  '30 DATA 32717,258,-1\n')
+        self.assertFalse([q for q in rep.payloads if q.idiom == 'varptr-array'])
+        rep = run('10 DEFINT A-Z:DIM OB(1,1)\n'
+                  '20 FOR O=0 TO 1:FOR K=0 TO 1:READ OB(O,K):NEXT K,O\n'
+                  '30 V=VARPTR(OB(0,0))\n'
+                  '40 DATA 1,2,3,4\n')
+        self.assertFalse([q for q in rep.payloads if q.idiom == 'varptr-array'])
+        rep = run('10 DEFINT A-Z:DEFSNG U\n'
+                  '20 DIM US(2):FOR X=0 TO 2:READ US(X):NEXT\n'
+                  '30 DEF USR=VARPTR(US(0))\n'
+                  '40 DATA 32717,258,-1\n')
+        self.assertFalse([q for q in rep.payloads if q.idiom == 'varptr-array'])
+
     def test_varptr_entry_is_recorded_as_symbolic(self):
         rep = run('10 DIM US%(1):FOR X=0 TO 1:READ US%(X):NEXT\n'
                   '20 DEF USR=VARPTR(US%(0))\n'
