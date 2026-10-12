@@ -97,7 +97,10 @@ class TestTheSweepEnvironmentIsItsOwn(unittest.TestCase):
     HOSTILE = {'TRS80_USR': 'strict', 'TRS80_USR_TRACE': '2',
                'TRS80_SOUND': 'auto', 'TRS80_SOUND_WAV': '/tmp/w.wav',
                'TRS80_PRINTER': '/tmp/lp', 'TRS80_EXT': '1',
-               'TRS80_MHZ': '1.77', 'TRS80_MANFILE': '/tmp/man.txt'}
+               'TRS80_MHZ': '1.77', 'TRS80_MANFILE': '/tmp/man.txt',
+               # ZL-8's own variable, and one no interpreter has yet: the
+               # scrub is categorical, not a list (ZM-5)
+               'TRS80_MEMORY': 'host', 'TRS80_NOT_A_KNOB_YET': '1'}
 
     def envs(self):
         keep = dict(os.environ)
@@ -125,6 +128,29 @@ class TestTheSweepEnvironmentIsItsOwn(unittest.TestCase):
         """PATH and HOME are not the sweep's business to remove."""
         for env in self.envs():
             self.assertIn('PATH', env)
+
+
+class TestEachRunHasAFreshCwd(unittest.TestCase):
+    """A file a listing wrote reached the next run under a shared cwd, so
+    the stub/core/control comparison measured leftovers (ZL-9; ZM-5: no
+    test failed without the fix)."""
+
+    def test_a_run_never_sees_the_last_runs_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = os.path.join(d, 'basic')
+            with open(fake, 'w') as f:
+                f.write('#!/bin/sh\n[ -e left ] && echo LEFTOVER\n: > left\n')
+            os.chmod(fake, 0o755)
+            saved = usr_sweep.BASIC
+            usr_sweep.BASIC = fake
+            try:
+                cwd = os.path.join(d, 'cwd')
+                first = usr_sweep.run('x.bas', '', cwd)
+                second = usr_sweep.run('x.bas', '', cwd)
+            finally:
+                usr_sweep.BASIC = saved
+        self.assertEqual(first['out'], '')
+        self.assertEqual(second['out'], '')
 
 
 def tree(d, names):
@@ -218,6 +244,24 @@ class TestTheInputSetIsPinned(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn('not the pinned', out)
         self.assertEqual(kept, '[{"file": "earlier"}]')
+
+    def test_both_sweeps_take_the_extractors_usr_population(self):
+        """ZM-9: USR in a DATA keyword table is no USR program; ZM-5: no
+        test failed when either sweep's population() took every listing."""
+        with tempfile.TemporaryDirectory() as d:
+            progs = tree(d, self.NAMES)
+            table = os.path.join(progs, 'runnable', 'kwtable.bas')
+            with open(table, 'w') as f:
+                f.write('10 READ K$\n900 DATA PEEK,POKE,USR,VARPTR\n')
+            want = sorted(os.path.join(progs, n) for n in self.NAMES if 'usr' in n)
+            files = sorted(os.path.join(progs, n) for n in self.NAMES) + [table]
+            self.assertEqual(sorted(usr_sweep.population(files)), want)
+            saved = usr_pty_sweep.CORPUS
+            usr_pty_sweep.CORPUS = progs
+            try:
+                self.assertEqual(sorted(usr_pty_sweep.population('all', None)), want)
+            finally:
+                usr_pty_sweep.CORPUS = saved
 
     def test_pty_sweep_refuses_an_empty_population(self):
         self.assertIn('empty', usr_pty_sweep.population_problem('no-usr-reached', None, []))

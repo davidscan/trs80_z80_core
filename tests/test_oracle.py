@@ -487,6 +487,10 @@ class TestTheEnvironmentDoesNotLeakIn(unittest.TestCase):
                 'TRS80_USR_TRACE': '2',
                 'TRS80_EXT': '1',
                 'TRS80_PRINTER': '/tmp/lp',
+                # ZL-8's own variable, and one no interpreter has yet: the
+                # scrub is categorical, not a list (ZM-5)
+                'TRS80_MEMORY': 'host',
+                'TRS80_NOT_A_KNOB_YET': '1',
             })
             env = oracle.base_env(TRS80_POKELOG='/tmp/x')
         finally:
@@ -496,7 +500,8 @@ class TestTheEnvironmentDoesNotLeakIn(unittest.TestCase):
         self.assertEqual(env['TRS80_DUMB'], '1')
         self.assertEqual(env['TRS80_POKELOG'], '/tmp/x')
         for v in ('TRS80_USR', 'TRS80_SOUND', 'TRS80_USR_TRACE',
-                  'TRS80_EXT', 'TRS80_PRINTER'):
+                  'TRS80_EXT', 'TRS80_PRINTER', 'TRS80_MEMORY',
+                  'TRS80_NOT_A_KNOB_YET'):
             self.assertNotIn(v, env, v)
 
     def test_a_run_under_a_hostile_environment_measures_the_same(self):

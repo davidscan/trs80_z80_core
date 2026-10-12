@@ -554,6 +554,19 @@ class TestUsrEvidence(unittest.TestCase):
         rep = run("10 S=USR(1):T=USR(2)\n20 REM USR(3)\n")
         self.assertEqual(rep.usr_calls, 2)
 
+    def test_usr_in_a_string_or_a_quote_comment_is_no_call(self):
+        """ZM-5: the blanking behind the population (ZM-9) had no test that
+        failed without it."""
+        self.assertEqual(run('10 PRINT "X=USR(0)"\n').usr_calls, 0)
+        self.assertEqual(run("10 CLS:' X=USR(0)\n").usr_calls, 0)
+        self.assertFalse(run('10 PRINT "X=USR(0)"\n20 PRINT "DEFUSR=1"\n').usr_entries)
+
+    def test_a_quoted_def_usr_makes_no_packed_string(self):
+        """ZM-5: VARPTR(A$) beside DEF USR in a message is text, not a sink."""
+        from phasea.extract import varptr_strings
+        prog = parse_program('10 A$="ABC"\n20 PRINT "DEFUSR=";VARPTR(A$)\n')
+        self.assertEqual(varptr_strings(prog), set())
+
 
 class TestPokeSequences(unittest.TestCase):
 
