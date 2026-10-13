@@ -84,14 +84,18 @@ def input_files():
 
 # The input set, pinned 2026-10-03 (XM-13, the 2026-09-30 audit): a stray
 # copy of one listing in runnable/ moved every F28 number and the sweep
-# still printed them with exit 0.  The set is unchanged since 2026-08-14
-# and reproduces F28.  A run on any other set refuses unless told to
+# still printed them with exit 0.  F28 was measured on the set as it stood
+# from 2026-08-14 to 2026-10-12 (cbdf3348f32f01e12a0f24da773bc91e0d383625);
+# re-pinned 2026-10-12 at trs80_programs c9d58f53, where 169 listings moved
+# from blocked/ to runnable/ (CMD"T" and CMD"R" now run), 23 re-filed
+# inside blocked/ and 73 headers rewritten in place.  A run on any other
+# set refuses unless told to
 # accept it; re-pin only with the corpus change recorded beside the
 # numbers.  The fingerprint is shasum's over the files input_files() reads;
 # today those are exactly the shell's, so it can be checked by hand:
 #   cd corpus/programs && LC_ALL=C find runnable blocked -type f \( -iname '*.bas' \
 #     -o -iname '*.txt' \) -print0 | LC_ALL=C sort -z | xargs -0 shasum | shasum
-INPUT_SET = (4339, 'cbdf3348f32f01e12a0f24da773bc91e0d383625')
+INPUT_SET = (4339, 'e2da25987d23a17e6f2784f380f1ba7f9851efdf')
 
 
 def fingerprint(paths, root=None):
