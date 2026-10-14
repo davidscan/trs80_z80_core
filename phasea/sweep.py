@@ -2,11 +2,11 @@
 
 Input set:
     programs/runnable/   +   programs/blocked/   (all categories)
-  The set is PARTIAL, by ruling (2026-08-13, kept 2026-10-03 for
-  comparability): Model1/ is not swept.  Every listing measured here is
-  also in Model1/, but Model1/ holds about 1,600 to 1,800 distinct
-  listings that are in no measurement (the count depends on the dedup
-  filter; the 2026-09-30 audit, XM-16).  Also skipped: the zip archive,
+  Since 2026-10-13 the set includes the Model1-only listings (the
+  2026-09-30 audit, XM-16): Model1/ itself is not swept, because every
+  listing in it that a detokenizer can read is now in runnable/,
+  blocked/ or dialect/ (the corpus's tools/model1_intake.py).  Also
+  skipped: the zip archive,
   dialect/ (non-Level-II), the large collection's Detokenized/ (empty).
   The anchors in OCRsamples/ are read IN PLACE, never copied.
 
@@ -88,14 +88,20 @@ def input_files():
 # from 2026-08-14 to 2026-10-12 (cbdf3348f32f01e12a0f24da773bc91e0d383625);
 # re-pinned 2026-10-12 at trs80_programs c9d58f53, where 169 listings moved
 # from blocked/ to runnable/ (CMD"T" and CMD"R" now run), 23 re-filed
-# inside blocked/ and 73 headers rewritten in place.  A run on any other
+# inside blocked/ and 73 headers rewritten in place.  Re-pinned 2026-10-13
+# at trs80_programs 511b9bb4, A NEW BASELINE: the 1,728 Model1-only
+# listings joined (1,755 judged, 27 of them filed as other dialects), so
+# numbers measured on the 4,339 set (e2da2598, cbdf3348) are not compared
+# with numbers on this one.  The set was 182f231b at the intake and is
+# 3a7a5442 since trs80_programs ba11d1fb regenerated the listings with the
+# colon before ELSE taken back (3,874 changed, only ELSE lines).  A run on any other
 # set refuses unless told to
 # accept it; re-pin only with the corpus change recorded beside the
 # numbers.  The fingerprint is shasum's over the files input_files() reads;
 # today those are exactly the shell's, so it can be checked by hand:
 #   cd corpus/programs && LC_ALL=C find runnable blocked -type f \( -iname '*.bas' \
 #     -o -iname '*.txt' \) -print0 | LC_ALL=C sort -z | xargs -0 shasum | shasum
-INPUT_SET = (4339, 'e2da25987d23a17e6f2784f380f1ba7f9851efdf')
+INPUT_SET = (6067, '3a7a5442de808c336fab2a534e7f45a89ddf7667')
 
 
 def fingerprint(paths, root=None):
