@@ -511,11 +511,14 @@ back and the core executes.
   LEVEL II ROM routine to work. Actually it stops with `?FC` and
   `USR CORE: rom called 0500H, no ROM here`. The ROM is copyrighted and not
   distributed, so ROM services are rewritten from their documentation one
-  at a time. Five are provided: 01C9H (CLS), 0A7FH (the `USR` argument
-  into HL), 0A9AH (HL back to BASIC as the result), 1A19H (READY: the
-  call ends and BASIC ends the program at the prompt) and 002BH (the
-  keyboard scan: the code of a key pressed since the last scan, else 0). Code that reads ROM
-  bytes gets nothing meaningful either.
+  at a time. Ten are provided: 01C9H (CLS), 0A7FH (the `USR` argument
+  into HL, or WRA1 once the routine has changed it), 0A9AH (HL back to
+  BASIC as the result), 1A19H (READY: the call ends and BASIC ends the
+  program at the prompt), 002BH (the keyboard scan: the code of a key
+  pressed since the last scan, else 0), 0049H (wait for a key), 0060H
+  (delay BC), 01D3H (RANDOM), 14C9H (RND, on BASIC's own sequence) and
+  05D9H (a line from the keyboard, echoed). Code that reads ROM bytes
+  gets nothing meaningful either.
 - **Empty memory reads FFH, which is `RST 38H`.** You might expect a call to
   an address nothing was loaded at to fail at that address. Actually the
   message names 0038H: `rom called 0038H, no ROM here -- no routine at

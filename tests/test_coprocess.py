@@ -462,6 +462,198 @@ class TestKeyboardScan(unittest.TestCase):
         self.assertIn(0x002B, SERVED)
 
 
+class Timeline(Scripted):
+    """Scripted, with a keyboard that changes between scans: `states` is a
+    list of {row: bits}, one per pass of 002BH (a pass starts with its
+    read of row 0, 3801H); the last state holds once the list runs out."""
+
+    def __init__(self, states):
+        Scripted.__init__(self)
+        self.states = list(states)
+        self.scans = -1
+
+    def recv(self):
+        last = self.out[-1]
+        if last.startswith('K '):
+            sel = int(last[2:])
+            if sel == 0x01:
+                self.scans += 1
+            rows = self.states[min(max(self.scans, 0), len(self.states) - 1)]
+            v = 0
+            for r in range(8):
+                if sel & (1 << r):
+                    v |= rows.get(r, 0)
+            return 'K %d' % v
+        return 'OK'
+
+
+def timed(code, states, arg=0):
+    sc = Timeline(states)
+    m = Machine(sc.send, sc.recv)
+    m.ram[0x7000:0x7000 + len(code)] = code
+    m.known[0x7000:0x7000 + len(code)] = b'\x01' * len(code)
+    m.ram[0x4036:0x403D] = bytes(7)
+    m.run(0x7000, arg, 0xF000)
+    return m, sc
+
+
+def le16(n):
+    return '%02X%02X' % (n & 0xFF, (n >> 8) & 0xFF)
+
+
+def rnd_call(n, dst):
+    """LD A,2 / LD (40AFH),A / LD HL,n / LD (4121H),HL / CALL 14C9H /
+    LD HL,(4121H) / LD (dst),HL"""
+    return '3E02' '32AF40' '21' + le16(n) + '222141' 'CDC914' '2A2141' '22' + le16(dst)
+
+
+KEY_A, KEY_B, KEY_C = {0: 0x02}, {0: 0x04}, {0: 0x08}
+ENTER, BREAK, LEFT = {6: 0x01}, {6: 0x04}, {6: 0x20}
+UP = {}
+
+# LD HL,7200H / LD B,size / CALL 05D9H / LD (7100H),HL / LD (7102H),BC /
+# LD (7104H),A / PUSH AF / POP DE / LD (7106H),DE / RET
+def line_input(size):
+    return bytes.fromhex('210072' '06%02X' % size + 'CDD905' '220071' 'ED430271'
+                         '320471' 'F5' 'D1' 'ED530671' 'C9')
+
+
+class TestLevelIIEntries(unittest.TestCase):
+    """The entries built 2026-10-14 for Eliminator: 0049H, 0060H, 01D3H,
+    14C9H and 05D9H (Farvour ch. 2), and 0A7FH reading WRA1 once a
+    routine has changed it."""
+
+    def test_they_are_served(self):
+        from z80.coprocess import SERVED
+        for a in (0x0049, 0x0060, 0x01D3, 0x14C9, 0x05D9):
+            self.assertIn(a, SERVED)
+
+    def test_0049_waits_for_a_key_and_ticks_meanwhile(self):
+        # CALL 0049H / LD (7100H),A / RET; 100 idle scans, then A
+        m, sc = timed(bytes.fromhex('CD4900' '320071' 'C9'), [UP] * 100 + [KEY_A])
+        self.assertEqual(m.ram[0x7100], 0x41)
+        self.assertGreaterEqual(len([l for l in sc.out if l.startswith('T ')]), 3,
+                                'the wait ticks: BREAK and pacing still work')
+
+    def test_0049_breaks_out_on_break(self):
+        sc = Timeline([UP])
+        sc.replies = []
+        m = Machine(sc.send, lambda: 'BREAK' if sc.out[-1].startswith('T ') else sc.recv())
+        code = bytes.fromhex('CD4900' 'C9')
+        m.ram[0x7000:0x7004] = code
+        m.known[0x7000:0x7004] = b'\x01' * 4
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(sc.ret()['break'], '1')
+
+    def test_0060_delays_bc_passes(self):
+        # LD BC,n / CALL 0060H / LD (7100H),BC / LD (7102H),A / RET
+        def run(n):
+            m, sc = machine(bytes.fromhex('01' + le16(n) + 'CD6000' 'ED430071' '320271' 'C9'))
+            m.ram[0x7100:0x7103] = b'\xff\xff\xff'
+            m.run(0x7000, 0, 0xF000)
+            return m, sc
+        one, _ = run(1)
+        k, _ = run(1000)
+        self.assertEqual(k.cycles - one.cycles, 999 * 26, "Farvour: ((BC-1)*26+17) T-states")
+        self.assertEqual(list(k.ram[0x7100:0x7103]), [0, 0, 0], 'BC = 0 and A = 0 after')
+        big, sc = run(0)
+        self.assertEqual(big.cycles - one.cycles, 65535 * 26, 'BC = 0 is 65536 passes')
+        self.assertGreater(len([l for l in sc.out if l.startswith('T ')]), 100)
+
+    def test_01d3_puts_r_in_the_seed_middle_byte(self):
+        # LD A,55H / LD R,A / CALL 01D3H / LD (7100H),A / RET
+        m, sc = machine(bytes.fromhex('3E55' 'ED4F' 'CDD301' '320071' 'C9'))
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x40AB], m.ram[0x7100])
+        self.assertEqual(m.ram[0x7100] & 0x7F, 0x56, 'R counted on from 55H by the CALL fetch')
+        self.assertIn('16555:%d' % m.ram[0x7100], sc.writes())
+
+    def test_14c9_draws_basics_rnd_sequence(self):
+        # the anchors are the interpreter's own BASIC RND from seed 00 15 00:
+        # RND(50) RND(50) RND(32767) RND(1) = 46 46 7051 1, seed then 7C 4F 29
+        code = rnd_call(50, 0x7100) + rnd_call(50, 0x7102) + rnd_call(32767, 0x7104) + rnd_call(1, 0x7106) + 'C9'
+        m, sc = machine(bytes.fromhex(code))
+        m.ram[0x40AA:0x40AD] = bytes([0, 21, 0])
+        m.run(0x7000, 0, 0xF000)
+        got = [m.ram[a] | m.ram[a + 1] << 8 for a in (0x7100, 0x7102, 0x7104, 0x7106)]
+        self.assertEqual(got, [46, 46, 7051, 1])
+        self.assertEqual(list(m.ram[0x40AA:0x40AD]), [124, 79, 41])
+        self.assertIn('16554:124,79,41', sc.writes(), 'the seed goes back to BASIC')
+        self.assertEqual(m.ram[0x40AF], 2)
+
+    def test_14c9_of_zero_is_a_single_below_one(self):
+        # BASIC: seed 00 15 00, RND(0) = .914084, seed then 65 01 EA
+        m, sc = machine(bytes.fromhex(rnd_call(0, 0x7100) + 'C9'))
+        m.ram[0x40AA:0x40AD] = bytes([0, 21, 0])
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(list(m.ram[0x40AA:0x40AD]), [101, 1, 234])
+        self.assertEqual(m.ram[0x40AF], 4)
+        x = m.wra1(0)
+        self.assertEqual(x, ((234 << 16) | (1 << 8) | 101) / 2.0 ** 24)
+        self.assertEqual('%.6f' % x, '0.914084')
+
+    def test_14c9_of_a_negative_number_is_fc(self):
+        m, sc = machine(bytes.fromhex(rnd_call(-1, 0x7100) + 'C9'))
+        with self.assertRaises(CoreError) as cm:
+            m.run(0x7000, 0, 0xF000)
+        self.assertEqual(cm.exception.code, 'fc')
+
+    def test_0a7f_reads_wra1_once_the_routine_changed_it(self):
+        # Eliminator: LD HL,3 / LD (4121H),HL / CALL 14C9H / CALL 0A7FH, with
+        # the type flag already 2; HL is RND's integer, not the USR argument
+        code = '3E02' '32AF40' '210300' '222141' 'CDC914' 'CD7F0A' '220071' 'C9'
+        m, sc = machine(bytes.fromhex(code))
+        m.run(0x7000, 999, 0xF000)
+        v = m.ram[0x7100] | m.ram[0x7101] << 8
+        self.assertIn(v, (1, 2, 3))
+        self.assertEqual(v, m.ram[0x4121] | m.ram[0x4122] << 8)
+
+    def test_0a7f_still_takes_the_argument_when_wra1_is_untouched(self):
+        m, sc = machine(bytes.fromhex('CD7F0A' '220071' 'C9'))
+        m.run(0x7000, 1234, 0xF000)
+        self.assertEqual(m.ram[0x7100] | m.ram[0x7101] << 8, 1234)
+
+    def test_wra1_reads_each_type(self):
+        m, sc = machine(bytes.fromhex('C9'))
+        m.ram[0x40AF] = 2
+        m.ram[0x4121:0x4123] = bytes([0xFE, 0xFF])
+        self.assertEqual(m.wra1(0), -2.0)
+        m.ram[0x40AF] = 4
+        m.ram[0x4121:0x4125] = bytes([0x00, 0x00, 0x20, 0x82])     # 2.5
+        self.assertEqual(m.wra1(0), 2.5)
+        m.ram[0x4121:0x4125] = bytes([0x00, 0x00, 0xA0, 0x82])     # -2.5
+        self.assertEqual(m.wra1(0), -2.5)
+        m.ram[0x40AF] = 8
+        m.ram[0x411D:0x4125] = bytes([0, 0, 0, 0, 0, 0, 0x40, 0x81])   # 1.5
+        self.assertEqual(m.wra1(0), 1.5)
+        m.ram[0x40AF] = 3
+        with self.assertRaises(CoreError):
+            m.wra1(0)
+
+    def test_05d9_takes_a_line_with_a_backspace(self):
+        keys = [KEY_A, UP, KEY_B, UP, LEFT, UP, KEY_C, UP, ENTER]
+        m, sc = timed(line_input(10), keys)
+        self.assertEqual(bytes(m.ram[0x7200:0x7203]), b'AC\r')
+        self.assertEqual(m.ram[0x7100] | m.ram[0x7101] << 8, 0x7200, 'HL = the buffer')
+        self.assertEqual((m.ram[0x7103], m.ram[0x7102]), (2, 10), 'B = typed, C = size')
+        self.assertEqual(m.ram[0x7104], 0x0D)
+        self.assertFalse(m.ram[0x7106] & 1, 'no carry: ENTER')
+        self.assertEqual(bytes(m.ram[0x3C00:0x3C02]), b'AC', 'echoed; the B overwritten by C')
+        self.assertEqual(m.ram[0x4020] | m.ram[0x4021] << 8, 0x3C40, 'ENTER: the next line')
+
+    def test_05d9_break_sets_carry(self):
+        m, sc = timed(line_input(10), [KEY_A, UP, BREAK])
+        self.assertEqual(bytes(m.ram[0x7200:0x7202]), b'A\r')
+        self.assertEqual(m.ram[0x7104], 0x01)
+        self.assertTrue(m.ram[0x7106] & 1, 'carry: BREAK')
+        self.assertEqual(m.ram[0x7103], 1)
+
+    def test_05d9_a_full_buffer_takes_only_enter(self):
+        m, sc = timed(line_input(1), [KEY_A, UP, KEY_B, UP, ENTER])
+        self.assertEqual(bytes(m.ram[0x7200:0x7202]), b'A\r')
+        self.assertEqual(m.ram[0x7103], 1)
+
+
 class TestFixtureLayout(unittest.TestCase):
 
     def test_routines_do_not_overlap_and_map_every_entry(self):

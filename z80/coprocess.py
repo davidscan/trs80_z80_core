@@ -6,7 +6,7 @@ video streamed and the keyboard served live during the call.  This
 module is the machine around the pure CPU in `z80.cpu`: 64K of RAM that
 reads 255 wherever no frame defined a byte, the address-dispatched
 handling of program-counter entry into ROM space (the sentinel 2FFDH
-ends the call, five documented entry points are served as HLE traps,
+ends the call, ten documented entry points are served as HLE traps,
 anything else is `ERR rom`), ticks for BREAK and pacing, and the
 line-oriented transport.
 
@@ -36,6 +36,22 @@ the RET the ROM routine would have.
            the last scan, else 0, through the work area at 4036H-403CH
            (Machine.scan_keyboard).  Built 2026-10-12 for Defense
            Command's high-score entry.
+    0049H  wait for a key: 002BH until it reports one; A = its code.
+    0060H  delay: BC counts ((BC - 1) * 26 + 17) T-states; BC and A
+           return 0.
+    01D3H  RANDOM: the refresh register R becomes the RND seed's middle
+           byte (40ABH), and A.
+    14C9H  RND: WRA1 (by the type flag at 40AFH) through CINT; 0 leaves
+           a single 0 <= x < 1 in WRA1, n > 0 the integer 1..n, negative
+           is ?FC (`ERR fc`).  The seed at 40AA-40ACH steps as BASIC's
+           RND steps it, so the two share one sequence.
+    05D9H  line input: HL = the buffer, B = its size; echoed on the
+           screen at the cursor (4020H); ENTER or BREAK ends it (BREAK
+           sets carry), with 0DH stored after the text, HL = the buffer,
+           B = the characters typed, C = the size.
+           The last five were built 2026-10-14 for Eliminator (Adventure
+           International, 1981), from Farvour's chapter 2 descriptions
+           and his notes on the routines.
 
 Port FFH reads 127 (the 64-character mode value the interpreter's INP
 returns) and every other port 255.  OUT (FFH) has two effects and the
@@ -78,17 +94,54 @@ def csng(x):
     q = 2.0 ** (e - 23)
     r = math.floor(ax / q + 0.5) * q
     return -r if x < 0 else r
+def single_add(a, b):
+    """The ROM's single add (0716H) as the interpreter's sadd has it: the
+    exact sum rounded, unless the operands are more than 8 binary places
+    apart and not both whole numbers below 2^24; then the smaller is cut
+    to one guard byte below the larger's 24 bits first, and a smaller one
+    25 or more places down is lost.  RND(n) adds its 1 this way."""
+    if b == 0:
+        return a
+    if a == 0:
+        return b
+    t, ab = abs(a), abs(b)
+    if (ab * 256 >= t) if t >= ab else (t * 256 >= ab):
+        return csng(a + b)
+    if t < 16777216 and ab < 16777216 and a == int(a) and b == int(b):
+        return csng(a + b)
+    ea, eb = math.frexp(a)[1], math.frexp(b)[1]
+    if ea < eb:
+        a, b, ea, eb = b, a, eb, ea
+    if ea - eb >= 25:
+        return a
+    g = 2.0 ** (ea - 32)
+    cut = math.floor(abs(b) / g) * g
+    return csng(a + (-cut if b < 0 else cut))
+
+
 ROM_TOP = 0x3000
 # The ROM entry points rom_entry() serves as traps (the sentinel apart):
 # the USR argument and result exchange, CLS, READY and the keyboard scan.
 # tools/romcalls.py reads this to say which of a library's ROM calls the
 # core answers.
-SERVED = (0x0A7F, 0x0A9A, 0x01C9, 0x1A19, 0x002B)
+SERVED = (0x0A7F, 0x0A9A, 0x01C9, 0x1A19, 0x002B, 0x0049, 0x0060, 0x01D3,
+          0x14C9, 0x05D9)
 # 002BH's last row, (unshifted, shifted): ENTER CLEAR BREAK UP DOWN LEFT
 # RIGHT SPACE (scan_keyboard)
 KEY_ROW6 = ((0x0D, 0x0D), (0x1F, 0x1F), (0x01, 0x01), (0x5B, 0x1B),
             (0x0A, 0x1A), (0x08, 0x18), (0x09, 0x19), (0x20, 0x20))
 KEY_DEBOUNCE = (0x0DAC - 1) * 26 + 17      # 90,991 T-states, ~51 ms
+# One idle pass of 0049H's loop (CALL 002BH, test, jump back): a nominal
+# cost, so a wait for a key ticks (BREAK, pacing) at the machine's rate.
+# An estimate; nothing a routine can observe depends on it.
+KEY_WAIT_PASS = 300
+# RND (14C9H): the 24-bit generator BASIC's RND uses (the interpreter's
+# rnd_next): seed' = seed * 4253261 + 372837, mod 2^24.  The ROM keeps the
+# multiplier in RAM at 4090H-4092H; neither side reads it from there.
+RND_MUL, RND_ADD = 4253261, 372837
+WRA1_LO, WRA1_HI = 0x411D, 0x4124
+TYPE_FLAG = 0x40AF
+CURSOR = 0x4020
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
 KBD_LO, KBD_HI = 0x3800, 0x3900
 TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz
@@ -191,6 +244,7 @@ class Machine:
         self.since_tick = 0
         self.wide = None
         self.wall0 = 0.0
+        self.wra1_moved = False
 
     # ---- the bus ------------------------------------------------------
     def read(self, a):
@@ -222,6 +276,8 @@ class Machine:
             return
         self.ram[a] = v
         self.known[a] = 1
+        if WRA1_LO <= a <= WRA1_HI or a == TYPE_FLAG:
+            self.wra1_moved = True
         if VIDEO_LO <= a < VIDEO_HI:
             self.video[a] = v
         else:
@@ -327,31 +383,7 @@ class Machine:
             self.ready = 1
             raise EndCall()
         if pc == 0x01C9:
-            for a in range(VIDEO_LO, VIDEO_HI):
-                self.write(a, 0x20)
-            self.write(0x4020, 0x00)
-            self.write(0x4021, 0x3C)
-            cpu.a = CLS_A
-            # CLS returns the display to 64-column mode, as the ROM does and
-            # as BASIC's own CLS does (s_cls in the interpreter's p20): the
-            # driver clears bit 3 of its port-FFH image at 403DH and writes
-            # the byte to the port.  Both halves matter.  The OUT emits
-            # MODE 0 (the first OUT of a call always states the mode), so a
-            # routine that printed 32-column text then cleared -- the
-            # Dancing Demon's intro -- draws its figure at full width.  The
-            # image byte reaches the interpreter in the write-set, where it
-            # clears the ROM's 32-column PRINT flag: without it the BASIC
-            # PRINTs that follow the call (the demon paints its stage that
-            # way) still step two bytes and land on every other cell -- the
-            # "background not clearing" seen 2026-09-15.
-            flag = self.read(0x403D) & 0xF7
-            self.write(0x403D, flag)
-            self.port_out(0xFF, flag)
-            # ... and zeroes the cursor COLUMN at 40A6H (0342H stores it on
-            # the home byte's way through the driver): without this the
-            # interpreter's TAB and POS pad from the stale pre-call column
-            # (the 2026-09-26 audit, M-18/ZM-5)
-            self.write(0x40A6, 0)
+            self.cls()
         elif pc == 0x0A7F:
             # the ROM's CINT (0A7F-0AAF): a string is ?TM there (sent as
             # `ERR tm`, proto 3); a number is rounded to single first (a
@@ -362,11 +394,19 @@ class Machine:
             # 2026-09-19 audit, L-43; ruled 2026-09-21).  On success the
             # ROM leaves the integer in WRA1 with the type flag 2 and
             # A = 2, ordinary stores that reach the write-set (ZM-4).
-            if self.argtype == 3:
-                raise CoreError('tm', 'USR argument is a string at 0A7FH')
-            v = int(csng(float(self.arg)) // 1)
-            if v < -32768 or v > 32767:
-                raise CoreError('ov', 'USR argument %s is outside -32768..32767 at 0A7FH' % self.arg)
+            # Once the routine (or a trap: 14C9H) has stored into WRA1 or
+            # the type flag, 0A7FH converts WRA1 as it now stands, which is
+            # what the ROM reads; until then the frame's `arg`, as before
+            # (the two agree: the frame seeded WRA1 from it).  Eliminator
+            # CALLs 14C9H and then 0A7FH to fetch RND's integer.
+            if self.wra1_moved:
+                v = self.cint(self.wra1(0x0A7F), '0A7FH')
+            else:
+                if self.argtype == 3:
+                    raise CoreError('tm', 'USR argument is a string at 0A7FH')
+                v = int(csng(float(self.arg)) // 1)
+                if v < -32768 or v > 32767:
+                    raise CoreError('ov', 'USR argument %s is outside -32768..32767 at 0A7FH' % self.arg)
             cpu.hl = v & 0xFFFF
             self.write(0x4121, cpu.hl & 0xFF)
             self.write(0x4122, cpu.hl >> 8)
@@ -374,6 +414,19 @@ class Machine:
             self.write(0x40AF, 2)
         elif pc == 0x002B:
             self.scan_keyboard()
+        elif pc == 0x0049:
+            self.wait_key()
+        elif pc == 0x0060:
+            self.delay()
+        elif pc == 0x01D3:
+            # RANDOM (Farvour p.24): the refresh register, as LD A,R reads
+            # it, becomes the seed's middle byte at 40ABH
+            cpu.a = cpu.r & 0xFF
+            self.write(0x40AB, cpu.a)
+        elif pc == 0x14C9:
+            self.rnd()
+        elif pc == 0x05D9:
+            self.line_input()
         elif pc == 0x0A9A:
             # HL to the result, then the RET below: JP 0A9AH pops the
             # sentinel and ends the call, CALL 0A9AH returns to the routine.
@@ -399,6 +452,35 @@ class Machine:
         sp = cpu.sp
         cpu.pc = cpu.wz = self.ram[sp] | (self.ram[(sp + 1) & 0xFFFF] << 8)
         cpu.sp = (sp + 2) & 0xFFFF
+
+    def cls(self):
+        """01C9H, CLS."""
+        cpu = self.cpu
+        for a in range(VIDEO_LO, VIDEO_HI):
+            self.write(a, 0x20)
+        self.write(0x4020, 0x00)
+        self.write(0x4021, 0x3C)
+        cpu.a = CLS_A
+        # CLS returns the display to 64-column mode, as the ROM does and
+        # as BASIC's own CLS does (s_cls in the interpreter's p20): the
+        # driver clears bit 3 of its port-FFH image at 403DH and writes
+        # the byte to the port.  Both halves matter.  The OUT emits
+        # MODE 0 (the first OUT of a call always states the mode), so a
+        # routine that printed 32-column text then cleared -- the
+        # Dancing Demon's intro -- draws its figure at full width.  The
+        # image byte reaches the interpreter in the write-set, where it
+        # clears the ROM's 32-column PRINT flag: without it the BASIC
+        # PRINTs that follow the call (the demon paints its stage that
+        # way) still step two bytes and land on every other cell -- the
+        # "background not clearing" seen 2026-09-15.
+        flag = self.read(0x403D) & 0xF7
+        self.write(0x403D, flag)
+        self.port_out(0xFF, flag)
+        # ... and zeroes the cursor COLUMN at 40A6H (0342H stores it on
+        # the home byte's way through the driver): without this the
+        # interpreter's TAB and POS pad from the stale pre-call column
+        # (the 2026-09-26 audit, M-18/ZM-5)
+        self.write(0x40A6, 0)
 
     def scan_keyboard(self):
         """002BH, the Level II keyboard scan (Farvour, "Scan Keyboard", p.15,
@@ -465,6 +547,213 @@ class Machine:
                  | ((code ^ 1 ^ r) & 0x10) | (0x01 if code < 1 else 0)
                  | (0x04 if ((code ^ 1) & (code ^ r) & 0x80) else 0))
 
+    # ---- time spent inside a trap -------------------------------------------
+    def spend(self, t):
+        """Charge t T-states the ROM routine would have taken, ticking as the
+        run loop does, so BREAK, pacing and the interpreter's read guard see
+        a long delay or a wait for a key as they see a loop of code."""
+        while t > 0:
+            n = min(t, max(1, self.tick_every - self.since_tick))
+            self.cycles += n
+            self.since_tick += n
+            t -= n
+            if self.since_tick >= self.tick_every:
+                self.tick()
+
+    def wait_key(self):
+        """0049H (Farvour p.17): returns as soon as a key is pressed, its
+        code in A; uses A, the flags and DE.  002BH, again and again."""
+        while True:
+            self.scan_keyboard()
+            if self.cpu.a:
+                return
+            self.spend(KEY_WAIT_PASS)
+
+    def delay(self):
+        """0060H: a loop of BC passes, ((BC - 1) * 26 + 17) T-states by
+        Farvour's note (BC = 0 is 65536 passes); it leaves BC = 0, A = 0
+        and the flags of its last OR C (Z and P/V set)."""
+        cpu = self.cpu
+        n = cpu.bc or 0x10000
+        self.spend((n - 1) * 26 + 17)
+        cpu.bc = 0
+        cpu.a = 0
+        cpu.f = 0x44
+
+    # ---- WRA1, the ROM's accumulator ------------------------------------------
+    def wra1(self, where):
+        """The number in WRA1 (411DH-4124H) as the type flag at 40AFH says:
+        2 an integer in 4121/4122H, 4 a single in 4121-4124H, 8 a double in
+        all eight (Microsoft binary format: exponent byte last, biased 128,
+        0 meaning zero; the top mantissa bit is the sign).  A string is
+        ?TM, as the ROM's CINT makes it."""
+        t = self.ram[TYPE_FLAG]
+        r = self.ram
+        if t == 2:
+            v = r[0x4121] | r[0x4122] << 8
+            return float(v - 0x10000 if v & 0x8000 else v)
+        if t == 3:
+            raise CoreError('tm', 'WRA1 holds a string at %04XH' % where)
+        lo = 0x411D if t == 8 else 0x4121
+        exp = r[0x4124]
+        if exp == 0:
+            return 0.0
+        bits = (0x4124 - lo) * 8
+        mant = 0
+        for a in range(0x4123, lo - 1, -1):
+            mant = (mant << 8) | r[a]
+        sign = mant >> (bits - 1)
+        mant |= 1 << (bits - 1)
+        v = mant / float(1 << bits) * 2.0 ** (exp - 128)
+        return -v if sign else v
+
+    def cint(self, x, where):
+        """The ROM's CINT on a number: rounded to single, floored, ?OV
+        outside -32768..32767 (as the 0A7FH trap converts `arg`)."""
+        v = int(csng(x) // 1)
+        if v < -32768 or v > 32767:
+            raise CoreError('ov', '%s is outside -32768..32767 at %s' % (x, where))
+        return v
+
+    def put_single(self, x):
+        """A single 0 <= x < 2^24 into WRA1 (4121-4124H), type flag 4."""
+        b = [0, 0, 0, 0]
+        if x > 0:
+            e = 0
+            while x >= 1.0:
+                x /= 2.0
+                e += 1
+            while x < 0.5:
+                x *= 2.0
+                e -= 1
+            m = int(x * (1 << 24) + 0.5)
+            if m >= 1 << 24:
+                m >>= 1
+                e += 1
+            b = [m & 0xFF, (m >> 8) & 0xFF, (m >> 16) & 0x7F, e + 128]
+        for i in range(4):
+            self.write(0x4121 + i, b[i])
+        self.write(TYPE_FLAG, 4)
+
+    def rnd(self):
+        """14C9H, RND (Farvour p.27): the value in WRA1 through CINT; 0
+        gives a single between 0 and 1 in WRA1, n > 0 an integer from 1 to
+        n with the type flag 2, a negative one ?FC (`ERR fc`).  The draw is
+        BASIC's own (the interpreter's RND, p60/p90): the 24-bit seed at
+        40AA-40ACH steps once, x = seed / 2^24, and RND(n) is
+        INT(x * n + 1) with the multiply and the add each rounded as a
+        single.  The new seed is an ordinary store, so the write-set hands
+        it back and BASIC's next RND carries on from it."""
+        n = self.cint(self.wra1(0x14C9), '14C9H')
+        if n < 0:
+            raise CoreError('fc', 'RND of a negative number (%d) at 14C9H' % n)
+        seed = self.read(0x40AA) | self.read(0x40AB) << 8 | self.read(0x40AC) << 16
+        seed = (seed * RND_MUL + RND_ADD) & 0xFFFFFF
+        self.write(0x40AA, seed & 0xFF)
+        self.write(0x40AB, (seed >> 8) & 0xFF)
+        self.write(0x40AC, seed >> 16)
+        x = seed / 16777216.0
+        if n == 0:
+            self.put_single(x)
+            return
+        v = int(single_add(csng(x * n), 1.0) // 1)
+        self.write(0x4121, v & 0xFF)
+        self.write(0x4122, (v >> 8) & 0xFF)
+        self.write(TYPE_FLAG, 2)
+
+    # ---- 05D9H, a line from the keyboard ----------------------------------
+    def cursor(self):
+        a = self.read(CURSOR) | self.read(CURSOR + 1) << 8
+        return a if VIDEO_LO <= a < VIDEO_HI else VIDEO_LO
+
+    def set_cursor(self, a):
+        self.write(CURSOR, a & 0xFF)
+        self.write(CURSOR + 1, a >> 8)
+        self.write(0x40A6, (a - VIDEO_LO) % 64)       # the column BASIC's POS reads
+
+    def scroll(self):
+        for a in range(VIDEO_LO, VIDEO_HI - 64):
+            self.write(a, self.ram[a + 64])
+        for a in range(VIDEO_HI - 64, VIDEO_HI):
+            self.write(a, 0x20)
+        return VIDEO_HI - 64
+
+    def echo(self, c):
+        """The few display codes line input sends (Farvour p.17): a
+        character at the cursor, 08H backspace and erase, 0DH and 0AH to
+        the next line, scrolling at the bottom.  Not the 0033H driver: no
+        blinking cursor, no 32-column stepping."""
+        a = self.cursor()
+        if c == 0x08:
+            if a > VIDEO_LO:
+                a -= 1
+                self.write(a, 0x20)
+        elif c in (0x0D, 0x0A):
+            a = VIDEO_LO + ((a - VIDEO_LO) // 64 + 1) * 64
+            if a >= VIDEO_HI:
+                a = self.scroll()
+        else:
+            self.write(a, c)
+            a += 1
+            if a >= VIDEO_HI:
+                a = self.scroll()
+        self.set_cursor(a)
+
+    def line_input(self):
+        """05D9H (Farvour p.16 and his notes on 05D9H-0673H): a line from
+        the keyboard into the buffer at HL, at most B characters, echoed at
+        the cursor.  ENTER or BREAK ends it: 0DH is stored after the text
+        either way, and the routine returns HL = the buffer, B = the
+        characters typed, C = the size, A = 0DH or 01H, carry set for
+        BREAK.  CLEAR clears the screen and starts the line again;
+        backspace (and SHIFT-left, to the start) erases, never back past a
+        line feed; TAB pads with spaces to the next 8-column stop; a full
+        buffer takes nothing more but ENTER and BREAK; SHIFT-right selects
+        32 characters a line; other control codes are ignored."""
+        cpu = self.cpu
+        start = p = cpu.hl
+        size = left = cpu.b
+        while True:
+            self.wait_key()
+            k = cpu.a
+            if k >= 0x20 or k == 0x0A:
+                if left:
+                    self.write(p, k)
+                    p = (p + 1) & 0xFFFF
+                    self.echo(k)
+                    left -= 1
+            elif k in (0x0D, 0x01):
+                self.write(p, 0x0D)
+                self.echo(0x0D)
+                cpu.hl = start
+                cpu.b = size - left
+                cpu.c = size
+                cpu.a = k
+                cpu.f = 0x42 | (1 if k == 0x01 else 0)
+                return
+            elif k == 0x1F:
+                self.cls()
+                p, left = start, size
+            elif k in (0x08, 0x18):
+                while left != size and self.read((p - 1) & 0xFFFF) != 0x0A:
+                    p = (p - 1) & 0xFFFF
+                    self.echo(0x08)
+                    left += 1
+                    if k == 0x08:
+                        break
+            elif k == 0x09:
+                for _ in range(8 - (self.cursor() - VIDEO_LO) % 8):
+                    if not left:
+                        break
+                    self.write(p, 0x20)
+                    p = (p + 1) & 0xFFFF
+                    self.echo(0x20)
+                    left -= 1
+            elif k == 0x19:
+                flag = self.read(0x403D) | 0x08
+                self.write(0x403D, flag)
+                self.port_out(0xFF, flag)
+
     # ---- one call ------------------------------------------------------------
     def run(self, entry, arg, sp, argtype=4, mbf=(0, 0, 0, 0, 0, 0, 0, 0)):
         cpu = self.cpu
@@ -493,6 +782,7 @@ class Machine:
         self.write(0x40AF, argtype)
         for i, b in enumerate(mbf[:8]):
             self.write((0x411D + i) & 0xFFFF, b & 0xFF)
+        self.wra1_moved = False        # the frame's own seeding: WRA1 is still `arg`
         cpu.sp = sp
         cpu.sp = (cpu.sp - 2) & 0xFFFF
         self.write((cpu.sp + 1) & 0xFFFF, SENTINEL >> 8)
