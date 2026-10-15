@@ -1784,13 +1784,18 @@ def mechanical(args, op=None):
     if not args:
         return out
     q = unquote(args)
-    if q != args:
+    # A DEF operand with one quote mark is a quoted character whose other
+    # quote the scan lost: it is read as that character (defined(), below),
+    # never as an open string -- the assembler takes `DEFB ',` to the end
+    # of the line, as EDTASM did, and 2CH would pass as the field read raw.
+    lost = op in DEFDIRS and q.count("'") % 2 == 1
+    if q != args and not lost:
         out.append(q)
     a = q.replace('~', '-').replace('—', '-').replace('–', '-')
     a = HEXTOKEN.sub(lambda m: (as_hex(m.group(1)) or m.group(1)) + 'H', a)
     a = re.sub(r'\s+', '', a)
     a = re.sub(r'(?<=[A-Z0-9)])[.;](?=[A-Z0-9(])', ',', a)      # the comma
-    if a != args and a not in out:
+    if a != args and a not in out and not lost:
         out.append(a)
     if len(a) == 1 and a in HEXFIX and HEXFIX[a] in HEXDIGITS:
         out.append(HEXFIX[a])                   # a bit or mode number

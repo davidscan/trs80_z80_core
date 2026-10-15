@@ -172,6 +172,55 @@ class TestTableRoundTrip(unittest.TestCase):
         r = assemble('  ORG 0\nSTART NOP\nLOOP: JR LOOP\n  END START')
         self.assertEqual(r.errors, [])
 
+    def test_a_column_one_label_may_be_spelled_like_an_opcode(self):
+        """ZM-2: Barden p.41-42, free format as long as an op-code does not
+        start in column 1; corpus sources label lines OUT, SET, BIT, END,
+        AND, INC, DEC, RET.  An op-code in column 1 is refused, saying so."""
+        r = one('  ORG 0\nOUT LD H,B\nSET NOP\nEND JR OUT\nBIT: INC A\nDEFB EQU 7\n'
+                '00100 AND RET\n  LD A,DEFB\n  END OUT\n')
+        self.assertEqual(r.symbols, {'OUT': 0, 'SET': 1, 'END': 2, 'BIT': 4, 'DEFB': 7, 'AND': 5})
+        self.assertEqual(r.segments[0][1].hex(), '60' '00' '18fc' '3c' 'c9' '3e07')
+        self.assertEqual(r.entry, 0)
+        for bad in ('LD A,1\n', '00100 JP 0\n', 'ORG 100H\n'):
+            e = assemble('  ORG 0\n' + bad).errors
+            self.assertEqual(len(e), 1, bad)
+            self.assertIn('in column 1 is a label; an op-code is indented', e[0][1])
+        # a column-1 word alone is a label on its own line, as ever
+        self.assertEqual(one('  ORG 0\n00100 NOP\n  RET\n').symbols, {'NOP': 0})
+
+    def test_a_data_string_with_no_closing_quote_runs_to_the_end_of_the_line(self):
+        """As EDTASM took it: TBBS's MINIHOST/SRC line 5140 against its
+        period object (N-6).  A lost quote anywhere else is still an error."""
+        r = one("  ORG 0\n  DEFM 'ABC ; not a comment\n  DB 1,'D''E\n  DEFM \"F\n")
+        self.assertEqual(r.segments[0][1], b"ABC ; not a comment" b"\x01D'E" b"F")
+        for bad in ("  LD A,'X\n", "  DEFW 'A\n", "  DEFM 'A','B\n  LD A,'\n"):
+            e = assemble('  ORG 0\n' + bad).errors
+            self.assertTrue(e, bad)
+            self.assertIn('unterminated', e[0][1])
+
+    def test_defs_reserves_its_bytes_and_writes_none(self):
+        """ZM-1: Barden p.45-46, "A DEFS does not fill the vacant space with
+        zeroes"; every period object beside a corpus source that uses DEFS
+        skips the space.  The object's blocks end before it and start after;
+        a trailing DEFS leaves nothing; a fill operand (this assembler's own)
+        still fills; the labels and the location counter are as before."""
+        r = one('  ORG 7000H\n  LD A,1\nBUF DEFS 300\nNEXT LD A,2\n  DEFS 4,0AAH\n'
+                'TAIL DEFS 100H\nTOP EQU $\n  END\n')
+        self.assertEqual(r.segments, [(0x7000, b'\x3e\x01'),
+                                      (0x712E, b'\x3e\x02' + b'\xaa' * 4)])
+        self.assertEqual((r.symbols['BUF'], r.symbols['NEXT'], r.symbols['TAIL'],
+                          r.symbols['TOP']), (0x7002, 0x712E, 0x7134, 0x7234))
+        self.assertEqual(r.to_bin(), b'\x3e\x01' + bytes(300) + b'\x3e\x02' + b'\xaa' * 4)
+        cmd = r.to_cmd('x')
+        self.assertEqual(cmd[-4:], b'\x02\x02\x00\x70')
+        self.assertNotIn(bytes(100), cmd)
+        self.assertEqual(len(r.to_cas('x')), 256 + 2 + 6 + (5 + 2) + (5 + 6) + 3)
+        # the harm case: a screen buffer declared over the display
+        r = one('  ORG 3C00H\nSCREEN DEFS 1024\n  ORG 7000H\n  RET\n')
+        self.assertEqual(r.segments, [(0x7000, b'\xc9')])
+        # a DEFS that would run past the top of memory is still refused
+        self.assertIn('runs past', assemble('  ORG 0FF00H\n  DEFS 101H\n').errors[0][1])
+
     def test_ddcb_displacement_sits_before_the_last_opcode_byte(self):
         b = one('  ORG 0\n  BIT 0,(IX+3)\n  SET 7,(IY-1)\n  RLC (IX+7FH)').segments[0][1]
         self.assertEqual(b.hex(), 'ddcb0346' 'fdcbfffe' 'ddcb7f06')
@@ -272,15 +321,47 @@ class TestSyntax(unittest.TestCase):
         # audit, L-53).  A word is a word however it is written.
         b = one('  ORG 0\n  DEFW 0FFFFH,65535,177777Q,1111111111111111B,1234H,\'AB\'\n'
                 '  DEFB 7.MOD.4, 1.SHL.4, 255.SHR.4, 0FH.AND.3, 4.OR.1, 5.XOR.1, .NOT.0\n'
-                '  DEFB 2+3*4, (2+3)*4, -1, 10/3').segments[0][1]
+                '  DEFB 2+3*4, (2+3)*4, -1, 10/3, -7/2').segments[0][1]
         self.assertEqual(b.hex(), 'ffff' 'ffff' 'ffff' 'ffff' '3412' '4241'
                                   '03' '10' '0f' '03' '05' '04' 'ff'
-                                  '0e' '14' 'ff' '03')
+                                  '14' '14' 'ff' '03' 'fd')       # 2+3*4 is 20: EDTASM's order
+
+    def test_the_order_of_evaluation_is_edtasms_unless_asked(self):
+        """Left to right with no precedence by default (the Editor/Assembler
+        manual; the user's ruling of 2026-10-15), the usual order with
+        precedence=True (--precedence); parentheses and unary signs work in
+        both.  `/` truncates toward zero either way (ZL-3: -7/2 is -3)."""
+        src = ('  ORG 0\n  DEFB 2+3*4, 10-2-3, 2*3+4, 1+2.AND.3, 20/2/5, 2+3*-1\n'
+               '  DEFW 1<4+1, 100H+(2+3)*4, -7/2, 0FFH&0FH+1\n')
+        ltr = one(src).segments[0][1]
+        self.assertEqual(ltr.hex(), '14' '05' '0a' '03' '02' 'fb'
+                                    '1100' '1404' 'fdff' '1000')
+        usual = one(src, precedence=True).segments[0][1]
+        self.assertEqual(usual.hex(), '0e' '05' '0a' '03' '02' 'ff'
+                                      '1100' '1401' 'fdff' '1000')
+
+    def test_an_expression_whose_value_depends_on_the_order_is_a_warning(self):
+        """Both values are reported, once per expression, in either mode;
+        an expression that comes out the same either way is not."""
+        r = one('  ORG 0\nV EQU 2+3*4\n  LD A,V\n  LD HL,V+1\n  DEFB 1+2+3, 4*5, (1+2)*3, V\n')
+        self.assertEqual([ln for ln, _ in r.warnings], [2])
+        self.assertIn('2+3*4 is 20 left to right (EDTASM, used) and 14 with operator '
+                      'precedence (--precedence)', r.warnings[0][1])
+        self.assertEqual(r.segments[0][1].hex(), '3e14' '211500' '06' '14' '09' '14')
+        r = one('  ORG 0\n  LD A,2+3*4\n  LD HL,2+3*4\n', precedence=True)
+        self.assertEqual([ln for ln, _ in r.warnings], [2, 3])      # once a line, two passes
+        self.assertIn('20 left to right (EDTASM) and 14 with operator precedence '
+                      '(--precedence, used)', r.warnings[0][1])
+        self.assertEqual(r.segments[0][1].hex(), '3e0e' '210e00')
+        self.assertEqual(one('  ORG 0\n  DEFB 1+2+3, 2*3*4, (2+3)*4\n').warnings, [])
+        # the other order failing (a shift count out of range) is no warning
+        self.assertEqual(one('  ORG 0\n  DEFW 1<4+1\n').warnings, [])
 
     def test_memory_versus_value_operands(self):
-        b = one('  ORG 100H\nBUF DEFS 2\n  LD A,(BUF+1)\n  LD HL,BUF+1\n  LD HL,(BUF)\n'
-                '  JP (IX)\n  LD A,(IY)').segments[0][1]
-        self.assertEqual(b.hex(), '0000' '3a0101' '210101' '2a0001' 'dde9' 'fd7e00')
+        r = one('  ORG 100H\nBUF DEFS 2\n  LD A,(BUF+1)\n  LD HL,BUF+1\n  LD HL,(BUF)\n'
+                '  JP (IX)\n  LD A,(IY)')
+        self.assertEqual(r.segments, [(0x102, bytes.fromhex('3a0101' '210101' '2a0001'
+                                                            'dde9' 'fd7e00'))])
 
     def test_lowercase_and_no_line_numbers(self):
         b = one('   org 7000h\nstart:  ld a,0ffh\n        jr start\n        end start')
@@ -331,7 +412,7 @@ class TestErrors(unittest.TestCase):
         self.assertIn('duplicate label', self.errors('  ORG 0\nA1 NOP\nA1 NOP\n')[0][1])
         self.assertIn('EQU needs a label', self.errors('  ORG 0\n  EQU 5\n')[0][1])
         self.assertIn('undefined symbol', self.errors('  ORG 0\nX EQU Y+1\n  NOP\n')[0][1])
-        self.assertIn('unterminated', self.errors("  ORG 0\n  DEFM 'ABC\n")[0][1])
+        self.assertIn('unterminated', self.errors("  ORG 0\n  DEFW 'ABC\n")[0][1])
         self.assertIn('known here', self.errors('  ORG 0\n  DEFS N\nN EQU 3\n')[0][1])
         self.assertIn('no such instruction', self.errors('  ORG 0\n  RST FWD\nFWD EQU 8\n')[0][1])
         self.assertIn('division by zero', self.errors('  ORG 0\n  DEFB 1/0\n')[0][1])
@@ -365,7 +446,7 @@ class TestErrors(unittest.TestCase):
             self.assertIn(what, e[0][1], src)
 
     def test_blanks_around_operators_and_signed_values_still_assemble(self):
-        r = assemble("  ORG 0\nV EQU 3C00H\n  LD HL, V + 5 * 64\n  LD A, ( V )\n  LD (IX + 2), -1\n"
+        r = assemble("  ORG 0\nV EQU 3C00H\n  LD HL, 5 * 64 + V\n  LD A, ( V )\n  LD (IX + 2), -1\n"
                      "  DEFB -128, 255, 'A' , 1 .SHL. 3\n  DEFW -32768, 65535, -2 .SHR. 1, 1 .SHL. 16\n"
                      "  DEFM 'DON''T', 13\n  RST 38H\n  EX AF, AF'\n")
         self.assertEqual(r.errors, [])
@@ -450,10 +531,39 @@ class TestOutputs(unittest.TestCase):
         self.assertIn('1000 DATA 33,52,18,195,154,10', bas)
         with self.assertRaises(ValueError):
             one('  ORG 0\n  NOP\n  ORG 10H\n  NOP\n').to_bas('two')
+        with self.assertRaisesRegex(ValueError, 'DEFS inside the code'):
+            one('  ORG 0\n  NOP\n  DEFS 10H\n  NOP\n').to_bas('split')
+        self.assertIn('1000 DATA 0', one('  ORG 0\n  NOP\n  DEFS 10H\n').to_bas('trailing'))
         # above 7FFFH the loader uses the signed POKE idiom (Level II)
         hi = one('  ORG 0A000H\n  RET\n  END 0A000H\n').to_bas('hi')
         self.assertIn('20 E=-24576:C=0', hi)
         self.assertIn('50 POKE 16526,0:POKE 16527,160', hi)
+        self.assertIn('20 E=-32768:C=0', one('  ORG 8000H\n  RET\n').to_bas('edge'))  # ZL-3
+        self.assertIn('20 E=32767:C=0', one('  ORG 7FFFH\n  RET\n').to_bas('edge'))
+        # a block straddling 8000H turns the address over as it crosses (ZL-4)
+        st = one('  ORG 7FF8H\n  DEFS 10,0\n  LD HL,1234H\n  JP 0A9AH\n').to_bas('st')
+        self.assertIn('20 E=32760:C=0', st)
+        self.assertIn('30 FOR I=0 TO 15:READ B:A=E+I:IF A>32767 THEN A=A-65536', st)
+        self.assertIn('35 POKE A,B:C=C+B:NEXT', st)
+        self.assertIn('50 POKE 16526,248:POKE 16527,127', st)
+
+    def test_the_interpreter_loads_a_block_straddling_8000h(self):
+        """ZL-4: `ORG 7FF8H`, 16 bytes, gave `?OV ERROR IN 30`.  Through the
+        interpreter driving this core: the routine runs and answers."""
+        basic = os.path.join(os.path.dirname(ROOT), 'trs80basic', 'basic')
+        if not os.access(basic, os.X_OK):
+            self.skipTest('no ../trs80basic/basic beside this repo')
+        r = one('  ORG 7FF8H\n  DEFS 10,0\n  LD HL,1234H\n  JP 0A9AH\n')
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'st.bas')
+            with open(path, 'w') as f:
+                f.write(r.to_bas('st'))
+            env = dict(os.environ, TRS80_Z80='python3 ' + os.path.join(ROOT, 'core.py'),
+                       TRS80_DUMB='1', TRS80_USR='strict')
+            p = subprocess.run([basic, path], env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertNotIn('?OV', p.stdout + p.stderr)
+        self.assertIn('4660', p.stdout)
 
     def test_the_core_runs_what_was_assembled(self):
         r = one(TINY)
@@ -497,6 +607,25 @@ class TestCommandLine(unittest.TestCase):
                 f.write('  ORG 0\n  LD A,(3\n')
             self.assertEqual(asm.main([bad, '-o', out]), 1)
 
+    def test_precedence_switch_and_warnings_on_the_command_line(self):
+        src_text = '  ORG 7D00H\n  LD HL,2+3*4\n  END\n'
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 'p.asm')
+            with open(src, 'w') as f:
+                f.write(src_text)
+            out = os.path.join(d, 'p.bin')
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertEqual(asm.main([src, '-o', out]), 0)
+            with open(out, 'rb') as f:
+                self.assertEqual(f.read(), b'\x21\x14\x00')
+            self.assertIn('p.asm:2: warning: 2+3*4 is 20 left to right (EDTASM, used) and 14 '
+                          'with operator precedence (--precedence)', err.getvalue())
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(asm.main([src, '-o', out, '--precedence']), 0)
+            with open(out, 'rb') as f:
+                self.assertEqual(f.read(), b'\x21\x0e\x00')
+
     def test_an_output_that_is_the_source_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
             src = os.path.join(d, 't.asm')
@@ -532,6 +661,160 @@ class TestCommandLine(unittest.TestCase):
                         asm.main([src, '--entry', bad])
             self.assertIn('not printable ASCII', err.getvalue())
             self.assertIn('past 0FFFFH', err.getvalue())
+
+
+def edtasm_file(lines, name='SAMPLE'):
+    """Bytes as the Editor/Assembler saved them (Prentice Hall p.156-157)."""
+    out = bytearray(b'\xd3' + name.ljust(6).encode())
+    for n, text in lines:
+        out += bytes(0x80 | ord(c) for c in '%05d' % n) + b' ' + text.encode('latin-1') + b'\r'
+    return bytes(out) + b'\x1a'
+
+
+class TestEditorAssemblerFiles(unittest.TestCase):
+    """read_source: the Editor's own file format (Q-8 of the 2026-09-30
+    audit; 52 of the corpus's 84 distinct sources) decodes to the text
+    the assembler reads, and plain text passes through."""
+
+    LINES = [(100, 'START\tLD\tHL,3C00H'), (110, '\tLD\t(HL),41H'), (120, '\tRET'),
+             (130, '\tEND\tSTART')]
+
+    def test_a_native_file_decodes_and_assembles(self):
+        data = edtasm_file(self.LINES, 'HELLO')
+        self.assertEqual(data[:7], b'\xd3HELLO ')
+        self.assertEqual(data[7:12], b'\xb0\xb0\xb1\xb0\xb0')       # bit 7 on the digits
+        text, name = asm.read_source(data)
+        self.assertEqual(name, 'HELLO')
+        self.assertEqual(text, '00100 START\tLD\tHL,3C00H\n00110 \tLD\t(HL),41H\n'
+                               '00120 \tRET\n00130 \tEND\tSTART\n')
+        r = one(text, org=0x7000)
+        self.assertEqual(r.segments, [(0x7000, bytes.fromhex('21003c' '3641' 'c9'))])
+        self.assertEqual(r.entry, 0x7000)
+
+    def test_without_the_header_and_with_a_tab_after_the_number(self):
+        data = edtasm_file(self.LINES)[7:]
+        self.assertEqual(asm.read_source(data)[1], None)
+        self.assertEqual(asm.read_source(data)[0].count('\n'), 4)
+        tabbed = data.replace(b'\xb0 ', b'\xb0\t')                   # TBBS's MINIHOST/SRC
+        self.assertEqual(asm.read_source(tabbed), asm.read_source(data))
+
+    def test_a_dropped_bit_in_a_line_number_reads_as_zero(self):
+        data = edtasm_file(self.LINES).replace(b'\xb0\xb0\xb1\xb1\xb0', b'\xb0\xb0\x91\xb1\xb0')
+        self.assertIn('\n00010 \tLD\t(HL),41H\n', asm.read_source(data)[0])
+        self.assertEqual(one(asm.read_source(data)[0], org=0).size, 6)
+
+    def test_a_record_without_a_line_number_is_an_error_naming_the_byte(self):
+        data = edtasm_file(self.LINES)
+        first = edtasm_file(self.LINES[:1])[:-1]                     # header and one record
+        with self.assertRaisesRegex(ValueError, 'at byte %d' % len(first)):
+            asm.read_source(first + b'xx\r' + data[len(first):])
+        # the EOF byte ends the file; bytes after it are not read
+        self.assertEqual(asm.read_source(data + b'junk')[0].count('\n'), 4)
+
+    def test_text_passes_through(self):
+        self.assertEqual(asm.read_source(b'  ORG 0\n  NOP\n'), ('  ORG 0\n  NOP\n', None))
+        self.assertEqual(asm.read_source(b'\xd3'), ('\xd3', None))
+        self.assertEqual(asm.read_source(b''), ('', None))
+
+    def test_the_command_line_reads_one_and_takes_its_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 'anything.src')
+            with open(src, 'wb') as f:
+                f.write(edtasm_file([(90, '\tORG\t7000H')] + self.LINES, 'HELLO'))
+            out = os.path.join(d, 'o.cmd')
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(asm.main([src, '-o', out]), 0)
+            with open(out, 'rb') as f:
+                self.assertEqual(f.read()[:7], b'\x05\x05HELLO')
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(asm.main([src, '-o', out, '--name', 'MINE']), 0)
+            with open(out, 'rb') as f:
+                self.assertEqual(f.read()[:6], b'\x05\x04MINE')
+
+
+CORPUS = os.path.join(ROOT, 'corpus', 'programs')
+
+# Period sources saved by the Editor/Assembler beside the object their
+# author built from them (Q-8): the one oracle for the assembler that is
+# not this project's own reading of the books.  Measured 2026-10-15 over
+# the 84 distinct sources: these 14 of the 19 source/object pairs come
+# out IMAGE-identical (every byte at every address, no byte more or
+# less: so DEFS space is absent on both sides, ZM-1; TBBS's MINIHOST
+# relies on an unterminated DEFM running to the end of its line).  Not
+# byte-identical files: the period objects differ among themselves in
+# record size (128 or 256), in sector padding after the transfer record
+# and in whether a DOS added a name record, and three (ene, multsrch,
+# GRAPHIC) carry the transfer address 0 of an END with no operand, where
+# this assembler's documented fallback is the first ORG.  Of the other
+# five: SCHED differs in one operand byte (LD DE,INTER: the object was
+# built from a slightly different source), quaver1 and INVASION.SRC (the
+# [BAS] copy) from other versions of their sources, FRAMER's object is
+# damaged (record type BEH), hrg.asm holds NUL bytes inside lines
+# (multied.asm's object holds another version of its line 4).
+PAIRS = [
+    'LargeCollection/Display Directories by Password (19xx)(Author Unknown)[BAS]/dirpw.asm',
+    'LargeCollection/Invasion Orion v3.0 (1979)(Automated Simulations)[a][BAS]/invasion.src',
+    'LargeCollection/Mini-BBS v2.01 (19xx)(Mike Bernstein-Kandy Shack)[BAS]/minihost.asm',
+    'LargeCollection/Playing God with Life v1.9.3 (1979)(Dennis Bathory-Kitsz)[BAS]/LIFE9.SRC',
+    'LargeCollection/Printer Driver for MX-FX-RX-80 (19xx)(Author Unknown)(De)[BAS]/drutreib.asm',
+    'LargeCollection/TBBS v3.0 (19xx)(Author Unknown)[BAS]/MINIHOST.SRC',
+    'LargeCollection/TRS3Link (19xx)(G Rahman)(Nl)[BAS]/ene.src',
+    'Model1/Disk Sort Merge v2.0 (1979)(Racet Computers)[CMD]/wipe.asm',
+    'Model1/Fast Screen Print Program (19xx)(Serge Y Calmettes)[CMD]/scrprt.src',
+    'Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/mult.asm',
+    'Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/multsrch.asm',
+    'Model1/PowerDRAW v1.0 (1981)(Kim Watt)[CMD]/PLAY.ASM',
+    'Model1/Quaver Music Compiler (1981)(Dennis Bathory-Kitsz)[ASM]/quaver2.asm',
+    'Model1/Title Graphics (19xx)(Author Unknown)[CMD]/GRAPHIC.SRC',
+]
+
+
+def image(segments):
+    m = {}
+    for org, data in segments:
+        for i, b in enumerate(data):
+            m[org + i] = b
+    return m
+
+
+@unittest.skipUnless(os.path.isdir(CORPUS), 'the corpus is not linked beside this repo')
+class TestPeriodObjects(unittest.TestCase):
+    def test_every_pair_assembles_to_its_period_object(self):
+        from z80.load import load_cmd
+        for rel in PAIRS:
+            path = os.path.join(CORPUS, rel)
+            folder, stem = os.path.dirname(path), os.path.splitext(os.path.basename(path))[0]
+            cmds = [f for f in os.listdir(folder) if f.lower() == stem.lower() + '.cmd']
+            self.assertEqual(len(cmds), 1, rel)
+            with open(path, 'rb') as f:
+                text, name = asm.read_source(f.read())
+            with open(os.path.join(folder, cmds[0]), 'rb') as f:
+                theirs, entry, _ = load_cmd(f.read())
+            r = assemble(text)
+            self.assertEqual(r.errors, [], rel)
+            self.assertEqual(r.warnings, [], rel)
+            self.assertEqual(image(r.segments), image(theirs), rel)
+            if entry:
+                self.assertEqual(r.entry, entry, rel)
+            self.assertTrue(name or stem, rel)
+
+    def test_the_period_objects_skip_their_defs_space(self):
+        """The harm case of ZM-1 held against the oracle: the four sources
+        the audit named reserve 256, 319, 64 and 290 bytes, and their
+        objects hold none of them."""
+        from z80.load import load_cmd
+        for rel, reserved in (('LargeCollection/Display Directories by Password (19xx)'
+                               '(Author Unknown)[BAS]/dirpw.asm', 256),
+                              ('LargeCollection/Mini-BBS v2.01 (19xx)(Mike Bernstein-Kandy Shack)'
+                               '[BAS]/minihost.asm', 319)):
+            path = os.path.join(CORPUS, rel)
+            with open(path, 'rb') as f:
+                r = assemble(asm.read_source(f.read())[0])
+            held = sum(s.size for s in r.stmts if s.op in ('DEFS', 'DS') and s.items is None)
+            self.assertEqual(held, reserved, rel)
+            top = max(s.pc + s.size for s in r.stmts if s.size)
+            low = min(s.pc for s in r.stmts if s.size)
+            self.assertEqual(r.size, top - low - held, rel)
 
 
 class TestRelativeJumpsAcrossTheTop(unittest.TestCase):

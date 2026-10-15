@@ -113,23 +113,29 @@ def load_cas(data):
     return segments, entry, name
 
 
-def load_file(path, org=None, entry=None, fmt=None):
-    """Read PATH by its extension (or FMT: bin, cmd, cas).  An .asm file
-    is assembled first (z80.asm), so a source file runs directly.  ENTRY
-    overrides what the file names -- a transfer record, a 78H record or
-    the operand of END alike; a file that names none starts at its first
-    block (the interpreter's SYSTEM follows the same rule)."""
+def load_file(path, org=None, entry=None, fmt=None, precedence=False):
+    """Read PATH by its extension (or FMT: bin, cmd, cas).  An .asm or
+    .src file is assembled first (z80.asm, which reads the Editor/
+    Assembler's own file format as well as text; `precedence` is its
+    --precedence), so a source file runs directly.  ENTRY overrides what
+    the file names -- a transfer record, a 78H record or the operand of
+    END alike; a file that names none starts at its first block (the
+    interpreter's SYSTEM follows the same rule)."""
     import os
     ext = (fmt or os.path.splitext(path)[1].lstrip('.')).lower()
     with open(path, 'rb') as f:
         data = f.read()
-    if ext == 'asm':
-        from .asm import assemble
-        r = assemble(data.decode('latin-1'), org=org, entry=entry)
+    if ext in ('asm', 'src'):
+        from .asm import assemble, read_source
+        try:
+            text, name = read_source(data)
+        except ValueError as e:
+            raise LoadError('%s: %s' % (path, e))
+        r = assemble(text, org=org, entry=entry, precedence=precedence)
         if r.errors:
             raise LoadError('\n'.join('%s:%d: %s' % (path, ln, msg) for ln, msg in r.errors))
         segments, e = r.segments, r.entry
-        name = os.path.splitext(os.path.basename(path))[0]
+        name = name or os.path.splitext(os.path.basename(path))[0]
         if not segments:
             raise LoadError('%s: the source assembles to no bytes' % path)
     elif ext == 'cmd':

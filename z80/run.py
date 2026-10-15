@@ -187,7 +187,7 @@ def parse_arg(s):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='python3 -m z80.run',
                                  description='Run a machine-language program in the core, headless.')
-    ap.add_argument('file', help='.cmd, .cas, .bin (with --org) or .asm')
+    ap.add_argument('file', help='.cmd, .cas, .bin (with --org), .asm or .src (assembled first)')
     ap.add_argument('--org', type=parse_addr, metavar='ADDR',
                     help='the load address of a .bin file, or of .asm source with no ORG')
     ap.add_argument('--entry', type=parse_addr, metavar='ADDR',
@@ -207,10 +207,14 @@ def main(argv=None):
     ap.add_argument('--dump', type=parse_range, action='append', default=[], metavar='ADDR,LEN',
                     help='hex-dump this range of memory at the end (repeatable)')
     ap.add_argument('--quiet', action='store_true', help='print nothing but what --dump asks for')
+    ap.add_argument('--precedence', action='store_true',
+                    help="assemble a source file with the usual operator precedence instead "
+                         "of EDTASM's left to right (z80.asm's --precedence)")
     a = ap.parse_args(argv)
 
     try:
-        segments, entry, name = load_file(a.file, org=a.org, entry=a.entry)
+        segments, entry, name = load_file(a.file, org=a.org, entry=a.entry,
+                                          precedence=a.precedence)
         sp = place_stack(segments, a.sp)
     except (LoadError, OSError) as e:
         sys.stderr.write('%s\n' % e)

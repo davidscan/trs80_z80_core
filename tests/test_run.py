@@ -27,7 +27,7 @@ HI = '''\
         ORG   7D00H
 VIDEO   EQU   3C00H
 START   LD    HL,MSG
-        LD    DE,VIDEO+5*64+28
+        LD    DE,5*64+28+VIDEO
         LD    BC,MSGEND-MSG
         LDIR
         CALL  0A7FH

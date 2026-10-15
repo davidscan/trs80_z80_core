@@ -419,11 +419,20 @@ def build(org, fps, scan=0):
 def listing(code, org, delay, fps):
     """The BASIC wrapper: a DATA loader with a checksum, in period style."""
     total = sum(code)
+    if org <= 0x7FFF < org + len(code) - 1:
+        # the routine straddles 8000H: POKE's address is signed in Level II,
+        # so E+I past 32767 was ?OV (the 2026-09-30 audit, ZL-4; the same
+        # loop as z80.asm's to_bas).  The IF ends its line, so the POKE
+        # goes on the next.
+        loop = ['40 E=%d : C=0' % org,
+                '50 FOR I=0 TO %d : READ B : A=E+I : IF A>32767 THEN A=A-65536' % (len(code) - 1),
+                '55 POKE A,B : C=C+B : NEXT']
+    else:
+        loop = ['40 E=%d : C=0' % (org - 65536 if org > 32767 else org),
+                '50 FOR I=0 TO %d : READ B : POKE E+I,B : C=C+B : NEXT' % (len(code) - 1)]
     out = ['10 REM CATCH -- A MACHINE-LANGUAGE REFLEX TEST FOR THE Z80 CORE',
            '20 REM ARROWS MOVE THE PADDLE, SPACE QUITS, THREE MISSES END IT',
-           '30 REM SET THE CLOCK FIRST AT THE PROMPT:  speed 1.77',
-           '40 E=%d : C=0' % (org - 65536 if org > 32767 else org),
-           '50 FOR I=0 TO %d : READ B : POKE E+I,B : C=C+B : NEXT' % (len(code) - 1),
+           '30 REM SET THE CLOCK FIRST AT THE PROMPT:  speed 1.77'] + loop + [
            '60 IF C<>%d THEN PRINT "BAD DATA -- CHECK THE DATA LINES" : END' % total,
            '70 POKE 16526,%d : POKE 16527,%d' % (org & 0xFF, (org >> 8) & 0xFF),
            '80 CLS : PRINT @ 540, "CATCH -- PRESS ENTER TO PLAY";',

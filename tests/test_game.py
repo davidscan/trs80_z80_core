@@ -163,6 +163,22 @@ class TestValuesThatDoNotFitAreRefused(unittest.TestCase):
             a.op('LD', ('DE', 'nn'), 70000)
         self.assertIn('word', str(e.exception))
 
+    def test_a_routine_straddling_8000h_gets_a_loader_that_turns_the_address(self):
+        """ZL-4: `--org` just under 8000H built a loader whose POKE E+I ran
+        past 32767 (?OV in Level II).  The same shape as z80.asm's to_bas."""
+        _, code, delay, _ = mkgame.build(32000, 30)
+        org = 0x8000 - len(code) // 2
+        text = mkgame.listing(code, org, delay, 30)
+        self.assertIn('40 E=%d : C=0' % org, text)
+        self.assertIn('50 FOR I=0 TO %d : READ B : A=E+I : IF A>32767 THEN A=A-65536'
+                      % (len(code) - 1), text)
+        self.assertIn('55 POKE A,B : C=C+B : NEXT', text)
+        below = mkgame.listing(code, 0x8000 - len(code), delay, 30)
+        self.assertIn('50 FOR I=0 TO %d : READ B : POKE E+I,B : C=C+B : NEXT' % (len(code) - 1),
+                      below)
+        self.assertNotIn('55 POKE', below)
+        self.assertIn('40 E=-32768 : C=0', mkgame.listing(code, 0x8000, delay, 30))
+
     def test_the_shipped_demo_is_unchanged(self):
         """The fix must not move demo/catch.bas."""
         asm, code, delay, fps_turn = mkgame.build(32000, 30)

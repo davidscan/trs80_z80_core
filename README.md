@@ -77,14 +77,26 @@ Disassembles raw Z80 bytes. **Writes:** nothing; the listing goes to stdout.
 
 ### `python3 -m z80.asm SOURCE`
 
-Assembles a Z80 source file written the way the period books print
-Editor/Assembler listings: an optional line number, a label (colon
-optional), the instruction, `;` comments; hex with a trailing `H` and a
-leading digit (`0FFH`), octal `Q`, binary `B`, `'A'` characters, `$` for
-the location counter; `+ - * /` and `.AND. .OR. .XOR. .NOT. .MOD. .SHL.
-.SHR.`, `&` for `.AND.` and EDTASM's `<` shift (left, or right for a
-negative count); `ORG`, `EQU`, `DEFB`/`DB`, `DEFW`/`DW`, `DEFM`/`DM`, `DEFS`/`DS`,
-`END entry`. Every instruction comes from the same opcode table the core
+Assembles a Z80 source file: text written the way the period books print
+Editor/Assembler listings, or a file the Editor/Assembler itself saved
+(its own format -- a `D3H` byte and the program name, then each line with
+its number's bit 7 set -- is read as it is, and the name inside it names
+the `cmd` or `cas` output). The syntax is EDTASM's: an optional line
+number, a label in column 1 (colon optional; a word in column 1 is a
+label whatever it is spelled like, and an op-code is indented), the
+instruction, `;` comments; hex with a trailing `H` and a leading digit
+(`0FFH`), octal `Q`, binary `B`, `'A'` characters, `$` for the location
+counter; `+ - * /`, `&` for `.AND.`, EDTASM's `<` shift (left, or right
+for a negative count) and `.AND. .OR. .XOR. .NOT. .MOD. .SHL. .SHR.`,
+evaluated strictly left to right as EDTASM did (`2+3*4` is 20;
+`--precedence` gives the usual order, 14, and either way an expression
+whose value depends on the order is reported as a warning with both
+values); `ORG`, `EQU`, `DEFB`/`DB`, `DEFW`/`DW`, `DEFM`/`DM` (a string with
+no closing quote runs to the end of the line), `DEFS`/`DS` (reserves the
+space and writes nothing into it, as EDTASM did; `DEFS n,fill` fills),
+`END entry`. Fourteen period sources assemble to the objects their
+authors built from them, byte for byte at every address (the test suite
+checks them when the corpus is linked beside the repo). Every instruction comes from the same opcode table the core
 executes and the disassembler prints from, so a disassembly listing is
 valid source again: assembled at the same address it gives the same bytes
 (bytes the assembler would encode another way -- an undefined `ED` opcode,
@@ -98,17 +110,19 @@ file; with neither, the listing goes to stdout.
 | `SOURCE` | required | the source file | always |
 | `-o OUT` | none | where the object goes; the extension picks the format: `.bin`, `.cmd`, `.cas`, `.bas` | producing something to load or run |
 | `--format {bin,cmd,cas,bas}` | from the extension, else `bin` | `bin` a raw image (gaps between `ORG` blocks zero-filled); `cmd` a TRS-80 load module; `cas` a Model I SYSTEM tape as a byte stream; `bas` a BASIC `DATA`/`POKE` loader with a checksum, the entry POKEd to 16526/16527 (Level II's own form; `DEFUSR` is Disk BASIC's) and `PRINT USR(0)` on line 60 | an output name without a telling extension |
-| `--name NAME` | the source file's name | the six-character program name inside a `cmd` or `cas` file | matching what a listing expects |
+| `--name NAME` | the name inside an Editor/Assembler file, else the source file's name | the six-character program name inside a `cmd` or `cas` file | matching what a listing expects |
 | `--org ADDR` | none | the load address when the source has no `ORG` (`32000` or `7D00H`) | a fragment without one |
 | `--entry ADDR` | the first `ORG` | the entry address when `END` names none | a routine whose entry is not its first byte |
 | `--list FILE` | stdout when there is no `-o` | writes the listing (address, bytes, source) here; `-` for stdout | keeping the listing beside the object |
 | `--symbols` | off | prints the symbol table after the listing | finding an address to `PEEK` |
+| `--precedence` | off | evaluates expressions with the usual operator precedence (`2+3*4` is 14) instead of EDTASM's left to right (20) | a listing written for a Zilog-style assembler, or new code |
 
 ### `python3 -m z80.run FILE`
 
 Runs a machine-language program in the core with no screen and no
 keyboard: a `.cmd` load module, a `.cas` SYSTEM tape, raw `.bin` bytes
-(with `--org`) or `.asm` source, assembled first. The program is called
+(with `--org`) or `.asm`/`.src` source (text or an Editor/Assembler file),
+assembled first. The program is called
 the way `USR` calls a routine, with the same fifteen ROM entries served and
 `ERR rom` for any other. Keyboard reads see no key; video bytes land in
 memory and are printed afterwards as the 16 by 64 screen. It prints how
@@ -118,7 +132,7 @@ an error, 3 when the T-state budget stopped it (2 is a usage error). **Writes:**
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
-| `FILE` | required | the program: `.cmd`, `.cas`, `.bin` or `.asm` | always |
+| `FILE` | required | the program: `.cmd`, `.cas`, `.bin`, `.asm` or `.src` | always |
 | `--org ADDR` | none | the load address of a `.bin` file, or of `.asm` source with no `ORG` | raw bytes |
 | `--entry ADDR` | the file's transfer address (in source, `END`'s operand), else its first block | where execution starts; it overrides what the file names | a routine whose entry is not its first byte |
 | `--arg N` | `0` | what `CALL 0A7FH` fetches into HL, as `USR(N)` would | routines that take an argument |
@@ -128,6 +142,7 @@ an error, 3 when the T-state budget stopped it (2 is a usage error). **Writes:**
 | `--regs` | off | prints AF BC DE HL IX IY SP PC at the end | debugging a routine |
 | `--dump ADDR,LEN` | none | hex-dumps that range at the end; repeatable | checking what a routine stored |
 | `--quiet` | off | prints nothing but the `--dump` ranges | scripting |
+| `--precedence` | off | assembles a source file with the usual operator precedence instead of EDTASM's left to right (`z80.asm`'s `--precedence`) | a listing written for a Zilog-style assembler |
 
 ### `python3 -m unittest discover -s tests`
 

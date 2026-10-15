@@ -3,6 +3,7 @@
 
     python3 -m z80.asm SOURCE [-o OUT] [--format {bin,cmd,cas,bas}] [--name NAME]
                        [--org ADDR] [--entry ADDR] [--list FILE] [--symbols]
+                       [--precedence]
 
 No opcode knowledge lives here.  Every instruction is looked up in
 `z80.table.INVERSE` (signature -> encoding), the same table the core
@@ -10,8 +11,12 @@ decodes from and the disassembler renders from, so what this assembles
 is by construction what the core executes and what `z80.disasm` prints
 (tests/test_asm.py pins the round trip over every signature).
 
-SOURCE is what the period books print for the Radio Shack Editor/
-Assembler and its successors:
+SOURCE is what the Radio Shack Editor/Assembler (EDTASM) read, either
+as the period books print it or as the Editor saved it (its own file
+format, decoded by `read_source`: a D3H byte and a six-character name,
+then each line as its five-digit number with bit 7 set, a blank, the
+text, 0DH; 1AH at the end -- Prentice Hall, TRS-80 Assembly Language,
+1981, p.156-157):
 
     00100 START   LD   HL,VIDEO      ;a comment
     00110         LD   (HL),A
@@ -21,26 +26,43 @@ Assembler and its successors:
 
   - A leading line number (as the editor numbered it) is optional and
     ignored.  A line whose first character is `*` or `;` is a comment.
-  - The first field is a label when it is not a mnemonic or directive;
-    a trailing colon is allowed and dropped.  Labels are case-insensitive
-    (everything outside quotes is upper-cased, as EDTASM did).
+  - A word in column 1 (right after the line number) is a label, whatever
+    it is spelled like -- `OUT  LD  H,B` labels the LD -- and an op-code
+    is indented (Barden, More TRS-80 Assembly-Language Programming,
+    p.40-42); a colon makes a label anywhere and is dropped.  Labels are
+    case-insensitive (everything outside quotes is upper-cased, as
+    EDTASM did).
   - Numbers: decimal; hex with a trailing H and a leading digit (0FFH);
     octal with Q or O; binary with B; a character in single quotes ('A',
     and 'AB' is 4142H).  `$` is the location counter.
-  - Expressions: + - * / and .MOD. .AND. .OR. .XOR. .NOT. .SHL. .SHR.,
-    with the usual precedence (unary, then * / .MOD. .SHL. .SHR., then
-    + -, then .AND., then .OR. .XOR.) and parentheses for grouping.  An
-    operand that is entirely parenthesized is a memory or port reference,
-    as in Zilog syntax: `LD A,(BUF+1)` reads memory, `LD A,BUF+1` loads
-    the address.  NOTE: the original EDTASM evaluated left to right with
-    no precedence; period listings' expressions (SCREEN+708, $-1) do not
-    tell the two apart, so the usual precedence is used here.  The shifts
+  - Expressions: + - * / & < and .MOD. .AND. .OR. .XOR. .NOT. .SHL. .SHR.,
+    with parentheses for grouping (an operand that is entirely
+    parenthesized is a memory or port reference, as in Zilog syntax:
+    `LD A,(BUF+1)` reads memory, `LD A,BUF+1` loads the address).  The
+    ORDER is EDTASM's, strictly left to right with no precedence (the
+    Editor/Assembler manual; Barden p.47 lists its operators as + - & <):
+    2+3*4 is 20.  `--precedence` (assemble(precedence=True)) gives the
+    usual order instead (unary, then * / .MOD. .SHL. .SHR. <, then + -,
+    then .AND. &, then .OR. .XOR.), what the Zilog-convention assemblers
+    did (Leventhal, Z80 Assembly Language Programming, 1979, ch. 3):
+    2+3*4 is 14.  Every expression is evaluated both ways, and one whose
+    value depends on the order is reported as a warning with both values,
+    so a listing written for the other kind of assembler never assembles
+    wrong in silence (no source in the period corpus has one: 2026-10-15,
+    84 files, 11 expressions with two operators, all + and -).  The shifts
     work on 16 bits with zeros coming in (a count of 0 to 16).  Blanks may
     stand around an operator, not between two values (`DB 1 2` is an
     error).  A byte operand is -128..255, a word -32768..65535.
   - Directives: ORG, EQU, DEFB/DB, DEFW/DW, DEFM/DM, DEFS/DS [,fill],
     END [entry].  DEFB and DEFM both take any mix of expressions and
-    quoted strings ('' inside single quotes is one quote).
+    quoted strings ('' inside single quotes is one quote; a string with
+    no closing quote runs to the end of the line, as EDTASM took it, and
+    the period object of the one corpus source that relies on it says
+    so).  DEFS reserves
+    its bytes and writes nothing into them, as EDTASM did (Barden p.45-46:
+    "A DEFS does not fill the vacant space with zeroes"): the object
+    skips them, so a buffer over live memory is left alone when the file
+    loads.  The optional fill is this assembler's own: DEFS n,fill emits.
   - Zilog leniencies: `SUB A,B` and `CP A,n` drop the A; `ADD B` means
     `ADD A,B`; `(IX)` means `(IX+0)`.
 
@@ -60,10 +82,12 @@ Outputs (`-o` picks the format from the extension, `--format` overrides):
   bas  a BASIC listing in the magazines' shape: a DATA block with a
        checksum, a POKE loop, the entry POKEd to 16526/16527 (Level II's
        own form -- DEFUSR is Disk BASIC's) and `PRINT USR(0)` on line 60
-       for the user to replace.  One contiguous ORG block only.
+       for the user to replace.  One contiguous block only (a DEFS at
+       the end is fine; one inside the code splits the block).
 With no -o the listing goes to stdout (`--list FILE` writes it as well).
 The entry address is the END operand, else --entry, else the first ORG.
-Errors are reported as `file:line: message`, all of them, exit status 1.
+Errors are reported as `file:line: message`, all of them, exit status 1;
+warnings as `file:line: warning: message`, and the output is written.
 """
 import argparse
 import os
@@ -80,6 +104,8 @@ ALU_DROP_A = {'SUB', 'AND', 'XOR', 'OR', 'CP'}
 ALU_NEED_A = {'ADD', 'ADC', 'SBC'}
 DIRECTIVES = {'ORG', 'EQU', 'DEFB', 'DB', 'DEFW', 'DW', 'DEFM', 'DM', 'DEFS', 'DS', 'END'}
 DOT_OPS = {'AND', 'OR', 'XOR', 'NOT', 'MOD', 'SHL', 'SHR'}
+BINARY = {'+', '-', '*', '/', '&', '<',
+          '.AND.', '.OR.', '.XOR.', '.MOD.', '.SHL.', '.SHR.'}
 
 # mnemonic -> [operand pattern tuples], in table order
 BY_MNEMONIC = {}
@@ -173,21 +199,57 @@ def tokenize(text, lineno):
 
 
 class Expr:
-    """A parsed expression, evaluated against a symbol table and a PC."""
+    """A parsed expression, evaluated against a symbol table and a PC.
 
-    def __init__(self, text, lineno):
+    `prec` picks the order of evaluation: False is EDTASM's, strictly
+    left to right; True the usual precedence (the module docstring).
+    Parentheses group in both.  An expression with two or more operators
+    is also evaluated the other way, and when the two values differ a
+    note goes to `warnings` (the Result's list, shared by every Expr of
+    one assembly) once per expression: the one place a listing written
+    for the other kind of assembler would otherwise go wrong in silence.
+    """
+
+    def __init__(self, text, lineno, prec=False, warnings=None):
         self.text = text.strip()
         self.lineno = lineno
+        self.prec = prec
+        self.warnings = warnings
         self.toks = tokenize(self.text, lineno)
         if not self.toks:
             raise AsmError(lineno, 'missing expression')
+        # binary operators: one that follows a value or a ')' (so the '-'
+        # of `-1` and of `2*-1` does not count)
+        self.binary = sum(1 for i, t in enumerate(self.toks)
+                          if t[0] == 'op' and t[1] in BINARY and i > 0
+                          and (self.toks[i - 1][0] != 'op' or self.toks[i - 1] == ('op', ')')))
 
     def eval(self, symbols, pc):
-        self._syms, self._pc, self._i = symbols, pc, 0
-        v = self._or()
+        v = self._run(symbols, pc, self.prec)
+        if self.binary >= 2 and self.warnings is not None:
+            try:
+                w = self._run(symbols, pc, not self.prec)
+            except (AsmError, Undefined):
+                w = v
+            if w != v:
+                ltr, usual = (v, w) if not self.prec else (w, v)
+                note = (self.lineno, '%s is %d left to right (EDTASM%s) and %d with '
+                                     'operator precedence (--precedence%s)'
+                        % (self.text, ltr, '' if self.prec else ', used',
+                           usual, ', used' if self.prec else ''))
+                if note not in self.warnings:
+                    self.warnings.append(note)
+        return v
+
+    def _run(self, symbols, pc, prec):
+        self._syms, self._pc, self._i, self._prec = symbols, pc, 0, prec
+        v = self._top()
         if self._i != len(self.toks):
             raise AsmError(self.lineno, 'bad expression %r' % self.text)
         return v
+
+    def _top(self):
+        return self._or() if self._prec else self._ltr()
 
     def _peek(self):
         return self.toks[self._i] if self._i < len(self.toks) else None
@@ -199,22 +261,34 @@ class Expr:
             return t[1]
         return None
 
+    def _ltr(self):
+        # EDTASM: one operator after another, each applied to everything
+        # to its left; a unary sign or .NOT. binds to its own operand
+        v = self._unary()
+        while True:
+            t = self._peek()
+            if not (t and t[0] == 'op' and t[1] in BINARY):
+                return v
+            self._i += 1
+            v = self._apply(t[1], v, self._unary())
+
     def _or(self):
         v = self._and()
         while True:
             o = self._take('.OR.', '.XOR.')
             if not o:
                 return v
-            w = self._and()
-            v = (v | w) if o == '.OR.' else (v ^ w)
+            v = self._apply(o, v, self._and())
 
     def _and(self):
         # EDTASM's own operator set is +, -, & and < (Barden, More TRS-80
         # Assembly-Language Programming, p.47): & is AND, < is the shift.
         v = self._add()
-        while self._take('.AND.', '&'):
-            v &= self._add()
-        return v
+        while True:
+            o = self._take('.AND.', '&')
+            if not o:
+                return v
+            v = self._apply(o, v, self._add())
 
     def _add(self):
         v = self._mul()
@@ -222,8 +296,7 @@ class Expr:
             o = self._take('+', '-')
             if not o:
                 return v
-            w = self._mul()
-            v = v + w if o == '+' else v - w
+            v = self._apply(o, v, self._mul())
 
     def _mul(self):
         v = self._unary()
@@ -231,31 +304,42 @@ class Expr:
             o = self._take('*', '/', '.MOD.', '.SHL.', '.SHR.', '<')
             if not o:
                 return v
-            w = self._unary()
-            if o == '*':
-                v *= w
-            elif o == '/':
-                if w == 0:
-                    raise AsmError(self.lineno, 'division by zero')
-                v = int(v / w)
-            elif o == '.MOD.':
-                if w == 0:
-                    raise AsmError(self.lineno, 'division by zero')
-                v %= w
-            elif o == '<':
-                # EDTASM's shift: left by w, a negative count shifts right
-                if not -16 <= w <= 16:
-                    raise AsmError(self.lineno, 'shift count out of range: %d' % w)
-                if w >= 0:
-                    v = ((v & 0xFFFF) << w) & 0xFFFF
-                else:
-                    v = (v & 0xFFFF) >> -w
-            elif not 0 <= w <= 16:
+            v = self._apply(o, v, self._unary())
+
+    def _apply(self, o, v, w):
+        """v OPERATOR w, the same in either order of evaluation."""
+        if o == '+':
+            return v + w
+        if o == '-':
+            return v - w
+        if o == '*':
+            return v * w
+        if o == '/':
+            if w == 0:
+                raise AsmError(self.lineno, 'division by zero')
+            return int(v / w)           # toward zero: -7/2 is -3, as in C
+        if o == '.MOD.':
+            if w == 0:
+                raise AsmError(self.lineno, 'division by zero')
+            return v % w
+        if o in ('.AND.', '&'):
+            return v & w
+        if o == '.OR.':
+            return v | w
+        if o == '.XOR.':
+            return v ^ w
+        if o == '<':
+            # EDTASM's shift: left by w, a negative count shifts right
+            if not -16 <= w <= 16:
                 raise AsmError(self.lineno, 'shift count out of range: %d' % w)
-            elif o == '.SHL.':
-                v = ((v & 0xFFFF) << w) & 0xFFFF
-            else:
-                v = (v & 0xFFFF) >> w     # 16 bits, zeros in: -2 .SHR. 1 is 7FFFH
+            if w >= 0:
+                return ((v & 0xFFFF) << w) & 0xFFFF
+            return (v & 0xFFFF) >> -w
+        if not 0 <= w <= 16:
+            raise AsmError(self.lineno, 'shift count out of range: %d' % w)
+        if o == '.SHL.':
+            return ((v & 0xFFFF) << w) & 0xFFFF
+        return (v & 0xFFFF) >> w         # 16 bits, zeros in: -2 .SHR. 1 is 7FFFH
 
     def _unary(self):
         o = self._take('-', '+', '.NOT.')
@@ -281,7 +365,7 @@ class Expr:
                 raise Undefined(t[1])
             return self._syms[t[1]]
         if t == ('op', '('):
-            v = self._or()
+            v = self._top()
             if not self._take(')'):
                 raise AsmError(self.lineno, 'missing ) in %r' % self.text)
             return v
@@ -314,8 +398,7 @@ def split_fields(line, lineno):
         prev = ch
     body = ''.join(out)
     comment = s[len(body):]
-    if q:
-        raise AsmError(lineno, 'unterminated string')
+    unterminated = q               # closed below for a data directive, else an error
     # upper-case outside quotes
     up, q, prev = [], None, ' '
     for ch in body:
@@ -331,9 +414,13 @@ def split_fields(line, lineno):
         prev = ch
     body = ''.join(up)
     # An indented word is an op-code, a word at the start of the field a
-    # label (Barden, More TRS-80 Assembly-Language Programming, p.40-42);
-    # a misspelled mnemonic used to become a label silently.  A ':' makes
-    # a label wherever it stands.
+    # label, whatever it is spelled like (Barden, More TRS-80 Assembly-
+    # Language Programming, p.40-42: free format "as long as an op-code
+    # does not start in column 1"); a misspelled mnemonic used to become
+    # a label silently, and then a column-1 label spelled like a mnemonic
+    # (`OUT  LD  H,B`: six corpus sources) was taken for the op-code and
+    # refused (the 2026-09-30 audit, ZM-2).  A ':' makes a label wherever
+    # it stands.
     indented = body[:1].isspace()
     parts = body.split(None, 1)
     if not parts:
@@ -341,8 +428,7 @@ def split_fields(line, lineno):
     first = parts[0]
     rest = parts[1] if len(parts) > 1 else ''
     label = None
-    if first.endswith(':') or (not indented
-                               and first not in MNEMONICS and first not in DIRECTIVES):
+    if first.endswith(':') or not indented:
         label = first.rstrip(':')
         if not re.match(r'^[A-Z_@?][A-Z0-9_@?$]*$', label):
             raise AsmError(lineno, 'bad label or unknown instruction %r' % first)
@@ -352,7 +438,18 @@ def split_fields(line, lineno):
         first = parts[0]
         rest = parts[1] if len(parts) > 1 else ''
     if first not in MNEMONICS and first not in DIRECTIVES:
+        if label in MNEMONICS or label in DIRECTIVES:
+            raise AsmError(lineno, '%s in column 1 is a label; an op-code is indented' % label)
         raise AsmError(lineno, 'unknown instruction %r' % first)
+    if unterminated:
+        # EDTASM took a DEFM or DEFB string with no closing quote to the
+        # end of the line: TBBS's MINIHOST/SRC line 5140, `DEFM 'Minihost/
+        # Cmd v3.2 (c)1985 Mike Bernstein`, assembles to its period object
+        # byte for byte so read, and was an error here (N-6 of the
+        # 2026-09-30 audit).  Anywhere else a lost quote is still an error.
+        if first not in ('DEFM', 'DM', 'DEFB', 'DB'):
+            raise AsmError(lineno, 'unterminated string')
+        rest += unterminated
     return (label, first, rest.strip(), comment)
 
 
@@ -404,7 +501,7 @@ def split_operands(text, lineno):
     return items
 
 
-def data_items(text, lineno, words=False):
+def data_items(text, lineno, words=False, prec=False, warnings=None):
     """DEFB/DEFM/DEFW items: ('str', bytes), ('word', int) or ('expr', Expr).
 
     With `words` (DEFW) every item is a WORD, so a quoted one or two
@@ -437,7 +534,7 @@ def data_items(text, lineno, words=False):
         if quoted and (item[0] == '"' or len(item) != 3):
             out.append(('str', s.encode('latin-1')))
         else:
-            out.append(('expr', Expr(item, lineno)))
+            out.append(('expr', Expr(item, lineno, prec, warnings)))
     return out
 
 
@@ -445,12 +542,15 @@ def data_items(text, lineno, words=False):
 class Opnd:
     """One instruction operand: its candidate pattern tokens and any value."""
 
-    def __init__(self, text, lineno, symbols, pc):
+    def __init__(self, text, lineno, symbols, pc, prec=False, warnings=None):
         self.text = text
         self.tokens = []            # pattern tokens this operand can stand for
         self.expr = None            # the value expression, if any
         self.kind = None            # 'reg' | 'ind' | 'idx' | 'mem' | 'expr'
         t = text
+
+        def ex(s):                  # an Expr in this assembly's order of evaluation
+            return Expr(s, lineno, prec, warnings)
         if t in REGS or t in CONDS:
             self.kind = 'reg'
             self.tokens = [t]
@@ -462,7 +562,7 @@ class Opnd:
                 self.tokens = ['(%s)' % inner]
                 if inner in ('IX', 'IY'):
                     self.tokens.append('(%s+d)' % inner)   # (IX) as (IX+0)
-                    self.expr = Expr('0', lineno)
+                    self.expr = ex('0')
                 return
             if inner == 'C':
                 self.kind = 'ind'
@@ -472,14 +572,14 @@ class Opnd:
             if m:
                 self.kind = 'idx'
                 self.tokens = ['(%s+d)' % m.group(1)]
-                self.expr = Expr(m.group(2), lineno)
+                self.expr = ex(m.group(2))
                 return
             self.kind = 'mem'
             self.tokens = ['(nn)', '(n)']
-            self.expr = Expr(inner, lineno)
+            self.expr = ex(inner)
             return
         self.kind = 'expr'
-        self.expr = Expr(t, lineno)
+        self.expr = ex(t)
         self.tokens = ['n', 'nn', 'd']
         try:
             v = self.expr.eval(symbols, pc)
@@ -580,6 +680,7 @@ class Result:
         self.symbols = {}
         self.stmts = []
         self.errors = []            # [(lineno, message)]
+        self.warnings = []          # [(lineno, message)]: assembled, but look
 
     @property
     def ok(self):
@@ -652,17 +753,27 @@ class Result:
 
     def to_bas(self, name):
         if len(self.segments) != 1:
-            raise ValueError('the DATA loader needs one contiguous ORG block, not %d'
-                             % len(self.segments))
+            raise ValueError('the DATA loader needs one contiguous block, not %d: a second '
+                             'ORG or a DEFS inside the code splits it (a DEFS at the end '
+                             'does not)' % len(self.segments))
         org, code = self.segments[0]
         # Level II only: POKE takes an address above 7FFFH as its negative
         # (the 16K signed idiom), and the entry goes to 16526/16527 -- DEFUSR
         # is Disk BASIC's (Level II manual p.8-9).
-        e = org - 65536 if org > 32767 else org
+        if org <= 0x7FFF < org + len(code) - 1:
+            # the block straddles 8000H, so neither sign fits the whole of
+            # it: E+I ran past 32767 and the loader stopped with ?OV (the
+            # 2026-09-30 audit, ZL-4).  The address is turned over as it
+            # crosses, on its own line: an IF ends the line it is on.
+            e = org
+            loop = ['30 FOR I=0 TO %d:READ B:A=E+I:IF A>32767 THEN A=A-65536' % (len(code) - 1),
+                    '35 POKE A,B:C=C+B:NEXT']
+        else:
+            e = org - 65536 if org > 32767 else org
+            loop = ['30 FOR I=0 TO %d:READ B:POKE E+I,B:C=C+B:NEXT' % (len(code) - 1)]
         lines = ['10 REM %s -- %d BYTES AT %d (%04XH), ENTRY %d (%04XH)'
                  % (name.upper(), len(code), org, org, self.entry, self.entry),
-                 '20 E=%d:C=0' % e,
-                 '30 FOR I=0 TO %d:READ B:POKE E+I,B:C=C+B:NEXT' % (len(code) - 1),
+                 '20 E=%d:C=0' % e] + loop + [
                  '40 IF C<>%d THEN PRINT "BAD DATA -- CHECK THE DATA LINES":END' % sum(code),
                  '50 POKE 16526,%d:POKE 16527,%d'
                  % (self.entry & 0xFF, (self.entry >> 8) & 0xFF),
@@ -674,15 +785,20 @@ class Result:
         return '\n'.join(lines) + '\n'
 
 
-def assemble(text, org=None, entry=None):
+def assemble(text, org=None, entry=None, precedence=False):
     """Assemble SOURCE text.  org/entry are the fallbacks when the source
-    has no ORG / no END operand.  Returns a Result; check .errors."""
+    has no ORG / no END operand; `precedence` evaluates expressions in the
+    usual order instead of EDTASM's left to right (the module docstring).
+    Returns a Result; check .errors, and .warnings."""
     res = Result()
     symbols = res.symbols
     stmts = res.stmts
     deferred = []                   # EQUs waiting on later labels
     pc = org
     ended = False
+
+    def expr(text, lineno):
+        return Expr(text, lineno, precedence, res.warnings)
 
     labels = set()                  # every label met, a deferred EQU's too
 
@@ -714,7 +830,7 @@ def assemble(text, org=None, entry=None):
                 if not label:
                     raise AsmError(lineno, 'EQU needs a label')
                 define(label, lineno)
-                s.items = Expr(args, lineno)
+                s.items = expr(args, lineno)
                 try:
                     s.value = s.items.eval(symbols, pc if pc is not None else 0)
                     symbols[label] = s.value
@@ -724,7 +840,7 @@ def assemble(text, org=None, entry=None):
                 continue
             if op == 'ORG':
                 try:
-                    pc = word_value(Expr(args, lineno).eval(symbols, pc if pc is not None else 0),
+                    pc = word_value(expr(args, lineno).eval(symbols, pc if pc is not None else 0),
                                     lineno, 'ORG')
                 except Undefined as u:
                     raise AsmError(lineno, 'ORG needs a value known here: %s undefined' % u.name)
@@ -744,33 +860,34 @@ def assemble(text, org=None, entry=None):
             if op is None:
                 continue
             if op == 'END':
-                s.items = Expr(args, lineno) if args else None
+                s.items = expr(args, lineno) if args else None
                 ended = True
                 continue
             if op in ('DEFB', 'DB', 'DEFM', 'DM'):
-                s.items = data_items(args, lineno)
+                s.items = data_items(args, lineno, prec=precedence, warnings=res.warnings)
                 s.size = sum(len(v) if k == 'str' else 1 for k, v in s.items)
             elif op in ('DEFW', 'DW'):
-                s.items = data_items(args, lineno, words=True)
+                s.items = data_items(args, lineno, words=True, prec=precedence,
+                                     warnings=res.warnings)
                 s.size = 2 * len(s.items)
             elif op in ('DEFS', 'DS'):
                 parts = split_operands(args, lineno)
                 if not 1 <= len(parts) <= 2:
                     raise AsmError(lineno, 'DEFS takes a size and an optional fill')
                 try:
-                    s.size = Expr(parts[0], lineno).eval(symbols, pc)
+                    s.size = expr(parts[0], lineno).eval(symbols, pc)
                 except Undefined as u:
                     raise AsmError(lineno, 'DEFS needs a size known here: %s undefined' % u.name)
                 if s.size < 0:
                     raise AsmError(lineno, 'negative DEFS size')
-                s.items = Expr(parts[1], lineno) if len(parts) == 2 else None
+                s.items = expr(parts[1], lineno) if len(parts) == 2 else None
             else:
                 names = split_operands(args, lineno)
                 if op in ALU_DROP_A and len(names) == 2 and names[0] == 'A':
                     names = names[1:]
                 elif op in ALU_NEED_A and len(names) == 1:
                     names = ['A'] + names
-                s.opnds = [Opnd(t, lineno, symbols, pc) for t in names]
+                s.opnds = [Opnd(t, lineno, symbols, pc, precedence, res.warnings) for t in names]
                 s.enc, s.entry = choose(op, s.opnds, lineno)
                 s.size = s.entry.length
             if pc + s.size > 0x10000:
@@ -846,7 +963,19 @@ def assemble(text, org=None, entry=None):
                     w = v if k == 'word' else word_value(v.eval(symbols, s.pc), s.lineno)
                     out += bytes((w & 0xFF, w >> 8))
             elif op in ('DEFS', 'DS'):
-                fill = byte_value(s.items.eval(symbols, s.pc), s.lineno, 'fill') if s.items else 0
+                if s.items is None:
+                    # EDTASM reserves the space and writes nothing into it
+                    # (Barden p.45-46; RS Assembly Language Programming
+                    # p.69-70): the object skips it, and so does the
+                    # period .cmd beside every corpus source that uses it.
+                    # Zeros went out here before, and through SYSTEM they
+                    # reached the screen or a DOS area a buffer sat over
+                    # (the 2026-09-30 audit, ZM-1).  A fill operand, this
+                    # assembler's own extension, still fills.
+                    flush()
+                    seg_org, seg = s.pc + s.size, bytearray()
+                    continue
+                fill = byte_value(s.items.eval(symbols, s.pc), s.lineno, 'fill')
                 out += bytes([fill]) * s.size
             else:
                 out += encode(s.enc, s.entry, s.opnds, symbols, s.pc, s.lineno)
@@ -864,6 +993,53 @@ def assemble(text, org=None, entry=None):
         res.entry = entry if entry is not None else (res.segments[0][0] if res.segments else 0)
     res.errors.sort()
     return res
+
+
+# ---- source files -----------------------------------------------------------
+def read_source(data):
+    """(text, name) from the bytes of a source file: the Editor/Assembler's
+    own file format decoded, with the six-character name it holds, or the
+    bytes as Latin-1 text (the shape the magazines printed) and no name.
+
+    EDTASM's file (Prentice Hall, TRS-80 Assembly Language, 1981,
+    p.156-157; 52 of the corpus's 84 distinct sources): D3H and the
+    six-character name, then one record a line -- the five-digit line
+    number as ASCII digits with bit 7 set, a blank (20H; a TAB, 09H, in
+    one corpus file), the statement with 09H where the TAB key was
+    pressed, 0DH -- and 1AH at the end.
+    A file saved without its header starts at the first line number.
+    The line number is kept as text (the assembler ignores it) and the
+    TAB stays a tab.  A line-number byte whose low seven bits are not a
+    digit (one each in two corpus files: a dropped bit) is written as 0,
+    since nothing reads it.  A record that does not start with a line
+    number is a ValueError naming the byte: the file is not what it
+    looked like.
+    """
+    def numbered(i):
+        # the blank after the number is a TAB in one corpus file (TBBS's
+        # MINIHOST/SRC): the Editor stored the key as pressed
+        return (i + 6 <= len(data) and all(c >= 0x80 for c in data[i:i + 5])
+                and data[i + 5] in (0x20, 0x09))
+
+    name = None
+    if data[:1] == b'\xd3' and numbered(7):
+        name, i = data[1:7].decode('latin-1').strip(), 7
+    elif numbered(0):
+        i = 0
+    else:
+        return data.decode('latin-1'), None
+    lines = []
+    while i < len(data) and data[i] != 0x1A:
+        if not numbered(i):
+            raise ValueError('not an Editor/Assembler source record at byte %d' % i)
+        num = ''.join(chr(c & 0x7F) if 0x30 <= c & 0x7F <= 0x39 else '0'
+                      for c in data[i:i + 5])
+        j = data.find(b'\r', i + 6)
+        if j < 0:
+            j = len(data)
+        lines.append(num + ' ' + data[i + 6:j].decode('latin-1'))
+        i = j + 1
+    return '\n'.join(lines) + '\n', name
 
 
 # ---- command line --------------------------------------------------------------
@@ -912,6 +1088,10 @@ def main(argv=None):
                     help='write the listing here (- for stdout); with no -o it goes to stdout anyway')
     ap.add_argument('--symbols', action='store_true',
                     help='print the symbol table after the listing')
+    ap.add_argument('--precedence', action='store_true',
+                    help="evaluate expressions with the usual operator precedence (2+3*4 is 14) "
+                         "instead of EDTASM's left to right (20): for a listing written for a "
+                         "Zilog-style assembler, or new code")
     a = ap.parse_args(argv)
 
     # An output that IS the source would be opened for writing over it: a
@@ -929,18 +1109,24 @@ def main(argv=None):
 
     try:
         with open(a.source, 'rb') as f:
-            text = f.read().decode('latin-1')
+            text, native_name = read_source(f.read())
     except OSError as e:
         sys.stderr.write('%s: %s\n' % (a.source, e.strerror))
         return 1
-    res = assemble(text, org=a.org, entry=a.entry)
+    except ValueError as e:
+        sys.stderr.write('%s: %s\n' % (a.source, e))
+        return 1
+    res = assemble(text, org=a.org, entry=a.entry, precedence=a.precedence)
+    for lineno, msg in res.warnings:
+        sys.stderr.write('%s:%d: warning: %s\n' % (a.source, lineno, msg))
     if res.errors:
         for lineno, msg in res.errors:
             sys.stderr.write('%s:%d: %s\n' % (a.source, lineno, msg))
         sys.stderr.write('%d error(s), nothing written\n' % len(res.errors))
         return 1
 
-    name = a.name or os.path.splitext(os.path.basename(a.source))[0]
+    # the name inside an Editor/Assembler file is the one its author gave
+    name = a.name or native_name or os.path.splitext(os.path.basename(a.source))[0]
     fmt = a.format
     if a.output and not fmt:
         ext = os.path.splitext(a.output)[1].lower().lstrip('.')
