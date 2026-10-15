@@ -6,7 +6,7 @@ video streamed and the keyboard served live during the call.  This
 module is the machine around the pure CPU in `z80.cpu`: 64K of RAM that
 reads 255 wherever no frame defined a byte, the address-dispatched
 handling of program-counter entry into ROM space (the sentinel 2FFDH
-ends the call, ten documented entry points are served as HLE traps,
+ends the call, fifteen documented entry points are served as HLE traps,
 anything else is `ERR rom`), ticks for BREAK and pacing, and the
 line-oriented transport.
 
@@ -52,6 +52,18 @@ the RET the ROM routine would have.
            The last five were built 2026-10-14 for Eliminator (Adventure
            International, 1981), from Farvour's chapter 2 descriptions
            and his notes on the routines.
+    0033H  the character in A on the video, as BASIC's PRINT puts it
+           there (Machine.display): characters, graphics, space
+           compression and the control codes; the cursor at 4020H.
+    033AH  0033H, and the cursor column to 40A6H.
+    2B05H  WRA1 through 0A7FH into DE; HL kept, A = D, flags of OR A.
+    0008H  RST 08H: JP 4000H, when something stored a vector there.
+    0018H  RST 18H: JP 4006H likewise; with no vector, the ROM's
+           compare of HL with DE (Z equal, C when HL < DE).
+           These five were built 2026-10-14 for the games/ titles that
+           call them (Cyborg, Stellar Escort, Missile Attack, Robot
+           Attack, Defense Penetrator), from Farvour's notes on the
+           routines (at 0008H, 0018H and 1C90H, 033AH, 0458H-058BH, 2B02H).
 
 Port FFH reads 127 (the 64-character mode value the interpreter's INP
 returns) and every other port 255.  OUT (FFH) has two effects and the
@@ -71,7 +83,7 @@ import signal
 import sys
 import time
 
-from .cpu import Z80
+from .cpu import Z80, SZ53, SZ53P, H, P, N, C
 from .sound import from_env as sound_from_env
 
 PROTO = '3'
@@ -125,7 +137,7 @@ ROM_TOP = 0x3000
 # tools/romcalls.py reads this to say which of a library's ROM calls the
 # core answers.
 SERVED = (0x0A7F, 0x0A9A, 0x01C9, 0x1A19, 0x002B, 0x0049, 0x0060, 0x01D3,
-          0x14C9, 0x05D9)
+          0x14C9, 0x05D9, 0x0008, 0x0018, 0x0033, 0x033A, 0x2B05)
 # 002BH's last row, (unshifted, shifted): ENTER CLEAR BREAK UP DOWN LEFT
 # RIGHT SPACE (scan_keyboard)
 KEY_ROW6 = ((0x0D, 0x0D), (0x1F, 0x1F), (0x01, 0x01), (0x5B, 0x1B),
@@ -142,6 +154,11 @@ RND_MUL, RND_ADD = 4253261, 372837
 WRA1_LO, WRA1_HI = 0x411D, 0x4124
 TYPE_FLAG = 0x40AF
 CURSOR = 0x4020
+# RST 08H and RST 18H jump through RAM vectors (0008H is JP 4000H, 0018H
+# is JP 4006H; Farvour's notes on the restart vectors)
+RST_VECTOR = {0x0008: 0x4000, 0x0018: 0x4006}
+VIDEO_DRIVER = 0x401E          # the video DCB's driver address (401D-4024H)
+ROM_VIDEO_DRIVER = 0x0458      # ... as the ROM sets it, and the interpreter seeds it
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
 KBD_LO, KBD_HI = 0x3800, 0x3900
 TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz
@@ -385,35 +402,49 @@ class Machine:
         if pc == 0x01C9:
             self.cls()
         elif pc == 0x0A7F:
-            # the ROM's CINT (0A7F-0AAF): a string is ?TM there (sent as
-            # `ERR tm`, proto 3); a number is rounded to single first (a
-            # double goes through 0AB9H at 0A87H), then floored, and an
-            # exponent past 16 bits goes to 0AA3H, which accepts exactly
-            # -32768 and otherwise exits through 07B2H, ?OV.  Sent as
-            # `ERR ov`, which the interpreter raises as BASIC's ?OV (the
-            # 2026-09-19 audit, L-43; ruled 2026-09-21).  On success the
-            # ROM leaves the integer in WRA1 with the type flag 2 and
-            # A = 2, ordinary stores that reach the write-set (ZM-4).
-            # Once the routine (or a trap: 14C9H) has stored into WRA1 or
-            # the type flag, 0A7FH converts WRA1 as it now stands, which is
-            # what the ROM reads; until then the frame's `arg`, as before
-            # (the two agree: the frame seeded WRA1 from it).  Eliminator
-            # CALLs 14C9H and then 0A7FH to fetch RND's integer.
-            if self.wra1_moved:
-                v = self.cint(self.wra1(0x0A7F), '0A7FH')
-            else:
-                if self.argtype == 3:
-                    raise CoreError('tm', 'USR argument is a string at 0A7FH')
-                v = int(csng(float(self.arg)) // 1)
-                if v < -32768 or v > 32767:
-                    raise CoreError('ov', 'USR argument %s is outside -32768..32767 at 0A7FH' % self.arg)
-            cpu.hl = v & 0xFFFF
-            self.write(0x4121, cpu.hl & 0xFF)
-            self.write(0x4122, cpu.hl >> 8)
-            cpu.a = 2
-            self.write(0x40AF, 2)
+            self.cint_entry()
         elif pc == 0x002B:
             self.scan_keyboard()
+        elif pc in RST_VECTOR:
+            # RST 08H and RST 18H: the ROM's 0008H is JP 4000H and its
+            # 0018H JP 4006H, vectors in RAM (the ROM puts JP 1C96H and
+            # JP 1C90H there: BASIC's syntax check, and the compare of HL
+            # with DE).  A program that stores its own jump there uses the
+            # RST as a one-byte call -- Robot Attack and Stellar Escort
+            # (Big Five, 1980-81) do with RST 08H -- so a vector something
+            # stored is followed, keeping the return address the RST
+            # pushed.  A vector nothing stored is the ROM's own routine:
+            # RST 18H's compare is served (Missile Attack, Adventure
+            # International, 1980, uses it); RST 08H's syntax check reads
+            # BASIC text and is not, so it stays ERR rom.
+            vec = RST_VECTOR[pc]
+            if self.known[vec]:
+                cpu.pc = cpu.wz = vec
+                return
+            if pc == 0x0008:
+                raise CoreError('rom', 'RST 08H jumps to 4000H, and nothing '
+                                'stored a routine there (BASIC\'s syntax check is not served)')
+            self.compare_hl_de()
+        elif pc == 0x0033:
+            cpu.a = self.display(cpu.a)
+        elif pc == 0x033A:
+            # 033AH: write to video -- 0033H, then the cursor COLUMN to
+            # 40A6H (0348H: half the column in 32-character mode)
+            cpu.a = self.display(cpu.a)
+            col = self.cursor() & 0x3F
+            self.write(0x40A6, (col >> 1) if self.video_flag() & 8 else col)
+        elif pc == 0x2B05:
+            # 2B05H, inside the ROM's "evaluate an expression as an
+            # integer in DE" (2B02H): WRA1 through 0A7FH into DE, HL kept,
+            # A = D with the flags of OR A (Farvour's notes there).  Defense
+            # Penetrator (Cosmic, 1982) CALLs 14C9H and 0A7FH, then JP
+            # 2B05H for its random numbers.
+            hl = cpu.hl
+            self.cint_entry()
+            cpu.de = cpu.hl
+            cpu.hl = hl
+            cpu.a = cpu.d
+            cpu.f = SZ53P[cpu.a]
         elif pc == 0x0049:
             self.wait_key()
         elif pc == 0x0060:
@@ -453,6 +484,38 @@ class Machine:
         cpu.pc = cpu.wz = self.ram[sp] | (self.ram[(sp + 1) & 0xFFFF] << 8)
         cpu.sp = (sp + 2) & 0xFFFF
 
+    def cint_entry(self):
+        """0A7FH: the USR argument (or WRA1, once a routine has moved it)
+        as an integer in HL."""
+        cpu = self.cpu
+        # the ROM's CINT (0A7F-0AAF): a string is ?TM there (sent as
+        # `ERR tm`, proto 3); a number is rounded to single first (a
+        # double goes through 0AB9H at 0A87H), then floored, and an
+        # exponent past 16 bits goes to 0AA3H, which accepts exactly
+        # -32768 and otherwise exits through 07B2H, ?OV.  Sent as
+        # `ERR ov`, which the interpreter raises as BASIC's ?OV (the
+        # 2026-09-19 audit, L-43; ruled 2026-09-21).  On success the
+        # ROM leaves the integer in WRA1 with the type flag 2 and
+        # A = 2, ordinary stores that reach the write-set (ZM-4).
+        # Once the routine (or a trap: 14C9H) has stored into WRA1 or
+        # the type flag, 0A7FH converts WRA1 as it now stands, which is
+        # what the ROM reads; until then the frame's `arg`, as before
+        # (the two agree: the frame seeded WRA1 from it).  Eliminator
+        # CALLs 14C9H and then 0A7FH to fetch RND's integer.
+        if self.wra1_moved:
+            v = self.cint(self.wra1(0x0A7F), '0A7FH')
+        else:
+            if self.argtype == 3:
+                raise CoreError('tm', 'USR argument is a string at 0A7FH')
+            v = int(csng(float(self.arg)) // 1)
+            if v < -32768 or v > 32767:
+                raise CoreError('ov', 'USR argument %s is outside -32768..32767 at 0A7FH' % self.arg)
+        cpu.hl = v & 0xFFFF
+        self.write(0x4121, cpu.hl & 0xFF)
+        self.write(0x4122, cpu.hl >> 8)
+        cpu.a = 2
+        self.write(0x40AF, 2)
+
     def cls(self):
         """01C9H, CLS."""
         cpu = self.cpu
@@ -473,7 +536,7 @@ class Machine:
         # PRINTs that follow the call (the demon paints its stage that
         # way) still step two bytes and land on every other cell -- the
         # "background not clearing" seen 2026-09-15.
-        flag = self.read(0x403D) & 0xF7
+        flag = self.video_flag() & 0xF7
         self.write(0x403D, flag)
         self.port_out(0xFF, flag)
         # ... and zeroes the cursor COLUMN at 40A6H (0342H stores it on
@@ -660,6 +723,121 @@ class Machine:
         self.write(0x4121, v & 0xFF)
         self.write(0x4122, (v >> 8) & 0xFF)
         self.write(TYPE_FLAG, 2)
+
+    def compare_hl_de(self):
+        """RST 18H's routine (1C90H): H - D, and if they are equal L - E,
+        with A and the flags of that SUB: Z if HL = DE, C if HL < DE."""
+        cpu = self.cpu
+        x, y = cpu.h, cpu.d
+        if x == y:
+            x, y = cpu.l, cpu.e
+        r = (x - y) & 0xFF
+        cpu.a = r
+        cpu.f = (SZ53[r] | N | (H if (x & 0x0F) < (y & 0x0F) else 0)
+                 | (P if (x ^ y) & (x ^ r) & 0x80 else 0) | (C if x < y else 0))
+
+    # ---- 0033H, the video driver ---------------------------------------------
+    def display(self, c):
+        """0033H: the character in A on the video, through the ROM's video
+        driver (0458H) as Farvour documents it (0458H-058BH), code for code
+        with the interpreter's own PRINT (s_putc_drv, its p20), so a
+        routine's text and BASIC's land alike:
+
+          20H-BFH   stored at the cursor (as is, as PRINT stores it), which
+                    steps on one byte, or two in 32-character mode;
+                    past the last line the screen scrolls
+          C0H-FFH   space compression: that many blanks, less C0H
+          08H       back one (two in 32-character mode), blanking it
+          0AH-0DH   to the start of the next line, which is blanked;
+                    from the last line the screen scrolls
+          0EH 0FH   cursor on, off: the cursor is the terminal's, as it is
+                    for BASIC's CHR$(14), so nothing changes here
+          17H       32 characters a line (bit 3 of 403DH, and the port)
+          18H-1BH   the arrows: left and right stay in the line, up and
+                    down wrap; none scrolls
+          1CH       home, and back to 64 characters a line
+          1DH       start of the line
+          1EH 1FH   blank to the end of the line, of the screen
+          others    ignored
+
+        The registers the ROM's driver entry (03C2H) saves are kept; A
+        comes back as the character.  A program that re-routed the video
+        driver (401EH) gets ERR rom: only the ROM's driver is served.
+        The Model III's codes 15H and 16H are not Level II's."""
+        if self.known[VIDEO_DRIVER] and self.known[VIDEO_DRIVER + 1]:
+            drv = self.read(VIDEO_DRIVER) | self.read(VIDEO_DRIVER + 1) << 8
+            if drv != ROM_VIDEO_DRIVER:
+                raise CoreError('rom', 'called 0033H with the video driver '
+                                're-routed to %04XH: only the ROM\'s is served' % drv)
+        a = self.cursor()
+        wide = self.video_flag() & 8
+        if c >= 0xC0:
+            for _ in range(c - 0xC0):
+                a = self.put_char(a, 0x20, wide)
+        elif c >= 0x20:
+            a = self.put_char(a, c, wide)
+        elif c in (0x0A, 0x0B, 0x0C, 0x0D):
+            a = VIDEO_LO + ((a - VIDEO_LO) // 64 + 1) * 64
+            if a >= VIDEO_HI:
+                a = self.scroll()          # the line scrolled in is blank
+            else:
+                for b in range(a, a + 64):
+                    self.write(b, 0x20)
+        elif c == 0x08:
+            if a > VIDEO_LO:
+                a = max(VIDEO_LO, a - (2 if wide else 1))
+                self.write(a, 0x20)
+        elif c == 0x17:
+            flag = self.video_flag() | 8
+            self.write(0x403D, flag)
+            self.port_out(0xFF, flag)
+            a = VIDEO_LO + ((a - VIDEO_LO + 1) & ~1) % 1024
+        elif c == 0x18:
+            for _ in range(2 if wide else 1):
+                a = a + 63 if (a - VIDEO_LO) % 64 == 0 else a - 1
+        elif c == 0x19:
+            a += 1
+            if (a - VIDEO_LO) % 64 == 0:
+                a -= 64
+        elif c == 0x1A:
+            a = VIDEO_LO + (a - VIDEO_LO + 64) % 1024
+        elif c == 0x1B:
+            a = VIDEO_LO + (a - VIDEO_LO + 960) % 1024
+        elif c == 0x1C:
+            a = VIDEO_LO
+            flag = self.video_flag() & 0xF7
+            self.write(0x403D, flag)
+            self.port_out(0xFF, flag)
+        elif c == 0x1D:
+            a = VIDEO_LO + (a - VIDEO_LO) // 64 * 64
+        elif c == 0x1E:
+            for b in range(a, VIDEO_LO + (a - VIDEO_LO) // 64 * 64 + 64):
+                self.write(b, 0x20)
+        elif c == 0x1F:
+            for b in range(a, VIDEO_HI):
+                self.write(b, 0x20)
+        self.write(CURSOR, a & 0xFF)
+        self.write(CURSOR + 1, a >> 8)
+        return c
+
+    def video_flag(self):
+        """403DH, the ROM's image of the port-FFH bits (bit 3: 32 characters
+        a line).  The interpreter's frame always carries it; with no frame
+        (z80.run) it is 0, as the ROM leaves it at power-up, not the 255 of
+        unwritten memory."""
+        v = self.read(0x403D)
+        return 0 if v == 0xFF and not self.known[0x403D] else v
+
+    def put_char(self, a, c, wide):
+        """One display byte at the cursor A; the next cursor.  In 32-character
+        mode characters land on even bytes and step two."""
+        if wide:
+            a &= ~1
+        self.write(a, c)
+        a += 2 if wide else 1
+        if a >= VIDEO_HI:
+            a = self.scroll()
+        return a
 
     # ---- 05D9H, a line from the keyboard ----------------------------------
     def cursor(self):

@@ -654,6 +654,175 @@ class TestLevelIIEntries(unittest.TestCase):
         self.assertEqual(m.ram[0x7103], 1)
 
 
+# LD HL,7200H / loop: LD A,(HL) / OR A / JR Z,done / CALL entry / INC HL /
+# JR loop / done: RET -- the bytes at 7200H, up to a 0, through `entry`
+def show(text, entry=0x0033, cursor=0x3C00, flag=0):
+    code = bytes.fromhex('210072' '7E' 'B7' '2806' 'CD' + le16(entry) + '23' '18F6' 'C9')
+    m, sc = machine(code)
+    data = bytes(text) + b'\x00'
+    m.ram[0x7200:0x7200 + len(data)] = data
+    m.known[0x7200:0x7200 + len(data)] = b'\x01' * len(data)
+    for a, v in ((0x4020, cursor & 0xFF), (0x4021, cursor >> 8), (0x403D, flag)):
+        m.ram[a] = v
+        m.known[a] = 1
+    m.run(0x7000, 0, 0xF000)
+    return m, sc
+
+
+def cur(m):
+    return m.ram[0x4020] | m.ram[0x4021] << 8
+
+
+class TestVideoAndVectors(unittest.TestCase):
+    """The entries built 2026-10-14 for the games/ titles: 0033H and 033AH
+    (the video driver, as the interpreter's PRINT has it), RST 08H and
+    RST 18H through their RAM vectors (RST 18H's compare served when no
+    vector was stored), and 2B05H (WRA1 to an integer in DE)."""
+
+    def test_they_are_served(self):
+        from z80.coprocess import SERVED
+        for a in (0x0008, 0x0018, 0x0033, 0x033A, 0x2B05):
+            self.assertIn(a, SERVED)
+
+    def test_0033_prints_at_the_cursor_and_keeps_the_registers(self):
+        # LD BC,1234H / LD DE,5678H / LD HL,9ABCH / LD A,'H' / CALL 0033H /
+        # LD (7100H),A / LD (7102H),BC / LD (7104H),DE / LD (7106H),HL / RET
+        m, sc = machine(bytes.fromhex('013412' '117856' '21BC9A' '3E48' 'CD3300'
+                                      '320071' 'ED430271' 'ED530471' '220671' 'C9'))
+        m.ram[0x4020:0x4022] = bytes([0x05, 0x3C])
+        m.known[0x4020:0x4022] = b'\x01\x01'
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x3C05], 0x48)
+        self.assertEqual(cur(m), 0x3C06)
+        self.assertEqual(m.ram[0x7100], 0x48, 'A comes back as the character')
+        self.assertEqual(bytes(m.ram[0x7102:0x7108]).hex(), '34127856bc9a')
+        self.assertIn('15365:72', sc.video())
+        self.assertIn('16416:6,60', sc.writes(), 'the cursor goes back to BASIC')
+
+    def test_0033_stores_what_print_stores(self):
+        # lower case as is, graphics as is, C3H as three blanks
+        m, _ = show(b'aZ\xbf\xc3!', cursor=0x3C00)
+        self.assertEqual(bytes(m.ram[0x3C00:0x3C07]), b'aZ\xbf   !')
+        self.assertEqual(cur(m), 0x3C07)
+
+    def test_0033_carriage_return_blanks_the_next_line(self):
+        m, _ = show(b'AB\rC', cursor=0x3C3C)
+        self.assertEqual(bytes(m.ram[0x3C3C:0x3C3E]), b'AB')
+        self.assertEqual(m.ram[0x3C40], ord('C'))
+        self.assertEqual(bytes(m.ram[0x3C41:0x3C80]), b' ' * 63, 'the line it lands on is blanked')
+        for c in (0x0A, 0x0B, 0x0C):
+            m, _ = show(bytes([c]), cursor=0x3C10)
+            self.assertEqual(cur(m), 0x3C40, '0AH-0DH are all the carriage return')
+
+    def test_0033_scrolls_from_the_bottom(self):
+        m, _ = show(b'X\rY', cursor=0x3FFE)
+        self.assertEqual(m.ram[0x3FBE], ord('X'), 'the last line moved up')
+        self.assertEqual(m.ram[0x3FC0], ord('Y'))
+        self.assertEqual(bytes(m.ram[0x3FC1:0x4000]), b' ' * 63)
+        m, _ = show(b'PQ', cursor=0x3FFF)
+        self.assertEqual(m.ram[0x3FBF], ord('P'))
+        self.assertEqual((m.ram[0x3FC0], cur(m)), (ord('Q'), 0x3FC1), 'running off the end scrolls')
+
+    def test_0033_32_column_mode_and_home(self):
+        m, sc = show(b'\x17AB\x1c', cursor=0x3C03)
+        self.assertEqual((m.ram[0x3C04], m.ram[0x3C06]), (ord('A'), ord('B')),
+                         '17H steps to an even byte; characters step two')
+        self.assertEqual(cur(m), 0x3C00, '1CH homes')
+        self.assertEqual(m.ram[0x403D] & 8, 0, 'and goes back to 64 characters')
+        self.assertEqual([l for l in sc.out if l.startswith('MODE')], ['MODE 1', 'MODE 0'])
+
+    def test_0033_backspace_arrows_and_erasing(self):
+        m, _ = show(b'\x08', cursor=0x3C05)
+        self.assertEqual((cur(m), m.ram[0x3C04]), (0x3C04, 0x20))
+        m, _ = show(b'\x18', cursor=0x3C40)
+        self.assertEqual(cur(m), 0x3C7F, 'left from column 0 is the end of the same line')
+        m, _ = show(b'\x19', cursor=0x3C7F)
+        self.assertEqual(cur(m), 0x3C40, 'right from the end is the start of the same line')
+        m, _ = show(b'\x1b', cursor=0x3C05)
+        self.assertEqual(cur(m), 0x3FC5, 'up from the top wraps to the bottom')
+        m, _ = show(b'\x1a', cursor=0x3FC5)
+        self.assertEqual(cur(m), 0x3C05, 'down from the bottom wraps, never scrolls')
+        m, _ = show(b'\x1d', cursor=0x3C47)
+        self.assertEqual(cur(m), 0x3C40)
+        m, _ = show(b'\x1e', cursor=0x3C7E)
+        self.assertEqual(bytes(m.ram[0x3C7E:0x3C81]), b'  \xff', '1EH: to the end of the line only')
+        m, _ = show(b'\x1f', cursor=0x3FFE)
+        self.assertEqual((bytes(m.ram[0x3FFD:0x4000]), cur(m)), (b'\xff  ', 0x3FFE))
+        m, _ = show(b'\x0e\x0f\x01', cursor=0x3C05)
+        self.assertEqual((cur(m), m.ram[0x3C05]), (0x3C05, 0xFF),
+                         'cursor on/off and other codes change no memory')
+
+    def test_033a_sets_the_column(self):
+        m, sc = show(b'ABC', entry=0x033A, cursor=0x3C45)
+        self.assertEqual(m.ram[0x40A6], 8)
+        self.assertIn('16550:8', sc.writes())
+        m, _ = show(b'\x17A', entry=0x033A, cursor=0x3C45, flag=8)
+        self.assertEqual(m.ram[0x40A6], 4, 'half the column in 32-character mode')
+        m, sc = show(b'A', entry=0x0033, cursor=0x3C45)
+        self.assertNotIn(0x40A6, [int(w.split(':')[0]) for w in sc.writes()], '0033H leaves it')
+
+    def test_a_rerouted_video_driver_is_not_served(self):
+        m, _ = machine(bytes.fromhex('3E41' 'CD3300' 'C9'))
+        m.ram[0x401E:0x4020] = bytes([0x00, 0x75])
+        m.known[0x401E:0x4020] = b'\x01\x01'
+        with self.assertRaises(CoreError) as cm:
+            m.run(0x7000, 0, 0xF000)
+        self.assertEqual(cm.exception.code, 'rom')
+        self.assertIn('7500H', cm.exception.text)
+        m, _ = machine(bytes.fromhex('3E41' 'CD3300' 'C9'))
+        m.ram[0x401E:0x4020] = bytes([0x58, 0x04])
+        m.known[0x401E:0x4020] = b'\x01\x01'
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x3C00], 0x41, "the ROM's own driver address is served")
+
+    def test_rst08_follows_a_stored_vector(self):
+        # 7000: RST 08H / LD (7100H),A / RET; 7010: LD A,99H / RET; 4000H: JP 7010H
+        m, sc = machine(bytes.fromhex('CF' '320071' 'C9'))
+        m.ram[0x7010:0x7013] = bytes.fromhex('3E99C9')
+        m.known[0x7010:0x7013] = b'\x01' * 3
+        m.ram[0x4000:0x4003] = bytes.fromhex('C31070')
+        m.known[0x4000:0x4003] = b'\x01' * 3
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x7100], 0x99, 'and returns after the RST')
+        m, _ = machine(bytes.fromhex('CF' 'C9'))
+        with self.assertRaises(CoreError) as cm:
+            m.run(0x7000, 0, 0xF000)
+        self.assertEqual(cm.exception.code, 'rom')
+        self.assertIn('4000H', cm.exception.text)
+
+    def test_rst18_compares_hl_with_de(self):
+        # LD HL,h / LD DE,d / RST 18H / PUSH AF / POP BC / LD (7100H),BC / RET
+        def cmp(h, d):
+            m, _ = machine(bytes.fromhex('21' + le16(h) + '11' + le16(d) + 'DF' 'F5' 'C1' 'ED430071' 'C9'))
+            m.run(0x7000, 0, 0xF000)
+            f = m.ram[0x7100]
+            return bool(f & 0x40), bool(f & 0x01)          # Z, C
+        self.assertEqual(cmp(0x1234, 0x1234), (True, False))
+        self.assertEqual(cmp(0x1233, 0x1234), (False, True))
+        self.assertEqual(cmp(0x1334, 0x1234), (False, False))
+        self.assertEqual(cmp(0x0001, 0xFF00), (False, True), 'unsigned')
+        # a stored vector at 4006H is followed instead
+        m, _ = machine(bytes.fromhex('DF' '320071' 'C9'))
+        m.ram[0x7010:0x7013] = bytes.fromhex('3E77C9')
+        m.known[0x7010:0x7013] = b'\x01' * 3
+        m.ram[0x4006:0x4009] = bytes.fromhex('C31070')
+        m.known[0x4006:0x4009] = b'\x01' * 3
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x7100], 0x77)
+
+    def test_2b05_puts_wra1_in_de_and_keeps_hl(self):
+        # Defense Penetrator's sequence, with WRA1 an integer: LD HL,1234H /
+        # LD (4121H),HL / LD A,2 / LD (40AFH),A / LD HL,0BEEFH / CALL 2B05H /
+        # LD (7100H),DE / LD (7102H),HL / PUSH AF / POP BC / LD (7104H),BC / RET
+        m, _ = machine(bytes.fromhex('213412' '222141' '3E02' '32AF40' '21EFBE' 'CD052B'
+                                     'ED530071' '220271' 'F5' 'C1' 'ED430471' 'C9'))
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x7100] | m.ram[0x7101] << 8, 0x1234)
+        self.assertEqual(m.ram[0x7102] | m.ram[0x7103] << 8, 0xBEEF)
+        self.assertEqual(m.ram[0x7105], 0x12, 'A = D')
+        self.assertEqual(m.ram[0x7104] & 0xC1, 0, 'OR A: not zero, positive, no carry')
+
+
 class TestFixtureLayout(unittest.TestCase):
 
     def test_routines_do_not_overlap_and_map_every_entry(self):

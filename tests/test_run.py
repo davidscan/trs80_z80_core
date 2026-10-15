@@ -165,9 +165,9 @@ class TestHeadless(Bounded):
     def test_returned_and_rom_and_budget(self):
         h, (how, _) = self.run_src('  ORG 8000H\n  LD HL,7\n  RET\n')
         self.assertEqual((how, h.machine.cpu.hl), ('ret', 7))
-        h, (how, detail) = self.run_src('  ORG 8000H\n  CALL 0033H\n  RET\n')
+        h, (how, detail) = self.run_src('  ORG 8000H\n  CALL 0500H\n  RET\n')
         self.assertEqual(how, 'rom')
-        self.assertIn('0033H', detail)
+        self.assertIn('0500H', detail)
         h, (how, detail) = self.run_src('  ORG 8000H\nLOOP JP LOOP\n', cycles=50_000)
         self.assertEqual(how, 'budget')
         self.assertGreaterEqual(h.machine.cycles, 50_000)

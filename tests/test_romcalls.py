@@ -97,8 +97,9 @@ class RomCalls(unittest.TestCase):
         for target in (0x0A7F, 0x01C9, 0x1A19):
             self.assertIn(target, coprocess.SERVED)
         self.assertRegex(text, r'0A7FH .* yes ')
-        self.assertRegex(text, r'0033H .* no ')
-        self.assertIn('the core serves 3 of the 5 entries, 3 of the 6 calls', text)
+        self.assertRegex(text, r'0033H .* yes ')            # served since 2026-10-14
+        self.assertRegex(text, r'0028H .* no ')
+        self.assertIn('the core serves 4 of the 5 entries, 5 of the 6 calls', text)
 
     def test_the_record_names_every_input(self):
         """ZM-7: the 2026-09-17 tally named no input file, so it could not
@@ -124,7 +125,7 @@ class RomCalls(unittest.TestCase):
                          hashlib.sha1(('%s  %s\n' % (sha, src)).encode()).hexdigest())
         self.assertEqual(got['inputs']['files_with_a_listing'], 1)
         self.assertIn({'entry': '0033H', 'name': 'DSP display char', 'calls': 2, 'alone': 0,
-                       'files': 1, 'served': False, 'by': ['CALL']},
+                       'files': 1, 'served': True, 'by': ['CALL']},
                       got['table'])
 
     def test_no_listing_exits_2(self):

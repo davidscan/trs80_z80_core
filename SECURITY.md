@@ -39,9 +39,12 @@ below are about the right column.
 - **Make sound.** Port FFH's cassette bits become audio samples, sent to the
   player `TRS80_SOUND` names or written to the `TRS80_SOUND_WAV` file. The
   routine chooses the samples, never the command or the file.
-- **Call ten documented ROM services** (the USR argument, the USR result,
+- **Call fifteen documented ROM services** (the USR argument, the USR result,
   CLS, the READY entry, the keyboard scan, wait for a key, delay, RANDOM,
-  RND and line input), which the core answers itself. Entering any
+  RND, line input, the two video entries, the integer in DE, and RST 08H
+  and 18H), which the core answers itself. RST 08H and 18H may jump to
+  the program's own vector at 4000H or 4006H, which is the program's own
+  code. Entering any
   other ROM address ends the call with an error. The core holds no ROM.
 
 ## What machine code cannot do
