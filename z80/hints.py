@@ -5,6 +5,9 @@ A hints file is text, one hint per line, `;` starting a comment:
 
     entry   8120            a routine reached only through JP (HL)
     label   0033  DSP       a name for an address, in the image or not
+    var     409C  DEVFLG    a name for a RAM location outside the program:
+                            it names (nn) operands only, never the
+                            program's own bytes
     data    7F40-7F7F text  bytes that are data: text, words or bytes
     code    8200-8240       bytes that are code, traced from 8200 on
     inline  0028  1         a CALL or RST to 0028 is followed by 1 data byte
@@ -15,6 +18,10 @@ Addresses are hex: 7F40, 7F40H or 0x7F40.  Counts (inline, table) are
 decimal.  A range A-B includes both ends.  Free text after an entry's
 address is a comment on it.  Anything the parser does not understand is
 an error naming the line: a typo is never skipped.
+
+Within one file a name names one address and an address has one name.
+Across files (Hints.merge) the later file wins, and every name it takes
+over is recorded in `overrides` for the report.
 """
 
 import re
@@ -33,21 +40,44 @@ class HintError(Exception):
 class Hints:
     entries: list = field(default_factory=list)
     labels: dict = field(default_factory=dict)      # addr -> name
+    vars: dict = field(default_factory=dict)        # addr -> name, RAM
     data: list = field(default_factory=list)        # (start, end, type)
     code: list = field(default_factory=list)        # (start, end)
     inline: dict = field(default_factory=dict)      # call target -> bytes
     tables: list = field(default_factory=list)      # (addr, count)
     comments: dict = field(default_factory=dict)    # addr -> [text]
+    overrides: list = field(default_factory=list)   # what a later file renamed
+    source: str = ''
+
+    def names(self):
+        """Every name, label or var: addr -> name."""
+        return {**self.labels, **self.vars}
 
     def merge(self, other):
-        """Add OTHER's hints to these; a name given twice must agree."""
-        for a, n in other.labels.items():
-            if self.labels.get(a, n) != n:
-                raise HintError('%04X is named both %s and %s'
-                                % (a, self.labels[a], n))
-        _unique(other.labels, self.labels)
-        self.entries += other.entries
+        """Add OTHER's hints to these.  Where the two name things
+        differently OTHER wins: an address it names loses its old name,
+        and a name it uses leaves the address that had it."""
+        by_name = {n.upper(): a for a, n in self.names().items()}
+        for a, n in other.names().items():
+            old = self.labels.get(a) or self.vars.get(a)
+            if old is not None and old != n:
+                self._drop(a)
+                self.overrides.append('%04X: %s replaces %s (%s)'
+                                      % (a, n, old, other.source or 'hints'))
+            b = by_name.get(n.upper())
+            if b is not None and b != a and (self.labels.get(b) or
+                                             self.vars.get(b)):
+                self._drop(b)
+                self.overrides.append('%s: names %04X, no longer %04X (%s)'
+                                      % (n, a, b, other.source or 'hints'))
+        for a in other.labels:
+            self.vars.pop(a, None)
+        for a in other.vars:
+            self.labels.pop(a, None)
         self.labels.update(other.labels)
+        self.vars.update(other.vars)
+        self.overrides += other.overrides
+        self.entries += other.entries
         self.data += other.data
         self.code += other.code
         self.inline.update(other.inline)
@@ -55,6 +85,10 @@ class Hints:
         for a, t in other.comments.items():
             self.comments.setdefault(a, []).extend(t)
         return self
+
+    def _drop(self, a):
+        self.labels.pop(a, None)
+        self.vars.pop(a, None)
 
 
 def _unique(new, old):
@@ -107,7 +141,7 @@ def _name(text):
 
 def parse(text, source='hints'):
     """Read hints from TEXT; errors name SOURCE and the line."""
-    h = Hints()
+    h = Hints(source=source)
     for no, line in enumerate(text.splitlines(), 1):
         body = line.split(';', 1)[0].split()
         if not body:
@@ -119,13 +153,15 @@ def parse(text, source='hints'):
                 h.entries.append(a)
                 if args[1:]:
                     h.comments.setdefault(a, []).append(' '.join(args[1:]))
-            elif kw == 'label' and len(args) == 2:
+            elif kw in ('label', 'var') and len(args) == 2:
                 a, n = addr(args[0]), _name(args[1])
-                if h.labels.get(a, n) != n:
+                have = h.names()
+                if have.get(a, n) != n or (a in have and (
+                        a in h.vars) != (kw == 'var')):
                     raise ValueError('%04X is already named %s'
-                                     % (a, h.labels[a]))
-                _unique({a: n}, h.labels)
-                h.labels[a] = n
+                                     % (a, have[a]))
+                _unique({a: n}, have)
+                (h.vars if kw == 'var' else h.labels)[a] = n
             elif kw == 'data' and len(args) == 2:
                 if args[1].lower() not in TYPES:
                     raise ValueError('data type %s: use %s'

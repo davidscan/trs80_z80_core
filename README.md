@@ -93,7 +93,10 @@ A hints file tells the tracer what flow cannot show: more entry points,
 names, data ranges (text, words, bytes), code ranges, calls followed by
 inline data, jump tables and comments, one per line (the format is in
 `z80/hints.py`). A hint that contradicts traced code is reported as a
-conflict. `hints/model1.hints` names the documented Model I Level II
+conflict. A `var` names a RAM location: it is used only in `(nn)`
+operands and never names bytes the program itself loads. With several
+`--hints` files a later one wins where they name an address differently,
+and the report lists every name it took over. `hints/model1.hints` names the documented Model I Level II
 entry points (`CALL 0033H` lists as `CALL VDCHAR`), each with its
 published sources; it is used only when you pass it.
 

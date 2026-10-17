@@ -304,6 +304,15 @@ class TestCli(unittest.TestCase):
                        '--hints', path)
         self.assertIn('JP FINISH', out)
 
+    def test_a_later_hints_file_wins_and_is_reported(self):
+        path = os.path.join(_tmp(), 'mine.hints')
+        with open(path, 'w') as f:
+            f.write('label 0033 DSP\n')
+        out = self.cli('--hex', 'CD 33 00 C9', '--base', '7000H',
+                       '--hints', MODEL1, '--hints', path)
+        self.assertIn('CALL DSP', out)
+        self.assertIn('hint override: 0033: DSP replaces VDCHAR (%s)' % path, out)
+
     def test_bad_hints_file_names_the_line(self):
         path = os.path.join(_tmp(), 'bad.hints')
         with open(path, 'w') as f:
@@ -383,10 +392,51 @@ class TestHintsFile(unittest.TestCase):
         a.merge(hints.parse('label 49 KBWAIT\nentry 7100'))
         self.assertEqual(a.labels, {0x33: 'DSP', 0x49: 'KBWAIT'})
         self.assertEqual(a.entries, [0x7000, 0x7100])
-        with self.assertRaises(hints.HintError):
-            a.merge(hints.parse('label 33 VIDEO'))
-        with self.assertRaises(hints.HintError):
-            a.merge(hints.parse('label 34 DSP'))
+        self.assertEqual(a.overrides, [])
+
+    def test_a_later_file_renames_an_address(self):
+        a = hints.parse('label 33 VDCHAR', 'model1.hints')
+        a.merge(hints.parse('label 33 DSP', 'mine.hints'))
+        self.assertEqual(a.labels, {0x33: 'DSP'})
+        self.assertEqual(a.overrides,
+                         ['0033: DSP replaces VDCHAR (mine.hints)'])
+
+    def test_a_later_file_moves_a_name(self):
+        a = hints.parse('label 33 VDCHAR', 'model1.hints')
+        a.merge(hints.parse('label 7000 vdchar', 'mine.hints'))
+        self.assertEqual(a.labels, {0x7000: 'vdchar'})
+        self.assertEqual(a.overrides,
+                         ['vdchar: names 7000, no longer 0033 (mine.hints)'])
+
+    def test_a_var_and_a_label_take_over_from_each_other(self):
+        a = hints.parse('var 409C DEVFLG')
+        a.merge(hints.parse('label 409C OUTDEV'))
+        self.assertEqual((a.labels, a.vars), ({0x409C: 'OUTDEV'}, {}))
+        a.merge(hints.parse('var 409C DEVFLG'))
+        self.assertEqual((a.labels, a.vars), ({}, {0x409C: 'DEVFLG'}))
+
+    def test_the_same_name_changing_kind(self):
+        a = hints.parse('var 409C DEVFLG')
+        a.merge(hints.parse('label 409C DEVFLG'))
+        self.assertEqual((a.labels, a.vars), ({0x409C: 'DEVFLG'}, {}))
+        a.merge(hints.parse('var 409C DEVFLG'))
+        self.assertEqual((a.labels, a.vars), ({}, {0x409C: 'DEVFLG'}))
+
+    def test_overrides_carry_through_a_merge_of_merges(self):
+        b = hints.parse('label 33 VDCHAR', 'one')
+        b.merge(hints.parse('label 33 DSP', 'two'))
+        a = hints.parse('entry 7000')
+        a.merge(b)
+        self.assertEqual(a.overrides, ['0033: DSP replaces VDCHAR (two)'])
+
+    def test_within_one_file_a_var_is_still_one_name(self):
+        for text in ('var 409C A1\nlabel 409C A1', 'var 409C A1\nvar 409D A1',
+                     'label 7000 A1\nvar 409C A1'):
+            with self.subTest(text=text):
+                with self.assertRaises(hints.HintError):
+                    hints.parse(text)
+        self.assertEqual(hints.parse('var 409C A1\nvar 409C A1').vars,
+                         {0x409C: 'A1'})
 
 
 def hinted(src, text):
@@ -484,6 +534,49 @@ class TestLabels(unittest.TestCase):
                            'comment 7004 the subroutine')
         self.assertIn('L7004    RET ; from 7000 call; the subroutine',
                       trace.listing(res))
+
+
+class TestVars(unittest.TestCase):
+    """A var names a RAM location in (nn), and never the program's bytes."""
+
+    def test_names_nn_only(self):
+        res, segs, _ = hinted('ST: LD A,(409CH)\n LD HL,409CH\n'
+                              ' LD (409CH),A\n RET',
+                              'var 409C DEVFLG\ncomment 409C output device')
+        text = trace.source(res)
+        self.assertIn('LD A,(DEVFLG)', text)
+        self.assertIn('LD (DEVFLG),A', text)
+        self.assertIn('LD HL,409CH', text)
+        self.assertIn('DEVFLG   EQU 409CH ; output device', text)
+        round_trips(self, res, segs)
+
+    def test_never_a_jump_target(self):
+        res, segs, _ = hinted('ST: CALL 41C4H\n RET', 'var 41C4 HOOK')
+        text = trace.source(res)
+        self.assertIn('CALL 41C4H', text)
+        self.assertNotIn('HOOK', text)
+        self.assertNotIn('HOOK', trace.report(res))
+        round_trips(self, res, segs)
+
+    def test_never_a_relative_target(self):
+        res, segs, _ = hinted('ST: JR NZ,7010H\n RET', 'var 7010 FLAG')
+        text = trace.source(res)
+        self.assertIn('JR NZ,7010H', text)
+        round_trips(self, res, segs)
+
+    def test_a_program_loaded_over_it_keeps_its_bytes(self):
+        segs, _, _ = build('ST: LD A,(V)\n RET\nV: DB 1', org=0x409A)
+        res = trace.trace(segs, [0x409A],
+                          hints.parse('var 409E DEVFLG\ncomment 409E output device'))
+        text = trace.source(res)
+        self.assertNotIn('DEVFLG', text)
+        self.assertNotIn('output device', text)
+        self.assertIn('L409E', text)
+        round_trips(self, res, segs)
+
+    def test_an_unused_var_writes_no_equ(self):
+        res, _, _ = hinted('ST: RET', 'var 409C DEVFLG')
+        self.assertNotIn('DEVFLG', trace.source(res))
 
 
 class TestHintEffects(unittest.TestCase):

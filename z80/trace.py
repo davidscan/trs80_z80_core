@@ -103,6 +103,8 @@ class Result:
     undoc: list = field(default_factory=list)       # (addr, kind)
     refs: dict = field(default_factory=dict)        # target -> [(from, kind)]
     names: dict = field(default_factory=dict)       # addr -> label
+    vars: set = field(default_factory=set)          # names that are RAM vars
+    overrides: list = field(default_factory=list)   # names a later file took
     comments: dict = field(default_factory=dict)    # addr -> [text]
     steps: list = field(default_factory=list)
 
@@ -331,8 +333,15 @@ def trace(segments, entries, hints=None):
 
 def _name(res, h):
     """Labels: the hints' names, then L<addr> for every referenced
-    address inside the loaded bytes.  Outside them only a hint names."""
+    address inside the loaded bytes.  Outside them only a hint names.
+    A `var` (a RAM location) names only an address outside the loaded
+    bytes: a program loaded over it owns those bytes."""
     res.names = dict(h.labels)
+    for a, n in h.vars.items():
+        if a not in res.mem:
+            res.names[a] = n
+            res.vars.add(a)
+    res.overrides = list(h.overrides)
     taken = {n.upper() for n in res.names.values()}
     for t in sorted(res.refs):
         if t in res.mem and t not in res.names:
@@ -341,7 +350,8 @@ def _name(res, h):
                 n += '_'
             res.names[t] = n
             taken.add(n.upper())
-    res.comments = {a: list(c) for a, c in h.comments.items()}
+    res.comments = {a: list(c) for a, c in h.comments.items()
+                    if not (a in h.vars and a in res.mem)}
 
 
 def _named_text(ins, res):
@@ -356,11 +366,12 @@ def _named_text(ins, res):
     for o in op.operands:
         t = None
         if o.kind == 'imm16' and ins.imm in res.names and (
-                flow or ins.imm in res.mem):
+                flow or ins.imm in res.mem) and ins.imm not in res.vars:
             t = res.names[ins.imm]
         elif o.kind == 'aimm16' and ins.imm in res.names:
             t = '(%s)' % res.names[ins.imm]
-        elif o.kind == 'rel' and ins.target in res.names:
+        elif o.kind == 'rel' and ins.target in res.names \
+                and ins.target not in res.vars:
             t = res.names[ins.target]
         parts.append(t if t is not None else
                      o.text(imm=ins.imm, disp=ins.disp, addr=ins.target))
@@ -438,6 +449,12 @@ def _note(res, a):
     return '; ' + '; '.join(parts) if parts else ''
 
 
+def _uses(res, a):
+    """Does the listing write the name of A?  A var only in (nn)."""
+    kinds = {k for _, k in res.refs.get(a, [])}
+    return bool(kinds & {'read', 'write'} if a in res.vars else kinds)
+
+
 def source(res, segments=None):
     """Assembler source for the traced image: assembled, it gives the same
     bytes back.  Labels sit on their lines; a name that cannot (outside
@@ -448,7 +465,7 @@ def source(res, segments=None):
     out = []
     for a in sorted(res.names):
         # an outside name is written only if the program uses it
-        if a not in at_line and (a in res.mem or a in res.refs):
+        if a not in at_line and (a in res.mem or _uses(res, a)):
             c = res.comments.get(a)
             out.append(('%-8s EQU %s %s' % (res.names[a], _hexw(a),
                                             '; ' + '; '.join(c) if c else '')).rstrip())
@@ -494,13 +511,16 @@ def report(res):
         out.append('RET after PUSH at %s: possible computed jump' % _hex4(a))
     for t, srcs in sorted(res.external.items()):
         out.append('external %s%s from %s' % (
-            _hex4(t), ' (%s)' % res.names[t] if t in res.names else '',
+            _hex4(t), ' (%s)' % res.names[t]
+            if t in res.names and t not in res.vars else '',
             ', '.join(_hex4(s) if s is not None else 'entry' for s in srcs)))
     for a in res.truncated:
         out.append('cut off at %s' % _hex4(a))
     for a, kind in res.undoc:
         out.append('undocumented at %s: %s (%s)'
                    % (_hex4(a), kind, 'strong' if UNDOC_STRONG[kind] else 'weak'))
+    for o in res.overrides:
+        out.append('hint override: ' + o)
     return '\n'.join(out)
 
 
