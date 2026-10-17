@@ -75,6 +75,25 @@ Disassembles raw Z80 bytes. **Writes:** nothing; the listing goes to stdout.
 | `--skip N` | `0` | bytes to skip at the start of the file | code that follows a header or data |
 | `--length N` | to the end | how many bytes to disassemble | stopping before data that follows the code |
 
+### `python3 -m z80.trace`
+
+Traces a program from its entry points and decodes only what control flow
+reaches, so data mixed into the code is left as `DB` instead of being read
+as instructions. Every byte some instruction reached is code; every other
+byte is unknown (marked `?`). Indirect jumps (`JP (HL)`, `(IX)`, `(IY)`)
+stop their path and are reported, as are jumps into the middle of an
+instruction, calls outside the loaded bytes, and undocumented opcodes.
+**Writes:** nothing; the listing and its report go to stdout.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `FILE` | none | a `.cmd`, `.cas`, `.asm`/`.src` or raw-byte file | any program image |
+| `--hex HEX` | none | the bytes as hex digits instead of a file | a routine from `DATA` lines |
+| `--base ADDR` | `0` | load address of raw bytes (a `.cmd` or `.cas` carries its own) | raw bytes, always |
+| `--entry ADDR` | the file's entry, or `--base` | another entry point; repeatable | code reached only through an indirect jump |
+| `--explain` | off | prints the worklist as it runs, one line per step | seeing why a byte was or was not reached |
+| `--source` | off | prints assembler source instead of the listing; `python3 -m z80.asm` gives the same bytes back | editing and reassembling a program |
+
 ### `python3 -m z80.asm SOURCE`
 
 Assembles a Z80 source file: text written the way the period books print
