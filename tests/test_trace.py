@@ -17,6 +17,7 @@ sys.path.insert(0, ROOT)
 
 from z80.asm import assemble                                    # noqa: E402
 from z80 import trace                                           # noqa: E402
+from z80 import hints                                           # noqa: E402
 
 
 def build(src, org=0x7000):
@@ -246,10 +247,10 @@ class TestListing(unittest.TestCase):
         segs = [(0x7000, bytes.fromhex('C30C70' + '41' * 9 + 'C9'))]
         res = trace.trace(segs, [0x7000])
         self.assertEqual(trace.listing(res).split('\n'), [
-            '7000  C3 0C 70                  JP 700CH',
-            '7003  41 41 41 41 41 41 41 41 ? DB 41H,41H,41H,41H,41H,41H,41H,41H',
-            '700B  41                      ? DB 41H',
-            '700C  C9                        RET',
+            '7000  C3 0C 70                  L7000    JP L700C',
+            '7003  41 41 41 41 41 41 41 41 ?          DB 41H,41H,41H,41H,41H,41H,41H,41H',
+            '700B  41                      ?          DB 41H',
+            '700C  C9                        L700C    RET ; from 7000 jump',
         ])
 
     def test_two_segments(self):
@@ -295,15 +296,310 @@ class TestCli(unittest.TestCase):
         r = assemble(out)
         self.assertEqual((r.errors, r.segments), ([], [(0x7000, data)]))
 
+    def test_hints_file(self):
+        path = os.path.join(_tmp(), 'p.hints')
+        with open(path, 'w') as f:
+            f.write('label 7004 FINISH\n')
+        out = self.cli('--hex', 'C3 04 70 FF C9', '--base', '7000H',
+                       '--hints', path)
+        self.assertIn('JP FINISH', out)
+
+    def test_bad_hints_file_names_the_line(self):
+        path = os.path.join(_tmp(), 'bad.hints')
+        with open(path, 'w') as f:
+            f.write('entry 7000\nentry nowhere\n')
+        err = io.StringIO()
+        with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()):
+            stderr, sys.stderr = sys.stderr, err
+            try:
+                trace.main(['--hex', 'C9', '--hints', path])
+            finally:
+                sys.stderr = stderr
+        self.assertIn('bad.hints:2:', err.getvalue())
+
     def test_bad_entry(self):
         with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), \
                 _quiet():
             trace.main(['--hex', 'C9', '--entry', 'zz'])
 
 
+class TestHintsFile(unittest.TestCase):
+    """The hints file: one keyword per line, every mistake named by line."""
+
+    def test_every_keyword(self):
+        h = hints.parse(
+            '; a whole-line comment\n'
+            'entry 8120 key handler ; reached via JP (HL)\n'
+            'label 0033H DSP\n'
+            'data 0x7F40-7F4F text\n'
+            'code 8200-8240\n'
+            'inline 28 1\n'
+            'table 8000 8\n'
+            'comment 7F12 wait for vertical blank\n')
+        self.assertEqual(h.entries, [0x8120])
+        self.assertEqual(h.labels, {0x33: 'DSP'})
+        self.assertEqual(h.data, [(0x7F40, 0x7F4F, 'text')])
+        self.assertEqual(h.code, [(0x8200, 0x8240)])
+        self.assertEqual(h.inline, {0x28: 1})
+        self.assertEqual(h.tables, [(0x8000, 8)])
+        self.assertEqual(h.comments, {0x8120: ['key handler'],
+                                      0x7F12: ['wait for vertical blank']})
+
+    def test_bare_numbers_are_hex_and_counts_decimal(self):
+        h = hints.parse('entry 10\ntable 20 10\ndata 7000 bytes')
+        self.assertEqual(h.entries, [0x10])
+        self.assertEqual(h.tables, [(0x20, 10)])
+        self.assertEqual(h.data, [(0x7000, 0x7000, 'bytes')])
+
+    def test_errors_name_the_line(self):
+        bad = [
+            ('entry 7G00', 'hints:2:'),
+            ('lable 7000 X', 'cannot read'),
+            ('data 7000-7003 floats', 'data type floats'),
+            ('data 7000-7002 words', 'even number'),
+            ('data 7003-7000 bytes', 'ends before it starts'),
+            ('label 7000 2X', 'not a label'),
+            ('label 7000 HL', 'not a label'),
+            ('inline 28 0', 'count must be 1'),
+            ('entry 10000', 'outside'),
+            ('table 8000', 'cannot read'),
+        ]
+        for line, msg in bad:
+            with self.subTest(line=line):
+                with self.assertRaises(hints.HintError) as cm:
+                    hints.parse('; ok\n' + line)
+                self.assertIn('hints:2:', str(cm.exception))
+                self.assertIn(msg, str(cm.exception))
+
+    def test_one_name_one_address(self):
+        with self.assertRaises(hints.HintError):
+            hints.parse('label 7000 A1\nlabel 7000 B1')
+        with self.assertRaises(hints.HintError):
+            hints.parse('label 7000 A1\nlabel 7001 a1')
+        hints.parse('label 7000 A1\nlabel 7000 A1')        # the same twice is fine
+
+    def test_merge(self):
+        a = hints.parse('label 33 DSP\nentry 7000')
+        a.merge(hints.parse('label 49 KBWAIT\nentry 7100'))
+        self.assertEqual(a.labels, {0x33: 'DSP', 0x49: 'KBWAIT'})
+        self.assertEqual(a.entries, [0x7000, 0x7100])
+        with self.assertRaises(hints.HintError):
+            a.merge(hints.parse('label 33 VIDEO'))
+        with self.assertRaises(hints.HintError):
+            a.merge(hints.parse('label 34 DSP'))
+
+
+def hinted(src, text):
+    segs, entry, syms = build(src)
+    return trace.trace(segs, [entry], hints.parse(text)), segs, syms
+
+
+def round_trips(test, res, segs):
+    r = assemble(trace.source(res))
+    test.assertEqual(r.errors, [])
+    test.assertEqual(r.segments, segs)
+
+
+class TestLabels(unittest.TestCase):
+    """Labels for every address the code names, and who names it."""
+
+    def test_flow_targets(self):
+        res, segs, syms = run('ST: CALL SUB\n JR ST\nSUB: RET')
+        self.assertEqual(res.names, {syms['ST']: 'L7000', syms['SUB']: 'L7005'})
+        self.assertEqual(res.refs[syms['SUB']], [(syms['ST'], 'call')])
+        self.assertEqual(res.refs[syms['ST']],
+                         [(None, 'entry'), (syms['ST'] + 3, 'jump')])
+        round_trips(self, res, segs)
+
+    def test_data_references(self):
+        res, segs, syms = run('ST: LD A,(V)\n LD (V+1),A\n LD HL,MSG\n'
+                              ' LD BC,1234H\n RET\nV: DB 0,0\nMSG: DM \'HI\'')
+        refs = {t: k for t, lst in res.refs.items() for _, k in lst}
+        self.assertEqual(refs[syms['V']], 'read')
+        self.assertEqual(refs[syms['V'] + 1], 'write')
+        self.assertEqual(refs[syms['MSG']], 'addr')
+        self.assertNotIn(0x1234, refs)               # outside the image: a number
+        self.assertIn(syms['V'] + 1, res.names)
+        text = trace.source(res)
+        self.assertIn('LD A,(L%04X)' % syms['V'], text)
+        self.assertIn('LD HL,L%04X' % syms['MSG'], text)
+        self.assertIn('LD BC,1234H', text)
+        round_trips(self, res, segs)
+
+    def test_data_ref_in_explain(self):
+        res, _, _ = run('ST: LD HL,V\n RET\nV: DB 0')
+        self.assertIn('pop 7000: LD HL,7004H [data ref 7004 addr] -> queue 7003',
+                      res.steps)
+
+    def test_a_label_inside_an_instruction_is_an_equ(self):
+        res, segs, syms = run('ST: JR NZ,MID+1\nMID: LD A,0C9H\n RET')
+        text = trace.source(res)
+        self.assertIn('L7003    EQU 7003H', text)
+        round_trips(self, res, segs)
+
+    def test_outside_names_come_only_from_hints(self):
+        res, segs, _ = run('ST: CALL 0033H\n RET')
+        self.assertNotIn(0x33, res.names)
+        res, segs, _ = hinted('ST: CALL 0033H\n RET', 'label 33 DSP')
+        text = trace.source(res)
+        self.assertIn('DSP      EQU 0033H', text)
+        self.assertIn('CALL DSP', text)
+        self.assertIn('external 0033 (DSP) from 7000', trace.report(res))
+        round_trips(self, res, segs)
+
+    def test_an_outside_name_is_not_put_on_a_constant(self):
+        # LD BC,0033H may be a count; only a jump, call or (nn) is renamed
+        res, segs, _ = hinted('ST: LD BC,0033H\n CALL 0033H\n RET', 'label 33 DSP')
+        text = trace.source(res)
+        self.assertIn('LD BC,0033H', text)
+        self.assertIn('CALL DSP', text)
+        round_trips(self, res, segs)
+
+    def test_a_label_splits_a_data_run(self):
+        res, segs, _ = run('ST: LD A,(V+3)\n RET\nV: DB 1,2,3,4,5')
+        text = trace.source(res)
+        self.assertNotIn('EQU', text)
+        self.assertIn('L7007    DB 04H,05H', text)
+        round_trips(self, res, segs)
+
+    def test_a_label_inside_a_word_table(self):
+        res, segs, _ = hinted('ST: LD A,(T+1)\n RET\nT: DW 1234H,5678H',
+                              'data 7004-7007 words')
+        text = trace.source(res)
+        self.assertIn('         DB 34H\nL7005    DB 12H,78H,56H', text)
+        round_trips(self, res, segs)
+
+    def test_a_hint_name_inside_the_image(self):
+        res, segs, syms = hinted('ST: CALL SUB\n RET\nSUB: RET', 'label 7004 PRINT')
+        self.assertEqual(res.names[syms['SUB']], 'PRINT')
+        self.assertIn('CALL PRINT', trace.source(res))
+        round_trips(self, res, segs)
+
+    def test_an_auto_name_never_takes_a_hint_name(self):
+        res, _, syms = hinted('ST: CALL SUB\n RET\nSUB: RET', 'label 7000 L7004')
+        self.assertEqual(res.names[syms['SUB']], 'L7004_')
+
+    def test_xref_and_hint_comment_in_the_listing(self):
+        res, _, _ = hinted('ST: CALL SUB\n RET\nSUB: RET',
+                           'comment 7004 the subroutine')
+        self.assertIn('L7004    RET ; from 7000 call; the subroutine',
+                      trace.listing(res))
+
+
+class TestHintEffects(unittest.TestCase):
+
+    def test_inline_data_after_a_call(self):
+        res, segs, syms = hinted('ST: RST 28H\n DB 5\n RET\n DB 9', 'inline 28 1')
+        self.assertEqual(bytemap(res, segs), 'CDC.')
+        round_trips(self, res, segs)
+
+    def test_inline_without_the_hint_decodes_the_byte(self):
+        res, segs, _ = run('ST: RST 28H\n DB 5\n RET\n DB 9')
+        self.assertEqual(res.truncated, [])
+        self.assertEqual(bytemap(res, segs)[:2], 'CC')
+
+    def test_jump_table(self):
+        src = ('ST: LD HL,TAB\n JP (HL)\nTAB: DW A1,A2\n'
+               'A1: RET\nA2: XOR A\n RET\n DB 7')
+        res, segs, syms = hinted(src, 'table %04X 2' % (0x7000 + 4))
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'DDDD' + 'CCC.')
+        self.assertEqual(res.refs[syms['A2']], [(syms['TAB'] + 2, 'table')])
+        text = trace.source(res)
+        self.assertIn('DW L7008,L7009', text)
+        round_trips(self, res, segs)
+
+    def test_data_hint_against_proven_code_is_a_conflict(self):
+        res, segs, syms = hinted('ST: NOP\n LD A,1\n RET', 'data 7002-7003 bytes')
+        self.assertEqual(res.conflicts,
+                         [trace.Conflict(syms['ST'] + 1, 0x7002, syms['ST'], 'data')])
+        self.assertEqual(bytemap(res, segs), 'C.DD')
+        self.assertIn('conflict at 7001: inside the data hinted at 7002, from 7000',
+                      trace.report(res))
+
+    def test_text_and_words(self):
+        res, segs, _ = hinted("ST: RET\n DM 'IT''S'\n DB 0\n DW 7000H,0C000H",
+                              'data 7001-7004 text\ndata 7005-7005 bytes\n'
+                              'data 7006-7009 words')
+        text = trace.source(res)
+        self.assertIn("DM 'IT''S'", text)
+        self.assertIn('DW L7000,0C000H', text)
+        self.assertEqual(bytemap(res, segs), 'C' + 'D' * 9)
+        round_trips(self, res, segs)
+
+    def test_text_with_a_control_byte(self):
+        res, segs, _ = hinted("ST: RET\n DM 'AB'\n DB 0DH\n DM 'C'",
+                              'data 7001-7004 text')
+        text = trace.source(res)
+        self.assertIn("DM 'AB'", text)
+        self.assertIn('DB 0DH', text)
+        round_trips(self, res, segs)
+
+    def test_code_hint_reaches_what_flow_does_not(self):
+        res, segs, _ = hinted('ST: RET\n NOP\n RET\n NOP\n RET\n DB 1',
+                              'code 7001-7004')
+        self.assertEqual(bytemap(res, segs), 'CCCCC.')
+        self.assertIn('code hint: 7003 not reached yet', res.steps)
+
+    def test_code_hint_over_bytes_that_do_not_decode(self):
+        res, segs, _ = hinted('ST: RET\n DB 0C3H', 'code 7001-7001')
+        self.assertEqual(res.truncated, [0x7001])
+        self.assertEqual(bytemap(res, segs), 'C.')
+
+    def test_entry_hint_with_comment(self):
+        res, segs, syms = hinted('ST: RET\nHND: XOR A\n RET',
+                                 'entry 7001 key handler')
+        self.assertEqual(bytemap(res, segs), 'CCC')
+        self.assertIn('key handler', trace.listing(res))
+
+    def test_summary_counts_data(self):
+        res, _, _ = hinted('ST: RET\n DB 1,2\n DB 3', 'data 7001-7002 bytes')
+        self.assertEqual(res.summary(), '1 of 4 bytes code, 2 data, 1 unknown')
+
+
+MODEL1 = os.path.join(ROOT, 'hints', 'model1.hints')
+
+
+class TestModel1Hints(unittest.TestCase):
+    """hints/model1.hints: published names, each with its sources."""
+
+    def test_it_parses_and_every_name_assembles(self):
+        h = hints.load(MODEL1)
+        self.assertGreaterEqual(len(h.labels), 28)
+        self.assertEqual(sorted(h.labels), sorted(h.comments))
+
+    def test_every_label_cites_a_source(self):
+        keys = ('L2 ', 'M3 ', 'MP ', 'RRD ', 'FV ', 'SAMS ')
+        with open(MODEL1) as f:
+            for line in f:
+                if line.startswith('label'):
+                    cite = line.split(';', 1)[1] if ';' in line else ''
+                    self.assertTrue(any(k in cite for k in keys), line)
+
+    def test_a_program_that_calls_the_entry_points(self):
+        segs, entry, _ = build('ST: CALL 0049H\n CALL 0033H\n JP 1A19H')
+        res = trace.trace(segs, [entry], hints.load(MODEL1))
+        text = trace.source(res)
+        for want in ('CALL KBWAIT', 'CALL VDCHAR', 'JP READY',
+                     'VDCHAR   EQU 0033H ; display the character in A'):
+            self.assertIn(want, text)
+        self.assertNotIn('RESET', text)          # an EQU only for what is used
+        round_trips(self, res, segs)
+
+
 def _span(segs):
     org, data = segs[0]
     return org, len(data)
+
+
+_TMP = []
+
+
+def _tmp():
+    import tempfile
+    if not _TMP:
+        d = tempfile.TemporaryDirectory()
+        _TMP.append(d)
+    return _TMP[0].name
 
 
 class _quiet:

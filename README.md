@@ -83,7 +83,19 @@ as instructions. Every byte some instruction reached is code; every other
 byte is unknown (marked `?`). Indirect jumps (`JP (HL)`, `(IX)`, `(IY)`)
 stop their path and are reported, as are jumps into the middle of an
 instruction, calls outside the loaded bytes, and undocumented opcodes.
-**Writes:** nothing; the listing and its report go to stdout.
+Every address the code names -- a jump or call target, an `(nn)` it reads
+or writes, a 16-bit constant that falls inside the program -- gets a
+label (`L7016`) and a comment saying who refers to it (`; from 7003
+call, 701D jump`). **Writes:** nothing; the listing and its report go to
+stdout.
+
+A hints file tells the tracer what flow cannot show: more entry points,
+names, data ranges (text, words, bytes), code ranges, calls followed by
+inline data, jump tables and comments, one per line (the format is in
+`z80/hints.py`). A hint that contradicts traced code is reported as a
+conflict. `hints/model1.hints` names the documented Model I Level II
+entry points (`CALL 0033H` lists as `CALL VDCHAR`), each with its
+published sources; it is used only when you pass it.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
@@ -91,6 +103,7 @@ instruction, calls outside the loaded bytes, and undocumented opcodes.
 | `--hex HEX` | none | the bytes as hex digits instead of a file | a routine from `DATA` lines |
 | `--base ADDR` | `0` | load address of raw bytes (a `.cmd` or `.cas` carries its own) | raw bytes, always |
 | `--entry ADDR` | the file's entry, or `--base` | another entry point; repeatable | code reached only through an indirect jump |
+| `--hints FILE` | none | a hints file; repeatable | naming routines, marking data, `hints/model1.hints` for ROM calls |
 | `--explain` | off | prints the worklist as it runs, one line per step | seeing why a byte was or was not reached |
 | `--source` | off | prints assembler source instead of the listing; `python3 -m z80.asm` gives the same bytes back | editing and reassembling a program |
 
@@ -620,6 +633,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 |---|---|---|---|
 | `core.py` | the entry point the interpreter runs | you | no |
 | `z80/` | the CPU (`cpu.py`), the opcode table everything decodes from (`table.py`), the disassembler, the coprocess, sound | you | no |
+| `hints/model1.hints` | names for the documented Model I entry points, for `z80.trace --hints` | you | no |
 | `phasea/` | the loader extractor, classifier, sweep and oracle | you | no |
 | `tools/` | the scripts above; `vectors.lock` pins the test vectors | you | no |
 | `tests/` | the test suite | you | no |

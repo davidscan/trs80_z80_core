@@ -1,0 +1,84 @@
+; model1.hints -- names for documented TRS-80 Model I Level II entry points,
+; for listings of programs that call them:
+;
+;     python3 -m z80.trace PROG.cmd --hints hints/model1.hints
+;
+; Opt-in, never read by default.  Every name and description below comes
+; from published documentation; the descriptions are our own words.
+; Where Radio Shack published a name it is used; the restart vectors had
+; none, so theirs are descriptive (marked "coined").
+;
+; Sources, cited as KEY pPAGE (the page of the scanned book, not the
+; printed folio):
+;   L2   Level II BASIC Reference Manual, Radio Shack, 1979 (USR chapter)
+;   M3   Model III Operation and BASIC Language Reference Manual, Tandy,
+;        1980, "Summary of Important ROM Addresses" -- Radio Shack's names;
+;        RRD states these entries are the same on the Model I
+;   MP   Level II ROM Reference Manual, Micro Products, 1980
+;   RRD  TRS-80 ROM Routines Documented, The Alternate Source, 1983
+;   FV   Microsoft BASIC Decoded & Other Mysteries, James Farvour, 1981
+;   SAMS TRS-80 Assembly Language Made Simple, Howard W. Sams, 1982
+
+; ---- the restarts and CPU vectors
+label   0000  RESET     ; M3 p92; MP p6; RRD p56
+comment 0000  power-up and reset entry
+label   0008  SYNCHK    ; coined.  MP p6; FV p29; RRD p56
+comment 0008  RST 08H: (HL) must be the byte after the RST, else SN error; then as RST 10H
+label   0010  NXTCHR    ; coined.  MP p6; FV p29; RRD p56
+comment 0010  RST 10H: HL to the next non-blank character; C set for a digit, Z at end of statement
+label   0018  CPDEHL    ; coined.  MP p7; FV p29; RRD p57
+comment 0018  RST 18H: compare HL with DE, unsigned; Z equal, C if HL is lower
+label   0020  TSTTYP    ; coined.  MP p7; FV p29; RRD p57
+comment 0020  RST 20H: test the type of the number in the accumulator (40AFH)
+label   0028  DOSVEC    ; coined.  MP p7; FV p30; RRD p57
+comment 0028  RST 28H: through the vector at 400CH; DOS requests and BREAK
+label   0030  DBGVEC    ; coined.  MP p7; FV p30; RRD p57
+comment 0030  RST 30H: through the vector at 400FH; DOS DEBUG
+label   0038  INTVEC    ; coined.  MP p8; FV p30; RRD p57
+comment 0038  RST 38H and the mode 1 interrupt: through the vector at 4012H
+label   0066  NMI       ; coined.  MP p8; RRD p59
+comment 0066  non-maskable interrupt (the RESET button); not called by programs
+
+; ---- keyboard, video, printer
+label   002B  KBCHAR    ; M3 p92; MP p7; RRD p17; FV p17
+comment 002B  scan the keyboard once: A = the key, or 0
+label   0033  VDCHAR    ; M3 p92; MP p7; RRD p19; FV p18
+comment 0033  display the character in A at the cursor
+label   003B  PRCHAR    ; M3 p92; MP p8; RRD p20; FV p19
+comment 003B  send the character in A to the printer
+label   0040  KBLINE    ; M3 p92; RRD p18; FV p65
+comment 0040  read a line from the keyboard into the buffer at HL
+label   0049  KBWAIT    ; M3 p92; MP p8; RRD p18; FV p18
+comment 0049  wait for a key: A = the key
+label   0060  DELAY     ; M3 p92; MP p8; RRD p58; FV p66
+comment 0060  delay loop counted by BC
+label   01C9  VDCLS     ; M3 p92; MP p9; RRD p20; FV p19
+comment 01C9  clear the screen and home the cursor
+label   032A  DSPCHR    ; SAMS p97; MP p11; RRD p15; FV p79
+comment 032A  output A to video, printer or tape, chosen by the flag at 409CH
+label   28A7  OUTLIN    ; SAMS p97; MP p25; RRD p16; FV p33
+comment 28A7  output the string at HL to the device chosen by 409CH
+
+; ---- cassette
+label   01F8  CSOFF     ; M3 p92; MP p10; RRD p21
+comment 01F8  cassette motor off
+label   0212  DEFCAS    ; SAMS p127; MP p10; RRD p22; FV p20
+comment 0212  select the cassette drive in A and start its motor
+label   0235  CSIN      ; M3 p92; MP p10; RRD p22; FV p20
+comment 0235  read a byte from tape into A
+label   0264  CSOUT     ; M3 p92; MP p10; RRD p22; FV p20
+comment 0264  write the byte in A to tape
+label   0287  CSHWR     ; M3 p92; MP p10; RRD p22; FV p77
+comment 0287  write the leader and sync byte (drive already on)
+label   0296  CSHIN     ; M3 p92; MP p11; RRD p22; FV p20
+comment 0296  find the leader and sync byte on tape
+
+; ---- BASIC
+label   01D3  RANDOM    ; MP p10; FV p27; RRD p34
+comment 01D3  RANDOM: reseed the random number generator
+label   0A7F  GETARG    ; L2 p105; MP p17; FV p21; RRD p36
+comment 0A7F  USR: the argument into HL
+label   0A9A  PUTANS    ; L2 p105; MP p17; RRD p38
+comment 0A9A  USR: return HL to BASIC as an integer
+label   1A19  READY     ; M3 p92; MP p20; FV p16
+comment 1A19  back to BASIC's command level
