@@ -94,9 +94,10 @@ whose value depends on the order is reported as a warning with both
 values); `ORG`, `EQU`, `DEFB`/`DB`, `DEFW`/`DW`, `DEFM`/`DM` (a string with
 no closing quote runs to the end of the line), `DEFS`/`DS` (reserves the
 space and writes nothing into it, as EDTASM did; `DEFS n,fill` fills),
-`END entry`. Fourteen period sources assemble to the objects their
+`END entry`. Ninety-seven period sources assemble to the objects their
 authors built from them, byte for byte at every address (the test suite
-checks them when the corpus is linked beside the repo). Every instruction comes from the same opcode table the core
+checks them when the corpus is linked beside the repo, reading the
+archive's zips in place). Every instruction comes from the same opcode table the core
 executes and the disassembler prints from, so a disassembly listing is
 valid source again: assembled at the same address it gives the same bytes
 (bytes the assembler would encode another way -- an undefined `ED` opcode,

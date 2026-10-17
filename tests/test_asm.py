@@ -734,39 +734,244 @@ class TestEditorAssemblerFiles(unittest.TestCase):
 
 CORPUS = os.path.join(ROOT, 'corpus', 'programs')
 
-# Period sources saved by the Editor/Assembler beside the object their
-# author built from them (Q-8): the one oracle for the assembler that is
-# not this project's own reading of the books.  Measured 2026-10-15 over
-# the 84 distinct sources: these 14 of the 19 source/object pairs come
+# Period sources beside the object their author built from them (Q-8):
+# the one oracle for the assembler that is not this project's own
+# reading of the books.  Measured 2026-10-16 over every source in the
+# corpus, loose or inside the archive's zips (1,159 distinct, by SHA-1),
+# against every load module in the same zip or directory: these 97 come
 # out IMAGE-identical (every byte at every address, no byte more or
 # less: so DEFS space is absent on both sides, ZM-1; TBBS's MINIHOST
 # relies on an unterminated DEFM running to the end of its line).  Not
 # byte-identical files: the period objects differ among themselves in
 # record size (128 or 256), in sector padding after the transfer record
-# and in whether a DOS added a name record, and three (ene, multsrch,
-# GRAPHIC) carry the transfer address 0 of an END with no operand, where
-# this assembler's documented fallback is the first ORG.  Of the other
-# five: SCHED differs in one operand byte (LD DE,INTER: the object was
-# built from a slightly different source), quaver1 and INVASION.SRC (the
-# [BAS] copy) from other versions of their sources, FRAMER's object is
-# damaged (record type BEH), hrg.asm holds NUL bytes inside lines
-# (multied.asm's object holds another version of its line 4).
+# and in whether a DOS added a name record, and nine (ene, multsrch,
+# GRAPHIC among them) carry the transfer address 0 of an END with no
+# operand, where this assembler's documented fallback is the first ORG.
+# A place is a path under corpus/programs, or 'ZIP :: MEMBER'.  Of the
+# loose pairs pinned 2026-10-15 that do not match: SCHED differs in one
+# operand byte (LD DE,INTER: the object was built from a slightly
+# different source), quaver1 and INVASION.SRC (the [BAS] copy) from
+# other versions of their sources, FRAMER's object is damaged (record
+# type BEH), hrg.asm holds NUL bytes inside lines (multied.asm's object
+# holds another version of its line 4).
 PAIRS = [
-    'LargeCollection/Display Directories by Password (19xx)(Author Unknown)[BAS]/dirpw.asm',
-    'LargeCollection/Invasion Orion v3.0 (1979)(Automated Simulations)[a][BAS]/invasion.src',
-    'LargeCollection/Mini-BBS v2.01 (19xx)(Mike Bernstein-Kandy Shack)[BAS]/minihost.asm',
-    'LargeCollection/Playing God with Life v1.9.3 (1979)(Dennis Bathory-Kitsz)[BAS]/LIFE9.SRC',
-    'LargeCollection/Printer Driver for MX-FX-RX-80 (19xx)(Author Unknown)(De)[BAS]/drutreib.asm',
-    'LargeCollection/TBBS v3.0 (19xx)(Author Unknown)[BAS]/MINIHOST.SRC',
-    'LargeCollection/TRS3Link (19xx)(G Rahman)(Nl)[BAS]/ene.src',
-    'Model1/Disk Sort Merge v2.0 (1979)(Racet Computers)[CMD]/wipe.asm',
-    'Model1/Fast Screen Print Program (19xx)(Serge Y Calmettes)[CMD]/scrprt.src',
-    'Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/mult.asm',
-    'Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/multsrch.asm',
-    'Model1/PowerDRAW v1.0 (1981)(Kim Watt)[CMD]/PLAY.ASM',
-    'Model1/Quaver Music Compiler (1981)(Dennis Bathory-Kitsz)[ASM]/quaver2.asm',
-    'Model1/Title Graphics (19xx)(Author Unknown)[CMD]/GRAPHIC.SRC',
+    ('LargeCollection/Display Directories by Password (19xx)(Author Unknown)[BAS]/dirpw.asm',
+     'LargeCollection/Display Directories by Password (19xx)(Author Unknown)[BAS]/dirpw.cmd'),
+    ('LargeCollection/Gin Rummy (1979)(Robert Sturmer)[a][BAS]/view.src',
+     'LargeCollection/Gin Rummy (1979)(Robert Sturmer)[a][BAS]/view.cim'),
+    ('LargeCollection/Invasion Orion v3.0 (1979)(Automated Simulations)[a][BAS]/invasion.src',
+     'LargeCollection/Invasion Orion v3.0 (1979)(Automated Simulations)[a][BAS]/invasion.cmd'),
+    ('LargeCollection/Mini-BBS v2.01 (19xx)(Mike Bernstein-Kandy Shack)[BAS]/minihost.asm',
+     'LargeCollection/Mini-BBS v2.01 (19xx)(Mike Bernstein-Kandy Shack)[BAS]/minihost.cmd'),
+    ('LargeCollection/Playing God with Life v1.9.3 (1979)(Dennis Bathory-Kitsz)[BAS]/LIFE9.SRC',
+     'LargeCollection/Playing God with Life v1.9.3 (1979)(Dennis Bathory-Kitsz)[BAS]/LIFE9.CMD'),
+    ('LargeCollection/Printer Driver for MX-FX-RX-80 (19xx)(Author Unknown)(De)[BAS]/drutreib.asm',
+     'LargeCollection/Printer Driver for MX-FX-RX-80 (19xx)(Author Unknown)(De)[BAS]/drutreib.cmd'),
+    ('LargeCollection/TBBS v3.0 (19xx)(Author Unknown)[BAS]/MINIHOST.SRC',
+     'LargeCollection/TBBS v3.0 (19xx)(Author Unknown)[BAS]/MINIHOST.CMD'),
+    ('LargeCollection/TRS3Link (19xx)(G Rahman)(Nl)[BAS]/ene.src',
+     'LargeCollection/TRS3Link (19xx)(G Rahman)(Nl)[BAS]/ene.cmd'),
+    ('LargeCollection/Window of TRS-Times (19xx)(Author Unknown)[BAS]/window.src',
+     'LargeCollection/Window of TRS-Times (19xx)(Author Unknown)[BAS]/window.bin'),
+    ('LargeCollection/Zone Display Program (1980)(Author Unknown)[BAS]/zdsply.src',
+     'LargeCollection/Zone Display Program (1980)(Author Unknown)[BAS]/zdsply16.cmd'),
+    ('Model1/Disk Sort Merge v2.0 (1979)(Racet Computers)[CMD]/wipe.asm',
+     'Model1/Disk Sort Merge v2.0 (1979)(Racet Computers)[CMD]/wipe.cmd'),
+    ('Model1/Fast Screen Print Program (19xx)(Serge Y Calmettes)[CMD]/scrprt.src',
+     'Model1/Fast Screen Print Program (19xx)(Serge Y Calmettes)[CMD]/scrprt.cmd'),
+    ('Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/mult.asm',
+     'Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/mult.cmd'),
+    ('Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/multsrch.asm',
+     'Model1/Multikey Editor v1.1 (19xx)(J Szajman)[CMD]/multsrch.cmd'),
+    ('Model1/PowerDRAW v1.0 (1981)(Kim Watt)[CMD]/MERGE.ASM',
+     'Model1/PowerDRAW v1.0 (1981)(Kim Watt)[CMD]/PMERGE.CMD'),
+    ('Model1/PowerDRAW v1.0 (1981)(Kim Watt)[CMD]/PLAY.ASM',
+     'Model1/PowerDRAW v1.0 (1981)(Kim Watt)[CMD]/PLAY.CMD'),
+    ('Model1/Quaver (19xx)(Dennis Bathory-Kitsz)[a][CMD]/quaver7.asm',
+     'Model1/Quaver (19xx)(Dennis Bathory-Kitsz)[a][CMD]/music7.bin'),
+    ('Model1/Quaver Music Compiler (1981)(Dennis Bathory-Kitsz)[ASM]/quaver2.asm',
+     'Model1/Quaver Music Compiler (1981)(Dennis Bathory-Kitsz)[ASM]/quaver2.cmd'),
+    ('Model1/Title Graphics (19xx)(Author Unknown)[CMD]/GRAPHIC.SRC',
+     'Model1/Title Graphics (19xx)(Author Unknown)[CMD]/GRAPHIC.CMD'),
+    ('TRS-80 Model I/Various/CP-M Hardware and Software Conversion (19xx)(Author Unknown)[CMD].zip :: cpmbios.asm',
+     'TRS-80 Model I/Various/CP-M Hardware and Software Conversion (19xx)(Author Unknown)[CMD].zip :: cpmbios.cmd'),
+    ('TRS-80 Model I/Various/Convert Binary Number to 1s and 0s (1983)(Mel Patrick)[CMD].zip :: convbin.asm',
+     'TRS-80 Model I/Various/Convert Binary Number to 1s and 0s (1983)(Mel Patrick)[CMD].zip :: convbin.cmd'),
+    ('TRS-80 Model I/Various/Convert Upper Case to Lower Case (1986)(Rod Stevenson)[CMD].zip :: ULCNVRT.ASM',
+     'TRS-80 Model I/Various/Convert Upper Case to Lower Case (1986)(Rod Stevenson)[CMD].zip :: ULCNVRT.CMD'),
+    ('TRS-80 Model I/Various/DOSPlus II Misc Source files (19xx)(Kim Watt)[SRC][Partial].zip :: RANDOM.ASM',
+     'TRS-80 Model I/Various/DOSPlus II Misc Source files (19xx)(Kim Watt)[SRC][Partial].zip :: RANDOM.CMD'),
+    ('TRS-80 Model I/Various/DOSPlus v3.5 Sort Routine for Use With Other DOSes (19xx)(Author Unknown)[SRC].zip :: o.asm',
+     'TRS-80 Model I/Various/DOSPlus v3.5 Sort Routine for Use With Other DOSes (19xx)(Author Unknown)[SRC].zip :: oo.cim'),
+    ('TRS-80 Model I/Various/Dir Slot (19xx)(Joachim Kelterbaum)[CMD].zip :: dirslot.asm',
+     'TRS-80 Model I/Various/Dir Slot (19xx)(Joachim Kelterbaum)[CMD].zip :: dirslot.cmd'),
+    ('TRS-80 Model I/Various/Directory Cataloge Program (1983)(Mel Patrick)[CMD].zip :: diskcat.asm',
+     'TRS-80 Model I/Various/Directory Cataloge Program (1983)(Mel Patrick)[CMD].zip :: diskcat.cmd'),
+    ('TRS-80 Model I/Various/Disable POKE and SYSTEM (1983)(Nick Andrew)[CMD].zip :: disabl.edt',
+     'TRS-80 Model I/Various/Disable POKE and SYSTEM (1983)(Nick Andrew)[CMD].zip :: disabl.cmd'),
+    ('TRS-80 Model I/Various/Disk Modification Utility for LDOS v1.0 (1982)(Kim Watt)[CMD].zip :: pmodldos.asm',
+     'TRS-80 Model I/Various/Disk Modification Utility for LDOS v1.0 (1982)(Kim Watt)[CMD].zip :: pmod1a.cmd'),
+    ('TRS-80 Model I/Various/Disk Route v84.07.19 (1984)(Arne Rohde)[CMD].zip :: dr.asm',
+     'TRS-80 Model I/Various/Disk Route v84.07.19 (1984)(Arne Rohde)[CMD].zip :: dr.cmd'),
+    ('TRS-80 Model I/Various/Diskcomp (19xx)(Jerry Vabulas)[CMD].zip :: diskcomp.asm',
+     'TRS-80 Model I/Various/Diskcomp (19xx)(Jerry Vabulas)[CMD].zip :: diskcomp.cmd'),
+    ('TRS-80 Model I/Various/Diskette Label Maker (19xx)(Timothy E Sewell)[CMD][DMP 200].zip :: label200.src',
+     'TRS-80 Model I/Various/Diskette Label Maker (19xx)(Timothy E Sewell)[CMD][DMP 200].zip :: label200.cmd'),
+    ('TRS-80 Model I/Various/Display TRSDOS Directory in NEWDOS-80 (19xx)(Author Unknown)[CMD].zip :: TRSDIR.ASM',
+     'TRS-80 Model I/Various/Display TRSDOS Directory in NEWDOS-80 (19xx)(Author Unknown)[CMD].zip :: TRSDIR.CMD'),
+    ('TRS-80 Model I/Various/Display and Sort Diskette Catalogs (1983)(Mel Patrick)[CMD].zip :: ndcat.asm',
+     'TRS-80 Model I/Various/Display and Sort Diskette Catalogs (1983)(Mel Patrick)[CMD].zip :: ndcat.cmd'),
+    ('TRS-80 Model I/Various/Error Finder v2.2 (19xx)(Mike Brotherton)[CMD].zip :: where.asm',
+     'TRS-80 Model I/Various/Error Finder v2.2 (19xx)(Mike Brotherton)[CMD].zip :: where.cmd'),
+    ('TRS-80 Model I/Various/File Transfer Utility (19xx)(Kim Watt)[a2][CMD].zip :: S2.ASM',
+     'TRS-80 Model I/Various/File Transfer Utility (19xx)(Kim Watt)[a2][CMD].zip :: S2.CMD'),
+    ('TRS-80 Model I/Various/Filter Collection (19xx)(Misosys Inc)[FLT].zip :: REMOVE.ASM',
+     'TRS-80 Model I/Various/Filter Collection (19xx)(Misosys Inc)[FLT].zip :: REMOVE.CMD'),
+    ('TRS-80 Model I/Various/Flight Simulator T80-FS1 Loader (19xx)(Author Unknown)[CMD].zip :: loader.src',
+     'TRS-80 Model I/Various/Flight Simulator T80-FS1 Loader (19xx)(Author Unknown)[CMD].zip :: loader.cmd'),
+    ('TRS-80 Model I/Various/Genie RAM Spooler (19xx)(Author Unknown)(De)[ASM].zip :: genspool.asm',
+     'TRS-80 Model I/Various/Spooler (19xx)(Author Unknown)(De)[CMD].zip :: spooler1.cmd'),
+    ('TRS-80 Model I/Various/Hayes Modem ASCII Commands from DOS (19xx)(Mel Patrick)[CMD].zip :: hayes.src',
+     'TRS-80 Model I/Various/Hayes Modem ASCII Commands from DOS (19xx)(Mel Patrick)[CMD].zip :: hayes.cmd'),
+    ('TRS-80 Model I/Various/Hex and Decimal Calculator (1983)(Mel Patrick)[CMD].zip :: hexcal.asm',
+     'TRS-80 Model I/Various/Hex and Decimal Calculator (1983)(Mel Patrick)[CMD].zip :: hexcal.cmd'),
+    ('TRS-80 Model I/Various/Host-80 (1983)(Mel Patrick)[CMD].zip :: host80.src',
+     'TRS-80 Model I/Various/Host-80 (1983)(Mel Patrick)[CMD].zip :: host80.cmd'),
+    ('TRS-80 Model I/Various/Interrupt (19xx)(Joachim Kelterbaum)[CMD].zip :: interrpt.asm',
+     'TRS-80 Model I/Various/Interrupt (19xx)(Joachim Kelterbaum)[CMD].zip :: interrpt.cmd'),
+    ('TRS-80 Model I/Various/KB Audio (19xx)(Author Unknown)[CMD].zip :: kbaudio.src',
+     'TRS-80 Model I/Various/KB Audio (19xx)(Author Unknown)[CMD].zip :: kbaudio.cmd'),
+    ('TRS-80 Model I/Various/LISP v5.0 (1986)(Mike Stump)[CMD].zip :: LISP.SRC',
+     'TRS-80 Model I/Various/LISP v5.0 (1986)(Mike Stump)[CMD].zip :: LISP.CMD'),
+    ('TRS-80 Model I/Various/Level III G2 Cassette Basic (1979)(GRT-Microsoft)[CMD].zip :: l3help.src',
+     'TRS-80 Model I/Various/Level III G2 Cassette Basic (1979)(GRT-Microsoft)[CMD].zip :: l3help.cmd'),
+    ('TRS-80 Model I/Various/Macro-Key v2.0 Removal Utility (1984)(Mel Patrick)[CMD].zip :: unmacro.asm',
+     'TRS-80 Model I/Various/Macro-Key v2.0 Removal Utility (1984)(Mel Patrick)[CMD].zip :: unmacro.cmd'),
+    ('TRS-80 Model I/Various/Make-80 v1.2 (1980)(Kim Watt)[CMD].zip :: MAKE80.ASM',
+     'TRS-80 Model I/Various/Make-80 v1.2 (1980)(Kim Watt)[CMD].zip :: MAKE80.CMD'),
+    ('TRS-80 Model I/Various/Marquee for Video Screen (19xx)(Author Unknown)[CMD].zip :: marq.asm',
+     'TRS-80 Model I/Various/Marquee for Video Screen (19xx)(Author Unknown)[CMD].zip :: marq.cmd'),
+    ('TRS-80 Model I/Various/Morse Code Generator (1983)(Mel Patrick)[CMD].zip :: morse.asm',
+     'TRS-80 Model I/Various/Morse Code Generator (1983)(Mel Patrick)[CMD].zip :: morse.cmd'),
+    ('TRS-80 Model I/Various/Music (19xx)(Author Unknown)[CMD].zip :: music.src',
+     'TRS-80 Model I/Various/Music (19xx)(Author Unknown)[CMD].zip :: MUSIC.CMD'),
+    ('TRS-80 Model I/Various/Organ-Synthesizer (19xx)(Kim Watt-Breeze Computing)[CMD].zip :: organkw.src',
+     'TRS-80 Model I/Various/Organ-Synthesizer (19xx)(Kim Watt-Breeze Computing)[CMD].zip :: organkw1.cmd'),
+    ('TRS-80 Model I/Various/PClear LDOS Disk Clear Utility v1.0 (1982)(Kim Watt-Breeze Computing)[CMD].zip :: pclear1a.asm',
+     'TRS-80 Model I/Various/PClear LDOS Disk Clear Utility v1.0 (1982)(Kim Watt-Breeze Computing)[CMD].zip :: pclear1a.cmd'),
+    ('TRS-80 Model I/Various/PClear LDOS Disk Clear Utility v2.1 (1982)(Kim Watt-Breeze Computing)[CMD].zip :: pclear21.asm',
+     'TRS-80 Model I/Various/PClear LDOS Disk Clear Utility v2.1 (1982)(Kim Watt-Breeze Computing)[CMD].zip :: pclear21.cmd'),
+    ('TRS-80 Model I/Various/PDrive Menu for NEWDOS-80 (1991)(Lance Wolstrup)[CMD].zip :: pdm.src',
+     'TRS-80 Model I/Various/PDrive Menu for NEWDOS-80 (1991)(Lance Wolstrup)[CMD].zip :: pdm.cmd'),
+    ('TRS-80 Model I/Various/Peek at the HASH Codes (19xx)(Nick Andrew)[CMD].zip :: peekhash.edt',
+     'TRS-80 Model I/Various/Peek at the HASH Codes (19xx)(Nick Andrew)[CMD].zip :: peekhash.cmd'),
+    ('TRS-80 Model I/Various/Printer Controls from DOS Line (19xx)(Author Unknown)[CMD].zip :: P.ASM',
+     'TRS-80 Model I/Various/Printer Controls from DOS Line (19xx)(Author Unknown)[CMD].zip :: P.CMD'),
+    ('TRS-80 Model I/Various/Printer Graphics (19xx)(Author Unknown)[CMD].zip :: GRAPH.SRC',
+     'TRS-80 Model I/Various/Printer Graphics (19xx)(Author Unknown)[CMD].zip :: GRAPH.CMD'),
+    ('TRS-80 Model I/Various/Printer Oriented DIR v1.2 (19xx)(Nick Andrew)[CMD].zip :: pdir12.asm',
+     'TRS-80 Model I/Various/Printer Oriented DIR v1.2 (19xx)(Nick Andrew)[CMD].zip :: pdir12.cmd'),
+    ('TRS-80 Model I/Various/Printer Oriented DIR v1.4 (19xx)(Nick Andrew)[CMD].zip :: pdir14.asm',
+     'TRS-80 Model I/Various/Printer Oriented DIR v1.4 (19xx)(Nick Andrew)[CMD].zip :: pdir14.cmd'),
+    ('TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: prints2.asm',
+     'TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: prints2.cmd'),
+    ('TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: prints3.asm',
+     'TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: prints3.cmd'),
+    ('TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: prints4.asm',
+     'TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: prints4.cmd'),
+    ('TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: printset.asm',
+     'TRS-80 Model I/Various/Printer Setup (19xx)(Dennis Bathory-Kitsz)[CMD].zip :: printset.cmd'),
+    ('TRS-80 Model I/Various/Printer Setup v1.6E (19xx)(Dan Shelby)[CMD].zip :: prnt.src',
+     'TRS-80 Model I/Various/Printer Setup v1.6E (19xx)(Dan Shelby)[CMD].zip :: prnt.cmd'),
+    ('TRS-80 Model I/Various/Quaver (19xx)(Dennis Bathory-Kitsz)[a2][CMD].zip :: quaver2.asm',
+     'TRS-80 Model I/Various/Quaver (19xx)(Dennis Bathory-Kitsz)[a2][CMD].zip :: music4.bin'),
+    ('TRS-80 Model I/Various/Quaver (19xx)(Dennis Bathory-Kitsz)[a2][CMD].zip :: quaver4.asm',
+     'TRS-80 Model I/Various/Quaver (19xx)(Dennis Bathory-Kitsz)[a2][CMD].zip :: music5.bin'),
+    ('TRS-80 Model I/Various/Quick-Fix (19xx)(Kim Watt)[CMD].zip :: boot1.asm',
+     'TRS-80 Model I/Various/Quick-Fix (19xx)(Kim Watt)[CMD].zip :: boot1.cmd'),
+    ('TRS-80 Model I/Various/Quick-Fix (19xx)(Kim Watt)[CMD].zip :: boot2.asm',
+     'TRS-80 Model I/Various/Quick-Fix (19xx)(Kim Watt)[CMD].zip :: boot2.cmd'),
+    ('TRS-80 Model I/Various/Screen Dump to Disk File (19xx)(Ron A Zajac)[CMD].zip :: sd456.asm',
+     'TRS-80 Model I/Various/Screen Dump to Disk File (19xx)(Ron A Zajac)[CMD].zip :: sd456.cmd'),
+    ('TRS-80 Model I/Various/Skrewup RAM (19xx)(CC Morris)[CMD].zip :: skrewup.src',
+     'TRS-80 Model I/Various/Skrewup RAM (19xx)(CC Morris)[CMD].zip :: skrewup.cmd'),
+    ('TRS-80 Model I/Various/Smart Driver Host Program v1.0 (19xx)(Mel Patrick)[CMD].zip :: BYE.SRC',
+     'TRS-80 Model I/Various/Smart Driver Host Program v1.0 (19xx)(Mel Patrick)[CMD].zip :: BYE.CMD'),
+    ('TRS-80 Model I/Various/Smart Driver Host Program v1.0 (19xx)(Mel Patrick)[CMD].zip :: SMARTDVR.SRC',
+     'TRS-80 Model I/Various/Smart Driver Host Program v1.0 (19xx)(Mel Patrick)[CMD].zip :: SMARTDVR.CMD'),
+    ('TRS-80 Model I/Various/Sort Directory (1984)(Author Unknown)[CMD].zip :: sdir.asm',
+     'TRS-80 Model I/Various/Sort Directory (1984)(Author Unknown)[CMD].zip :: sdir.cmd'),
+    ('TRS-80 Model I/Various/Space Bomber (19xx)(Dale Chernak)[CMD].zip :: BOMBER.ASM',
+     'TRS-80 Model I/Various/Space Bomber (19xx)(Dale Chernak)[CMD].zip :: BOMBER.CMD'),
+    ('TRS-80 Model I/Various/Special Disk Copy III- I-III File Transfer Utility (19xx)(Kim Watt)[a][CMD].zip :: boot1s.asm',
+     'TRS-80 Model I/Various/Special Disk Copy III- I-III File Transfer Utility (19xx)(Kim Watt)[a][CMD].zip :: boot1s.cmd'),
+    ('TRS-80 Model I/Various/Special Disk Copy III- I-III File Transfer Utility (19xx)(Kim Watt)[a][CMD].zip :: mod1fix.asm',
+     'TRS-80 Model I/Various/Special Disk Copy III- I-III File Transfer Utility (19xx)(Kim Watt)[a][CMD].zip :: mod1fix.cmd'),
+    ('TRS-80 Model I/Various/Spooler (1981)(John J Schultz)[CMD].zip :: datadump.asm',
+     'TRS-80 Model I/Various/Spooler (1981)(John J Schultz)[CMD].zip :: datadump.cmd'),
+    ('TRS-80 Model I/Various/Spooler (1981)(John J Schultz)[CMD].zip :: gprint.asm',
+     'TRS-80 Model I/Various/Spooler (1981)(John J Schultz)[CMD].zip :: gprint.cmd'),
+    ('TRS-80 Model I/Various/Super Script (1980)(Acorn Software)[CMD].zip :: lc.edt',
+     'TRS-80 Model I/Various/Super Script (1980)(Acorn Software)[CMD].zip :: lc.cmd'),
+    ('TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT1B.ASM',
+     'TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT1B.CMD'),
+    ('TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT1N.ASM',
+     'TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT1N.CMD'),
+    ('TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT3A.ASM',
+     'TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT3A.CMD'),
+    ('TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT3B.ASM',
+     'TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT3B.CMD'),
+    ('TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT3N.ASM',
+     'TRS-80 Model I/Various/Super Utility + Boot Routines (19xx)(Kim Watt)[SRC].zip :: BOOT3N.CMD'),
+    ('TRS-80 Model I/Various/Super Utility + Source Code (19xx)(Kim Watt)[a][SRC].zip :: sucopy.asm',
+     'TRS-80 Model I/Various/Super Utility + Source Code (19xx)(Kim Watt)[a][SRC].zip :: sucopy.cmd'),
+    ('TRS-80 Model I/Various/Super Utility + Source Code (19xx)(Kim Watt)[a][SRC].zip :: uk.asm',
+     'TRS-80 Model I/Various/Super Utility + Source Code (19xx)(Kim Watt)[a][SRC].zip :: uk.cmd'),
+    ('TRS-80 Model I/Various/Super Utility + Source Code (19xx)(Kim Watt)[a][SRC].zip :: uk3.asm',
+     'TRS-80 Model I/Various/Super Utility + Source Code (19xx)(Kim Watt)[a][SRC].zip :: uk3.cmd'),
+    ('TRS-80 Model I/Various/SuperCop (19xx)(Dan Robinson)[CMD].zip :: supercp2.asm',
+     'TRS-80 Model I/Various/SuperCop (19xx)(Dan Robinson)[CMD].zip :: supercp2.cmd'),
+    ('TRS-80 Model I/Various/Terminal Program v1.4 (19xx)(Nick Andrew)[CMD].zip :: term14.asm',
+     'TRS-80 Model I/Various/Terminal Program v1.4 (19xx)(Nick Andrew)[CMD].zip :: trmprg14.cmd'),
+    ('TRS-80 Model I/Various/Tic Tac Toe (1985)(Lance Wolstrup)[CMD].zip :: ttt.src',
+     'TRS-80 Model I/Various/Tic Tac Toe (1985)(Lance Wolstrup)[CMD].zip :: ttt.cmd'),
+    ('TRS-80 Model I/Various/Time & Date Saver v1.0 (19xx)(Michael Keller)[CMD].zip :: TMEDAT1.SRC',
+     'TRS-80 Model I/Various/Time & Date Saver v1.0 (19xx)(Michael Keller)[CMD].zip :: TMEDAT1.CMD'),
+    ('TRS-80 Model I/Various/Trace Function (1985)(Greg Small)[CMD].zip :: trace.asm',
+     'TRS-80 Model I/Various/Trace Function (1985)(Greg Small)[CMD].zip :: trace.cmd'),
+    ('TRS-80 Model I/Various/VHF Data Link Program (19xx)(W4UCH)[ASM].zip :: vhfdlp.asm',
+     'TRS-80 Model I/Various/VHF Data Link Program (19xx)(W4UCH)[ASM].zip :: vhfdlp.cmd'),
+    ('TRS-80 Model I/Various/Verfile (1983)(Laurie Shields)[CMD].zip :: verfile.asm',
+     'TRS-80 Model I/Various/Verfile (1983)(Laurie Shields)[CMD].zip :: verfile.cmd'),
+    ('TRS-80 Model I/Various/View ASCII File (1983)(Mel Patrick)[CMD].zip :: ascfmt.asm',
+     'TRS-80 Model I/Various/View ASCII File (1983)(Mel Patrick)[CMD].zip :: ascfmt.cmd'),
+    ('TRS-80 Model I/Various/XModem v1.20 (1984)(Nick Andrew)[CMD].zip :: xmf.asm',
+     'TRS-80 Model I/Various/XModem v1.20 (1984)(Nick Andrew)[CMD].zip :: xmf.cmd'),
+    ('TRS-80 Model I/Various/Zap Debug (1983)(Tony Domigan)[CMD].zip :: zapdebug.asm',
+     'TRS-80 Model I/Various/Zap Debug (1983)(Tony Domigan)[CMD].zip :: zapdebug.cmd'),
 ]
+
+# Kim Watt's Super Utility patch files have no ORG (the address was given
+# to the assembler) and no END: assembled at the object's own first
+# address.  uk.asm's object carries the transfer address of the program
+# it patches, which nothing in the file names.
+ORG_GIVEN = {'uk.asm': 0x4200, 'uk3.asm': 0x4300}
+NO_ENTRY = {'uk.asm'}
+
+# The one pair whose bytes depend on the order of evaluation: Misosys's
+# REMOVE/ASM rounds up to a page with `ORG $<-8+1<8`, and the object holds
+# the left-to-right value (EDTASM's order), not the precedence one.
+WARNED = {'REMOVE.ASM': 1}
+
+
+def corpus_bytes(place):
+    import zipfile
+    if ' :: ' in place:
+        z, member = place.split(' :: ', 1)
+        with zipfile.ZipFile(os.path.join(CORPUS, z)) as zf:
+            return zf.read(member)
+    with open(os.path.join(CORPUS, place), 'rb') as f:
+        return f.read()
 
 
 def image(segments):
@@ -781,22 +986,27 @@ def image(segments):
 class TestPeriodObjects(unittest.TestCase):
     def test_every_pair_assembles_to_its_period_object(self):
         from z80.load import load_cmd
-        for rel in PAIRS:
-            path = os.path.join(CORPUS, rel)
-            folder, stem = os.path.dirname(path), os.path.splitext(os.path.basename(path))[0]
-            cmds = [f for f in os.listdir(folder) if f.lower() == stem.lower() + '.cmd']
-            self.assertEqual(len(cmds), 1, rel)
-            with open(path, 'rb') as f:
-                text, name = asm.read_source(f.read())
-            with open(os.path.join(folder, cmds[0]), 'rb') as f:
-                theirs, entry, _ = load_cmd(f.read())
-            r = assemble(text)
-            self.assertEqual(r.errors, [], rel)
-            self.assertEqual(r.warnings, [], rel)
-            self.assertEqual(image(r.segments), image(theirs), rel)
-            if entry:
-                self.assertEqual(r.entry, entry, rel)
-            self.assertTrue(name or stem, rel)
+        self.assertEqual(len(PAIRS), 97)
+        for src, obj in PAIRS:
+            stem = src.replace(' :: ', '/').rsplit('/', 1)[1]
+            with self.subTest(src):
+                text, name = asm.read_source(corpus_bytes(src))
+                theirs, entry, _ = load_cmd(corpus_bytes(obj))
+                r = assemble(text, org=ORG_GIVEN.get(stem))
+                self.assertEqual(r.errors, [])
+                self.assertEqual(len(r.warnings), WARNED.get(stem, 0))
+                self.assertEqual(image(r.segments), image(theirs))
+                if entry and stem not in NO_ENTRY:
+                    self.assertEqual(r.entry, entry)
+
+    def test_the_left_to_right_order_is_the_one_the_period_object_holds(self):
+        src = [s for s, _ in PAIRS if s.endswith(':: REMOVE.ASM')][0]
+        text = asm.read_source(corpus_bytes(src))[0]
+        warning = assemble(text).warnings[0][1]
+        self.assertIn('is 22016 left to right', warning)
+        self.assertIn('341 with operator precedence', warning)
+        self.assertNotEqual(image(assemble(text, precedence=True).segments),
+                            image(assemble(text).segments))
 
     def test_the_period_objects_skip_their_defs_space(self):
         """The harm case of ZM-1 held against the oracle: the four sources
