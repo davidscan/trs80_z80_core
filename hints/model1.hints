@@ -1,16 +1,17 @@
-; model1.hints -- names for documented TRS-80 Model I Level II entry points,
-; for listings of programs that call them:
+; model1.hints -- names for documented TRS-80 Model I Level II entry points
+; and RAM locations, for listings of programs that use them:
 ;
 ;     python3 -m z80.trace PROG.cmd --hints hints/model1.hints
 ;
-; Opt-in, never read by default.  Every name and description below comes
-; from published documentation; the descriptions are our own words.
-; Where Radio Shack published a name it is used; the restart vectors had
-; none, so theirs are descriptive (marked "coined").
+; Opt-in, never read by default.  Every address and what it is comes from
+; published documentation; the descriptions are our own words.  Where
+; Radio Shack or another source published a name it is used; where none
+; did, the name is descriptive (marked "coined").
 ;
 ; Sources, cited as KEY pPAGE (the page of the scanned book, not the
 ; printed folio):
-;   L2   Level II BASIC Reference Manual, Radio Shack, 1979 (USR chapter)
+;   L2   Level II BASIC Reference Manual, Radio Shack, 1979 (USR chapter,
+;        LPRINT, Appendix D memory map)
 ;   M3   Model III Operation and BASIC Language Reference Manual, Tandy,
 ;        1980, "Summary of Important ROM Addresses" -- Radio Shack's names;
 ;        RRD states these entries are the same on the Model I
@@ -82,3 +83,102 @@ label   0A9A  PUTANS    ; L2 p105; MP p17; RRD p38
 comment 0A9A  USR: return HL to BASIC as an integer
 label   1A19  READY     ; M3 p92; MP p20; FV p16
 comment 1A19  back to BASIC's command level
+
+; ---- RAM locations (var: names (nn) operands only, never the program's
+; own bytes).  Names marked "Sams" are Sams' Appendix D mnemonics, VIDEO
+; is Radio Shack's; the rest are coined.  A pointer or vector is named at
+; its first byte.
+
+; video memory
+var     3C00  VIDEO     ; L2 p163; L2 p104; SAMS p175; MP p28
+comment 3C00  video memory, 3C00H-3FFFH: 16 lines of 64
+
+; the restart vectors, each a 3-byte jump
+var     4000  RST08V    ; coined.  FV p48; MP p28; RRD p69
+comment 4000  vector for RST 08H
+var     4003  RST10V    ; coined.  FV p48 (MP p28 misprints 4001)
+comment 4003  vector for RST 10H
+var     4006  RST18V    ; coined.  FV p48; MP p28
+comment 4006  vector for RST 18H
+var     4009  RST20V    ; coined.  FV p48; MP p28
+comment 4009  vector for RST 20H
+var     400C  RST28V    ; coined.  FV p48; MP p28
+comment 400C  vector for RST 28H: a RET without DOS
+var     400F  RST30V    ; coined.  FV p48; MP p28
+comment 400F  vector for RST 30H: a RET without DOS
+var     4012  RST38V    ; coined.  FV p48; MP p28; SAMS p73
+comment 4012  vector for RST 38H and the mode 1 interrupt
+
+; the device control blocks
+var     4015  KIDCB     ; coined.  FV p48; L2 p164; RRD p13
+comment 4015  keyboard device control block, 8 bytes
+var     4016  KIDRV     ; coined.  MP p29; RRD p13; SAMS p73
+comment 4016  keyboard driver address
+var     401D  DODCB     ; coined.  FV p48; L2 p164; RRD p13
+comment 401D  video device control block, 8 bytes
+var     401E  VIDDRA    ; Sams.  SAMS p175; MP p29; RRD p13
+comment 401E  video driver address
+var     4020  CCRPOS    ; Sams.  SAMS p175; MP p29; L2 p164; RRD p13
+comment 4020  cursor address in video memory
+var     4022  CURCHR    ; coined.  L2 p164; RRD p13; FV p50
+comment 4022  the character under the cursor
+var     4025  PRDCB     ; coined.  FV p48; L2 p164; RRD p13
+comment 4025  printer device control block, 8 bytes
+var     4026  PRDRV     ; coined.  MP p29; RRD p13; SAMS p73
+comment 4026  printer driver address
+var     4028  LPPAGE    ; coined.  L2 p124; RRD p13; RRD p14; MP p29
+comment 4028  printer lines per page, plus one
+var     4029  LPCTRA    ; Sams.  SAMS p175; L2 p124; RRD p13; RRD p14
+comment 4029  lines printed on this page
+
+; keyboard and port FFH
+var     4036  KBWORK    ; coined.  MP p30; RRD p69; RRD p70; FV p48
+comment 4036  keyboard scan work area, 7 bytes: the rows last seen
+var     403D  PORTFF    ; coined.  RRD p70; SAMS p73; MP p30; FV p48
+comment 403D  the bits last sent to port FFH: bit 3 32-character mode, bit 2 cassette motor
+
+; BASIC's communications region
+var     408E  USRADR    ; coined.  L2 p102; MP p30; RRD p71; FV p49; SAMS p73
+comment 408E  USR entry address
+var     4099  INKEYB    ; coined.  RRD p71; SAMS p73; MP p30; FV p49
+comment 4099  INKEY$ buffer: the last key seen, or 0
+var     409A  ERRCOD    ; coined.  RRD p71; SAMS p73; MP p30
+comment 409A  error code (ERR, RESUME)
+var     409B  LPPOSC    ; Sams.  SAMS p175; RRD p71; MP p30
+comment 409B  characters printed on the printer line
+var     409C  DTF       ; Sams.  SAMS p175; MP p30; RRD p72; FV p68
+comment 409C  output device: 0 video, 1 printer, FFH tape
+var     40A0  STRBEG    ; coined.  RRD p72; MP p30; SAMS p73; FV p49
+comment 40A0  start of string space
+var     40A2  CURLIN    ; coined.  RRD p72; MP p30; SAMS p73; FV p68
+comment 40A2  line number executing; FFFFH in direct mode
+var     40A4  PRGBEG    ; coined.  RRD p72; MP p30; SAMS p73; FV p46
+comment 40A4  start of the BASIC program
+var     40A6  CCPPTR    ; Sams.  SAMS p175; RRD p72; MP p31; FV p79
+comment 40A6  cursor column on the video line (POS)
+var     40A7  BUFPTR    ; Sams.  SAMS p175; RRD p72; MP p31; FV p49
+comment 40A7  input buffer address
+var     40AA  RNDSED    ; coined.  RRD p73; MP p31; SAMS p73; FV p49
+comment 40AA  random number seed, 3 bytes
+var     40AF  NTF1      ; Sams.  SAMS p174; MP p31; RRD p73; FV p49
+comment 40AF  type of the number in FPA1: 2 integer, 3 string, 4 single, 8 double
+var     40B1  MEMTOP    ; coined.  RRD p73; MP p31; FV p49; SAMS p74
+comment 40B1  top of BASIC memory: the last usable byte
+var     40D6  STRFRE    ; coined.  RRD p74; MP p31; SAMS p74; FV p49
+comment 40D6  next free byte in string space (strings grow down)
+var     40F9  SIMVAR    ; coined.  RRD p75; MP p32; FV p46; FV p47
+comment 40F9  start of simple variables: the end of the program
+var     40FB  ARYVAR    ; coined.  RRD p76; MP p32; FV p47; SAMS p74
+comment 40FB  start of arrays
+var     40FD  FREPTR    ; coined.  RRD p76; MP p32; SAMS p74; FV p49
+comment 40FD  end of arrays: the start of free memory
+var     40FF  DATPTR    ; coined.  RRD p76; MP p32; FV p49
+comment 40FF  where READ looks for the next DATA item
+var     4101  DEFTBL    ; coined.  RRD p76; FV p46; FV p49; SAMS p74; MP p32
+comment 4101  default type for each letter A-Z, 26 bytes
+var     411B  TRONFL    ; coined.  RRD p76; SAMS p74; MP p32; FV p49
+comment 411B  trace flag: 0 off, AFH on
+var     411D  FPA1      ; Sams.  SAMS p174; MP p32; RRD p77; FV p49
+comment 411D  numeric accumulator, 411DH-4124H (an integer at 4121H)
+var     41E8  INPBUF    ; Sams.  SAMS p175; RRD p79; MP p34
+comment 41E8  BASIC's input and output line buffer, 256 bytes
