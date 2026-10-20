@@ -658,7 +658,7 @@ class TestModel1Hints(unittest.TestCase):
     def test_it_parses_and_every_name_assembles(self):
         h = hints.load(MODEL1)
         self.assertGreaterEqual(len(h.labels), 28)
-        self.assertGreaterEqual(len(h.vars), 42)
+        self.assertGreaterEqual(len(h.vars), 56)
         self.assertEqual(sorted({**h.labels, **h.vars}), sorted(h.comments))
 
     def test_every_label_cites_a_source(self):
@@ -681,10 +681,11 @@ class TestModel1Hints(unittest.TestCase):
 
     def test_a_program_that_uses_the_ram_locations(self):
         segs, entry, _ = build('ST: LD HL,(4020H)\n LD (409CH),A\n'
-                               ' LD HL,4020H\n RET')
+                               ' LD HL,4020H\n LD (40F2H),A\n RET')
         res = trace.trace(segs, [entry], hints.load(MODEL1))
         text = trace.source(res)
         for want in ('LD HL,(CCRPOS)', 'LD (DTF),A', 'LD HL,4020H',
+                     'LD (ERRFLG),A',
                      'CCRPOS   EQU 4020H ; cursor address in video memory'):
             self.assertIn(want, text)
         self.assertNotIn('VIDEO', text)          # an EQU only for what is used

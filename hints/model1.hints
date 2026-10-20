@@ -86,7 +86,7 @@ comment 1A19  back to BASIC's command level
 
 ; ---- RAM locations (var: names (nn) operands only, never the program's
 ; own bytes).  Names marked "Sams" are Sams' Appendix D mnemonics, VIDEO
-; is Radio Shack's; the rest are coined.  A pointer or vector is named at
+; is Radio Shack's, PBUFF is Farvour's; the rest are coined.  A pointer or vector is named at
 ; its first byte.
 
 ; video memory
@@ -137,9 +137,19 @@ comment 4036  keyboard scan work area, 7 bytes: the rows last seen
 var     403D  PORTFF    ; coined.  RRD p70; SAMS p73; MP p30; FV p48
 comment 403D  the bits last sent to port FFH: bit 3 32-character mode, bit 2 cassette motor
 
+; routines and constants BASIC copies into RAM at power-up
+var     4080  DIVSUB    ; coined.  RRD p70; FV p48; SAMS p73
+comment 4080  subtraction routine used by division, 4080H-408DH, patched before each call
+
 ; BASIC's communications region
 var     408E  USRADR    ; coined.  L2 p102; MP p30; RRD p71; FV p49; SAMS p73
 comment 408E  USR entry address
+var     4090  RNDMUL    ; coined.  RRD p71; SAMS p73 (FV p49, FV p68 call it the seed)
+comment 4090  RND's multiplier constant, mantissa, 3 bytes
+var     4093  INPSUB    ; coined.  RRD p71; SAMS p73; MP p30
+comment 4093  IN A,(n) and RET for INP: the port at 4094H
+var     4096  OUTSUB    ; coined.  RRD p71; SAMS p73; MP p30
+comment 4096  OUT (n),A and RET for OUT: the port at 4097H
 var     4099  INKEYB    ; coined.  RRD p71; SAMS p73; MP p30; FV p49
 comment 4099  INKEY$ buffer: the last key seen, or 0
 var     409A  ERRCOD    ; coined.  RRD p71; SAMS p73; MP p30
@@ -148,6 +158,10 @@ var     409B  LPPOSC    ; Sams.  SAMS p175; RRD p71; MP p30
 comment 409B  characters printed on the printer line
 var     409C  DTF       ; Sams.  SAMS p175; MP p30; RRD p72; FV p68
 comment 409C  output device: 0 video, 1 printer, FFH tape
+var     409D  VIDLEN    ; coined.  RRD p72; SAMS p73; FV p49
+comment 409D  video line width for printing numbers: 64
+var     409E  ZONLIM    ; coined.  RRD p72; SAMS p73; FV p49
+comment 409E  last print zone for a comma: 48, four zones
 var     40A0  STRBEG    ; coined.  RRD p72; MP p30; SAMS p73; FV p49
 comment 40A0  start of string space
 var     40A2  CURLIN    ; coined.  RRD p72; MP p30; SAMS p73; FV p68
@@ -166,6 +180,16 @@ var     40B1  MEMTOP    ; coined.  RRD p73; MP p31; FV p49; SAMS p74
 comment 40B1  top of BASIC memory: the last usable byte
 var     40D6  STRFRE    ; coined.  RRD p74; MP p31; SAMS p74; FV p49
 comment 40D6  next free byte in string space (strings grow down)
+var     40DF  SYSENT    ; coined.  RRD p74; RRD p75; MP p31; SAMS p74; FV p49
+comment 40DF  entry address of the last SYSTEM tape; also a work pointer
+var     40E1  AUTOFL    ; coined.  RRD p75; MP p31; SAMS p74
+comment 40E1  AUTO flag: 0 off
+var     40EA  ERRLIN    ; coined.  RRD p75; SAMS p74; FV p49; MP p32
+comment 40EA  line number of the last error (ERL)
+var     40F0  ONERRA    ; coined.  RRD p75; SAMS p74; FV p49
+comment 40F0  ON ERROR GOTO address, or 0
+var     40F2  ERRFLG    ; coined.  RRD p75; SAMS p74; FV p49
+comment 40F2  error flag: FFH after an error, 0 after RESUME
 var     40F9  SIMVAR    ; coined.  RRD p75; MP p32; FV p46; FV p47
 comment 40F9  start of simple variables: the end of the program
 var     40FB  ARYVAR    ; coined.  RRD p76; MP p32; FV p47; SAMS p74
@@ -180,5 +204,11 @@ var     411B  TRONFL    ; coined.  RRD p76; SAMS p74; MP p32; FV p49
 comment 411B  trace flag: 0 off, AFH on
 var     411D  FPA1      ; Sams.  SAMS p174; MP p32; RRD p77; FV p49
 comment 411D  numeric accumulator, 411DH-4124H (an integer at 4121H)
+var     4127  FPA2      ; Sams.  SAMS p174; MP p32; RRD p77
+comment 4127  second numeric accumulator, 4127H-412EH
+var     4130  PBUFF     ; Farvour.  FV p49; RRD p77 (MP p32 differs)
+comment 4130  number-to-text buffer for PRINT, 4130H-4149H
 var     41E8  INPBUF    ; Sams.  SAMS p175; RRD p79; MP p34
 comment 41E8  BASIC's input and output line buffer, 256 bytes
+var     42E9  PGMORG    ; coined.  MP p34; SAMS p74; L2 p163
+comment 42E9  where a Level II program starts without DOS
