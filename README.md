@@ -78,9 +78,14 @@ Disassembles raw Z80 bytes. **Writes:** nothing; the listing goes to stdout.
 ### `python3 -m z80.trace`
 
 Traces a program from its entry points and decodes only what control flow
-reaches, so data mixed into the code is left as `DB` instead of being read
-as instructions. Every byte some instruction reached is code; every other
-byte is unknown (marked `?`). Indirect jumps (`JP (HL)`, `(IX)`, `(IY)`)
+reaches, so data mixed into the code is left as data instead of being read
+as instructions. Every byte some instruction reached is code. The other
+bytes are guessed at by conservative rules, and every guess is flagged:
+text (`t`: five or more printable characters with a letter, and the
+00H/0DH/03H or bit-7 byte that ends them), a table of routines (`w`: two
+or more words in a row, each the address of a traced instruction) and
+fill (`f`: four or more identical bytes). Anything else is unknown (`?`).
+Nothing is traced from a guess. Indirect jumps (`JP (HL)`, `(IX)`, `(IY)`)
 stop their path and are reported, as are jumps into the middle of an
 instruction, calls outside the loaded bytes, and undocumented opcodes.
 Every address the code names -- a jump or call target, an `(nn)` it reads
@@ -91,14 +96,16 @@ stdout.
 
 A hints file tells the tracer what flow cannot show: more entry points,
 names, data ranges (text, words, bytes), code ranges, calls followed by
-inline data, jump tables and comments, one per line (the format is in
+inline data (a count of bytes, or up to a terminator), calls that never
+return, jump tables and comments, one per line (the format is in
 `z80/hints.py`). A hint that contradicts traced code is reported as a
 conflict. A `var` names a RAM location: it is used only in `(nn)`
 operands and never names bytes the program itself loads. With several
 `--hints` files a later one wins where they name an address differently,
 and the report lists every name it took over. `hints/model1.hints` names the documented Model I Level II
-entry points (`CALL 0033H` lists as `CALL VDCHAR`), each with its
-published sources; it is used only when you pass it.
+entry points (`CALL 0033H` lists as `CALL VDCHAR`) and RAM locations,
+each with its published sources, and says that RST 08H is followed by
+one byte and that RST 0 never returns; it is used only when you pass it.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
@@ -109,6 +116,7 @@ published sources; it is used only when you pass it.
 | `--hints FILE` | none | a hints file; repeatable | naming routines, marking data, `hints/model1.hints` for ROM calls |
 | `--explain` | off | prints the worklist as it runs, one line per step | seeing why a byte was or was not reached |
 | `--source` | off | prints assembler source instead of the listing; `python3 -m z80.asm` gives the same bytes back | editing and reassembling a program |
+| `--no-guess` | off | leaves every byte nothing reached unknown: no text, table or fill guesses | seeing only what flow proves |
 
 ### `python3 -m z80.asm SOURCE`
 
@@ -636,7 +644,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 |---|---|---|---|
 | `core.py` | the entry point the interpreter runs | you | no |
 | `z80/` | the CPU (`cpu.py`), the opcode table everything decodes from (`table.py`), the disassembler, the coprocess, sound | you | no |
-| `hints/model1.hints` | names for the documented Model I entry points, for `z80.trace --hints` | you | no |
+| `hints/model1.hints` | names for the documented Model I entry points and RAM locations, for `z80.trace --hints` | you | no |
 | `phasea/` | the loader extractor, classifier, sweep and oracle | you | no |
 | `tools/` | the scripts above; `vectors.lock` pins the test vectors | you | no |
 | `tests/` | the test suite | you | no |

@@ -8,6 +8,7 @@ nothing reached.  Nothing is copied from a ROM or a period listing.
 
 import io
 import os
+import re
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -245,7 +246,7 @@ class TestListing(unittest.TestCase):
 
     def test_listing_lines(self):
         segs = [(0x7000, bytes.fromhex('C30C70' + '41' * 9 + 'C9'))]
-        res = trace.trace(segs, [0x7000])
+        res = trace.trace(segs, [0x7000], guess=False)
         self.assertEqual(trace.listing(res).split('\n'), [
             '7000  C3 0C 70                  L7000    JP L700C',
             '7003  41 41 41 41 41 41 41 41 ?          DB 41H,41H,41H,41H,41H,41H,41H,41H',
@@ -614,7 +615,7 @@ class TestHintEffects(unittest.TestCase):
     def test_inline_with_no_terminator_stops_the_path(self):
         res, segs, _ = hinted("ST: RST 28H\n DM 'NO END'", 'inline 28 until 0DH')
         self.assertEqual(res.truncated, [0x7000])
-        self.assertEqual(bytemap(res, segs), 'C' + '.' * 6)
+        self.assertEqual(bytemap(res, segs), 'C' + 't' * 6)     # S3's guess
         self.assertIn('no terminator', '\n'.join(res.steps))
 
     def test_noreturn_ends_the_path(self):
@@ -693,6 +694,82 @@ class TestHintEffects(unittest.TestCase):
     def test_summary_counts_data(self):
         res, _, _ = hinted('ST: RET\n DB 1,2\n DB 3', 'data 7001-7002 bytes')
         self.assertEqual(res.summary(), '1 of 4 bytes code, 2 data, 1 unknown')
+
+
+class TestGuess(unittest.TestCase):
+    """S3: what the bytes nothing reached are guessed to be."""
+
+    def test_a_string_with_its_terminator(self):
+        res, segs, _ = run("ST: RET\n DM 'HELLO'\n DB 0DH\n DB 1,2")
+        self.assertEqual(bytemap(res, segs), 'C' + 't' * 6 + '..')
+        self.assertEqual(res.guess[0x7001], ('text', 0x7001))
+        round_trips(self, res, segs)
+
+    def test_a_bit7_terminated_string(self):
+        res, segs, _ = run("ST: RET\n DM 'STOPP'\n DB 'S'+80H\n DB 1")
+        self.assertEqual(bytemap(res, segs), 'C' + 't' * 6 + '.')
+        round_trips(self, res, segs)
+
+    def test_the_bit7_character_does_not_count(self):
+        # four printable bytes and a RET (C9H) are code often enough
+        res, segs, _ = run("ST: RET\n DM 'STOP'\n DB 'S'+80H")
+        self.assertEqual(bytemap(res, segs), 'C' + '.' * 5)
+
+    def test_short_or_letterless_runs_are_not_text(self):
+        res, segs, _ = run("ST: RET\n DM 'ABCD'\n DB 0\n DM '12.50'\n DB 1")
+        self.assertEqual(bytemap(res, segs), 'C' + '.' * 11)
+
+    def test_a_word_table_of_routines(self):
+        src = ('ST: CALL A1\n RET\nTAB: DW A1,ST,A1\nA1: RET\n DB 7')
+        res, segs, syms = run(src)
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'w' * 6 + 'C.')
+        self.assertIn((syms['TAB'] + 2, 'word'), res.refs[syms['ST']])
+        text = trace.source(res)
+        self.assertIn('DW L700A,L7000,L700A', text)
+        round_trips(self, res, segs)
+
+    def test_words_that_point_at_data_are_not_a_table(self):
+        res, segs, _ = run('ST: RET\n DW 7003H,7004H\n DB 1')
+        self.assertEqual(bytemap(res, segs), 'C' + '.' * 5)
+
+    def test_fill(self):
+        res, segs, _ = run('ST: RET\n DB 0,0,0,0,0\n DB 0FFH,0FFH,0FFH\n DB 1')
+        self.assertEqual(bytemap(res, segs), 'C' + 'f' * 5 + '....')
+        round_trips(self, res, segs)
+        res, segs, _ = run("ST: RET\n DM 'AAAAA'")     # one letter: fill
+        self.assertEqual(bytemap(res, segs), 'C' + 'f' * 5)
+
+    def test_a_hint_overrides_a_guess(self):
+        res, segs, _ = hinted("ST: RET\n DM 'HELLO'", 'data 7001-7005 bytes')
+        self.assertEqual(bytemap(res, segs), 'C' + 'D' * 5)
+        self.assertEqual(res.guess, {})
+
+    def test_never_over_code_and_nothing_traced_from_a_guess(self):
+        src = 'ST: RET\nTAB: DW X,X\nX: NOP\n RET'
+        res, segs, _ = run(src)
+        self.assertEqual(bytemap(res, segs), 'C......')  # X is not traced: no table
+        self.assertEqual(res.guess, {})
+
+    def test_the_listing_flags_and_summary(self):
+        # the text takes its 00 terminator; the four zeros after are fill
+        res, segs, _ = run("ST: RET\n DM 'HELLO'\n DB 0,0,0,0,0\n DB 9")
+        listing = trace.listing(res)
+        self.assertRegex(listing, r"7001  48 45 4C 4C 4F +t +DM 'HELLO'")
+        self.assertRegex(listing, r'7006  00 +t +DB 00H')
+        self.assertRegex(listing, r'7007  00 00 00 00 +f +DB')
+        self.assertEqual(res.summary(), '1 of 12 bytes code, '
+                         '10 guessed data (6 text, 4 fill), 1 unknown')
+
+    def test_no_guess(self):
+        res, segs, _ = run("ST: RET\n DM 'HELLO'")
+        self.assertEqual(trace.trace(segs, [0x7000], guess=False).guess, {})
+        for args, flag in ((['--hex', 'C9 48 45 4C 4C 4F', '--base', '7000H'], 't'),
+                           (['--hex', 'C9 48 45 4C 4C 4F', '--base', '7000H',
+                             '--no-guess'], '?')):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                trace.main(args)
+            self.assertRegex(out.getvalue(), r'7001  48 45 4C 4C 4F +%s ' % (re.escape(flag)))
 
 
 MODEL1 = os.path.join(ROOT, 'hints', 'model1.hints')

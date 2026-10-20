@@ -96,6 +96,8 @@ class Result:
     insns: dict = field(default_factory=dict)   # head addr -> Insn
     owner: dict = field(default_factory=dict)   # byte addr -> head addr
     data: dict = field(default_factory=dict)    # byte addr -> (type, range start)
+    guess: dict = field(default_factory=dict)   # byte addr -> (type, run start):
+    #                                             S3's guesses for unknown bytes
     conflicts: list = field(default_factory=list)
     indirect: list = field(default_factory=list)    # JP (HL)/(IX)/(IY) addrs
     computed: list = field(default_factory=list)    # RET straight after PUSH
@@ -110,28 +112,45 @@ class Result:
     steps: list = field(default_factory=list)
 
     def map(self, start, length):
-        """'C' per code byte, 'D' per byte a hint makes data, '.' per
+        """'C' per code byte, 'D' per byte a hint makes data, a guess's
+        letter (t text, w words, f fill) per guessed byte, '.' per
         unknown, over [start, start+length)."""
         out = []
         for i in range(length):
             a = (start + i) & 0xFFFF
             out.append('C' if a in self.owner else 'D' if a in self.data
+                       else GUESS_FLAG[self.guess[a][0]] if a in self.guess
                        else '.')
         return ''.join(out)
 
     def summary(self):
         code = len(self.owner)
         data = sum(1 for a in self.data if a in self.mem and a not in self.owner)
+        kinds = {}
+        for t, _ in self.guess.values():
+            kinds[t] = kinds.get(t, 0) + 1
+        guessed = sum(kinds.values())
         total = len(self.mem)
-        return '%d of %d bytes code, %s%d unknown' % (
+        return '%d of %d bytes code, %s%s%d unknown' % (
             code, total, '%d data, ' % data if data else '',
-            total - code - data)
+            '%d guessed data (%s), ' % (guessed, ', '.join(
+                '%d %s' % (kinds[t], t) for t in GUESS_TYPES if t in kinds))
+            if guessed else '', total - code - data - guessed)
 
 
 # The kinds of reference, as the listing names them.  `addr` is a 16-bit
 # constant that falls inside the loaded bytes (LD HL,nn): perhaps an
 # address, perhaps a number; it is labelled, and marked as a guess.
-REF_KINDS = ('entry', 'jump', 'call', 'table', 'read', 'write', 'addr')
+# `word` is a word of a table S3 guessed: a guess too.
+REF_KINDS = ('entry', 'jump', 'call', 'table', 'read', 'write', 'addr', 'word')
+
+# S3: what unknown bytes are guessed to be, and the listing's flag for each.
+GUESS_TYPES = ('words', 'text', 'fill')
+GUESS_FLAG = {'words': 'w', 'text': 't', 'fill': 'f'}
+MIN_WORDS = 2       # words in a row, each the address of a traced instruction
+MIN_TEXT = 5        # printable bytes in a row, one of them a letter
+MIN_FILL = 4        # identical bytes in a row
+TEXT_ENDS = (0x00, 0x0D, 0x03)  # a terminator a text run takes with it
 
 
 def _successors(ins):
@@ -196,9 +215,10 @@ def _hex4(a):
     return '%04X' % a
 
 
-def trace(segments, entries, hints=None):
+def trace(segments, entries, hints=None, guess=True):
     """Trace SEGMENTS ([(org, bytes)], as z80.load returns) from ENTRIES,
-    with HINTS (a z80.hints.Hints) if given."""
+    with HINTS (a z80.hints.Hints) if given; then, unless GUESS is false,
+    guess what the bytes nothing reached are (S3, `_guess`)."""
     from .hints import Hints
     h = hints or Hints()
     mem = {}
@@ -349,6 +369,8 @@ def trace(segments, entries, hints=None):
         else:
             say('pop %s: %s%s -> end of path' % (_hex4(addr), text, note))
 
+    if guess:
+        _guess(res, say)
     res.conflicts.sort(key=lambda c: c.addr)
     res.indirect.sort()
     res.computed.sort()
@@ -357,6 +379,78 @@ def trace(segments, entries, hints=None):
     _name(res, h)
     say('done: ' + res.summary())
     return res
+
+
+def _guess(res, say):
+    """S3: classify the bytes that are neither code nor hinted data, by
+    conservative rules, in this order; every one is a guess, kept apart
+    from proven code and from hints, and nothing is traced from it.
+
+      words   MIN_WORDS or more words in a row, each the address of an
+              instruction the trace decoded: a table of routines
+      text    MIN_TEXT or more printable ASCII bytes (20H-7EH), one of
+              them a letter and not all the same, with one terminator
+              after them if there is one: 00H, 0DH or 03H, or a last
+              character with bit 7 set (not counted: an opcode such as
+              C9H or CDH after four printable bytes of code passes for
+              one)
+
+    The thresholds were set against the 86 period pairs whose objects
+    have an entry: four bytes, or the bit-7 character counted, called
+    two to five times as much missed code text.
+      fill    MIN_FILL or more identical bytes
+
+    Anything else stays unknown (DB in the listing)."""
+    free = {a for a in res.mem if a not in res.owner and a not in res.data}
+
+    def mark(lo, n, typ):
+        for i in range(n):
+            res.guess[(lo + i) & 0xFFFF] = (typ, lo)
+            free.discard((lo + i) & 0xFFFF)
+        say('guess %s-%s: %s' % (_hex4(lo), _hex4((lo + n - 1) & 0xFFFF), typ))
+
+    def word(a):
+        if not all((a + i) & 0xFFFF in free for i in (0, 1)):
+            return None
+        return res.mem[a] | res.mem[(a + 1) & 0xFFFF] << 8
+
+    for start, length in _runs(res.mem):
+        a, end = start, start + length
+        while a < end - 1:
+            n = 0
+            while a + 2 * n + 1 < end and word(a + 2 * n) in res.insns:
+                n += 1
+            if n >= MIN_WORDS:
+                for i in range(n):
+                    res.refs.setdefault(word(a + 2 * i), []).append((a + 2 * i, 'word'))
+                mark(a, 2 * n, 'words')
+                a += 2 * n
+            else:
+                a += 1
+    for start, length in _runs(res.mem):
+        a, end = start, start + length
+        while a < end:
+            b = a
+            while b < end and b in free and _printable(res.mem[b]):
+                b += 1
+            run = [res.mem[x] for x in range(a, b)]
+            last = res.mem[b] if b < end and b in free else None
+            bit7 = last is not None and last & 0x80 and _printable(last & 0x7F)
+            if (len(run) >= MIN_TEXT and len(set(run)) > 1
+                    and any(chr(x).isalpha() for x in run)):
+                if bit7 or last in TEXT_ENDS:
+                    b += 1
+                mark(a, b - a, 'text')
+            a = max(b, a + 1)
+    for start, length in _runs(res.mem):
+        a, end = start, start + length
+        while a < end:
+            b = a
+            while b < end and b in free and res.mem[b] == res.mem[a]:
+                b += 1
+            if b - a >= MIN_FILL:
+                mark(a, b - a, 'fill')
+            a = max(b, a + 1)
 
 
 def _name(res, h):
@@ -443,7 +537,8 @@ def _word(w, res):
 
 def _lines(res):
     """(addr, raw, text, flag) for every run of the image; flag is ' ' for
-    code, 'D' for hinted data, '?' for unknown bytes."""
+    code, 'D' for hinted data, t/w/f for data S3 guessed (text, words,
+    fill), '?' for unknown bytes."""
     for start, n in _runs(res.mem):
         a, end = start, start + n
         while a < end:
@@ -452,18 +547,31 @@ def _lines(res):
                 yield a, ins.raw, _named_text(ins, res), ' '
                 a += ins.length
                 continue
-            typ = res.data.get(a, (None,))[0] if a not in res.owner else None
+            kind = _kind(res, a)
+            typ = kind[0] if kind else None
             limit = {'text': 32, 'words': 8}.get(typ, 8)
             b = a + 1
             while (b < end and b - a < limit and b not in res.owner
-                   and b not in res.names
-                   and res.data.get(b, (None,))[0] == typ):
+                   and b not in res.names and _kind(res, b) == kind):
                 if typ == 'text' and _printable(res.mem[b]) != _printable(res.mem[a]):
                     break
                 b += 1
             raw = bytes(res.mem[x] for x in range(a, b))
-            yield a, raw, _data_text(raw, typ, res), 'D' if typ else '?'
+            flag = '?' if kind is None else 'D' if kind[2] else GUESS_FLAG[typ]
+            yield a, raw, _data_text(raw, typ, res), flag
             a = b
+
+
+def _kind(res, a):
+    """(type, run start, hinted) for a data byte, or None: a hint's
+    data first, then S3's guess."""
+    if a in res.owner:
+        return None
+    if a in res.data:
+        return res.data[a] + (True,)
+    if a in res.guess:
+        return res.guess[a] + (False,)
+    return None
 
 
 def _note(res, a):
@@ -511,8 +619,8 @@ def source(res, segments=None):
 
 
 def listing(res):
-    """Address, bytes, flag (' ' code, D data, ? unknown), label, text,
-    and who refers to the line."""
+    """Address, bytes, flag (' ' code, D hinted data, t/w/f guessed
+    text/words/fill, ? unknown), label, text, and who refers to the line."""
     out = []
     for a, raw, text, flag in _lines(res):
         hexb = ' '.join('%02X' % b for b in raw)
@@ -562,7 +670,9 @@ def main(argv=None):
 
     A /CMD file or a SYSTEM tape (.cas) gives its own load addresses and
     entry point; raw bytes load at --base and start there.  --entry adds
-    entry points; --hints reads a hints file (both repeatable).
+    entry points; --hints reads a hints file (both repeatable).  The bytes
+    nothing reaches are guessed at (text, word tables, fill; flagged t, w,
+    f) unless --no-guess.
     Addresses: decimal, 0x.., or ..H.
     """
     import argparse
@@ -577,6 +687,9 @@ def main(argv=None):
     ap.add_argument('--explain', action='store_true', help='print the worklist as it runs')
     ap.add_argument('--source', action='store_true',
                     help='print assembler source (gives the same bytes back)')
+    ap.add_argument('--no-guess', action='store_true',
+                    help='leave the bytes nothing reached unknown: no text, word '
+                         'table or fill guesses')
     a = ap.parse_args(argv)
     try:
         base = _addr(a.base) if a.base is not None else None
@@ -609,7 +722,7 @@ def main(argv=None):
     else:
         ap.error('a file or --hex is required')
     entries = [entry] + [e for e in extra if e != entry]
-    res = trace(segments, entries, h)
+    res = trace(segments, entries, h, guess=not a.no_guess)
     # Under --source the notes are comments, so the whole output assembles.
     note = (lambda t: '\n'.join('; ' + x for x in t.split('\n'))) \
         if a.source else (lambda t: t)
