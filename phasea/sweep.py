@@ -104,7 +104,10 @@ def input_files():
 # today those are exactly the shell's, so it can be checked by hand:
 #   cd corpus/programs && LC_ALL=C find runnable blocked -type f \( -iname '*.bas' \
 #     -o -iname '*.txt' \) -print0 | LC_ALL=C sort -z | xargs -0 shasum | shasum
-INPUT_SET = (6479, 'f8a7b965cdfd31ef9528626b1388f951d322eb71')
+# Re-pinned again 2026-10-20 (later that day), A NEW BASELINE: the CLOAD,
+# SoftSide and Micro-80 magazine-disk listings joined (+157), so numbers
+# on the 6,479 set (f8a7b965) are not compared with numbers on this one.
+INPUT_SET = (6636, '6fae9756e700a80b27b4361bd469b53ff45c31aa')
 
 
 def fingerprint(paths, root=None):
