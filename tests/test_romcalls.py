@@ -79,6 +79,15 @@ class RomCalls(unittest.TestCase):
         calls = romcalls.rom_calls(b.recs)
         self.assertEqual([alone for t, _, alone, _ in calls if t == 0x0033], [False, True])
 
+    def test_the_names_are_the_hints_files(self):
+        # one table: the names cited in hints/model1.hints, not a copy
+        # that drifted (032AH, 28A7H, 0A9AH and 0212H were named wrongly)
+        self.assertEqual(romcalls.NAMES[0x032A], 'DSPCHR')
+        self.assertEqual(romcalls.NAMES[0x28A7], 'OUTLIN')
+        self.assertEqual(romcalls.NAMES[0x0A9A], 'PUTANS')
+        self.assertEqual(romcalls.NAMES[0x0212], 'DEFCAS')
+        self.assertNotIn(0x4020, romcalls.NAMES)        # a var is not an entry
+
     def test_the_report_names_the_served_entries(self):
         with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
             f.write('A page of prose.\n\n' + self.listing + '\nMore prose.\n')
@@ -92,7 +101,7 @@ class RomCalls(unittest.TestCase):
         out = io.StringIO()
         romcalls.report(table, out=out)
         text = out.getvalue()
-        self.assertIn('0033H  DSP display char', text)
+        self.assertIn('0033H  VDCHAR', text)
         self.assertIn('6 ROM-range calls to 5 entry points', text)
         for target in (0x0A7F, 0x01C9, 0x1A19):
             self.assertIn(target, coprocess.SERVED)
@@ -124,7 +133,7 @@ class RomCalls(unittest.TestCase):
         self.assertEqual(got['inputs']['fingerprint'],
                          hashlib.sha1(('%s  %s\n' % (sha, src)).encode()).hexdigest())
         self.assertEqual(got['inputs']['files_with_a_listing'], 1)
-        self.assertIn({'entry': '0033H', 'name': 'DSP display char', 'calls': 2, 'alone': 0,
+        self.assertIn({'entry': '0033H', 'name': 'VDCHAR', 'calls': 2, 'alone': 0,
                        'files': 1, 'served': True, 'by': ['CALL']},
                       got['table'])
 

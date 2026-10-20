@@ -47,23 +47,13 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import hexcheck                                                 # noqa: E402
 from z80 import coprocess                                       # noqa: E402
 from z80 import disasm                                          # noqa: E402
+from z80 import hints                                           # noqa: E402
 
 ROM_TOP = coprocess.ROM_TOP
 
-# The names the Level II manual and the period ROM guides give these entry
-# points.  Documentation names only: no ROM bytes, no disassembly.
-NAMES = {
-    0x0000: 'RESET', 0x0008: 'RST 08H syntax check', 0x0010: 'RST 10H next char',
-    0x0018: 'RST 18H compare HL,DE', 0x0020: 'RST 20H test type',
-    0x0028: 'RST 28H DOS hook', 0x0030: 'RST 30H DOS hook', 0x0038: 'RST 38H interrupt',
-    0x002B: 'KBCHAR keyboard scan', 0x0033: 'DSP display char', 0x003B: 'PRT print char',
-    0x0040: 'KBLINE keyboard line', 0x0049: 'KBWAIT wait for key', 0x0060: 'DELAY',
-    0x0066: 'NMI', 0x01C9: 'CLS', 0x01D3: 'RANDOM', 0x01F8: 'CSOFF cassette off',
-    0x0212: 'CSON cassette on', 0x0235: 'CSIN read byte', 0x0264: 'CSOUT write byte',
-    0x0287: 'CSHWR write leader', 0x0296: 'CSHIN read leader',
-    0x032A: 'CHROUT char to device (DE)', 0x0A7F: 'GETARG USR argument to HL',
-    0x0A9A: 'RETINT return integer', 0x1A19: 'READY', 0x28A7: 'VDLINE display string (HL)',
-}
+# The entry points' names come from hints/model1.hints, where each one
+# cites its published sources: one table for this report and the tracer.
+NAMES = hints.load(os.path.join(ROOT, 'hints', 'model1.hints')).labels
 
 REACH = 64          # bytes between two lines of one run (hexcheck.continues' reach)
 

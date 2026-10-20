@@ -54,12 +54,13 @@ class TestStage1(unittest.TestCase):
         self.assertEqual(r.stage2_traps, [0x0049])
 
     def test_a_call_to_3033h_is_tallied(self):
-        # 3000H-37FFH is not RAM on a Model I either; ROM_NAMES has 3033H
+        # 3000H-37FFH is not RAM on a Model I either; ROM_NAMES has 3033H,
+        # a Model III ROM vector,
         # and ROM_HI (2FFFH) made it untallyable
         r = c(0xCD, 0x33, 0x30, 0xC9)
         self.assertFalse(r.stage1_ok)
         self.assertEqual(r.stage2_traps, [0x3033])
-        self.assertEqual(r.rom_calls, [(0x3033, 'DOS entry')])
+        self.assertEqual(r.rom_calls, [(0x3033, '$DATE (Model III ROM)')])
 
     def test_an_indirect_jump_is_not_stage1(self):
         for code in ((0x21, 0x33, 0x00, 0xE9),                 # LD HL,0033H / JP (HL)

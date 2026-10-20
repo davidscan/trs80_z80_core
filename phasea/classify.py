@@ -22,9 +22,11 @@ Reporting the tiers separately is the point. A single blended number
 would be a plausible heuristic wearing a measurement's clothes.
 """
 
+import os
 from dataclasses import dataclass, field
 
 from z80.disasm import disassemble, decode
+from z80.hints import load
 
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x3FFF
 KBD_LO, KBD_HI = 0x3800, 0x38FF
@@ -39,19 +41,16 @@ ROM_HI = 0x37FF
 # The two ROM entry points Stage 1 was specified with (the USR idiom).
 STAGE1_TRAPS = {0x0A7F, 0x0A9A}
 
-# Documented candidates for Stage 2 traps, for naming what we find.
-# Names cross-checked 2026-09-06 against the scanned reference library
-# (ROM Routines Documented, Micro-80 Level II ROM Reference Manual, Tab
-# Books Level II ROMs, Farvour).
-# The two Stage 1 traps are named by their ROM SERVICE, not by the USR
-# idiom that composes them: 0A7FH is CINT, 0A9AH stores HL into ACCUM.
+# Names for what we find: the entry points named in hints/model1.hints,
+# each citing its published sources, and four more it does not name yet:
+# the RST 10H and 18H targets (RRD pp37, 56-57), BASIC's tokenizer
+# (Farvour p11), and 3033H, a Model III ROM vector (RRD p89), which is
+# not even memory on a Model I.
 ROM_NAMES = {
-    0x0000: 'RESET', 0x002B: 'KBD scan-once', 0x0033: 'char to display',
-    0x003B: 'char to printer', 0x0049: 'wait key', 0x0060: 'delay',
-    0x01D3: 'RANDOM', 0x0A7F: 'CINT: ACCUM -> HL (the USR arg fetch)',
-    0x0A9A: 'ACCUM = HL (the USR result store)', 0x1BC0: 'tokenize/COMPRESS a BASIC line',
-    0x1C90: 'CLS', 0x1D78: 'LIST',
-    0x28A7: 'PRINT string', 0x3033: 'DOS entry',
+    0x1BC0: 'tokenize a BASIC line', 0x1C90: 'RST 18H compare HL,DE',
+    0x1D78: 'RST 10H next char', 0x3033: '$DATE (Model III ROM)',
+    **load(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), 'hints', 'model1.hints')).labels,
 }
 
 PAIRS = ('BC', 'DE', 'HL', 'IX', 'IY', 'SP')
