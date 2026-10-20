@@ -6,7 +6,8 @@ tracer decodes only what control flow can reach: it starts at the entry
 points and follows each instruction's successors.
 
     a fall-through                  most instructions
-    a target, no fall-through       JP nn, JR e
+    a target, no fall-through       JP nn, JR e; an unconditional CALL
+                                    or RST to a `noreturn` hint
     a target and a fall-through     JP cc / JR cc / DJNZ / CALL / RST
     a fall-through only             RET cc
     nothing                         RET, RETI, RETN, HALT
@@ -165,6 +166,20 @@ def _data_refs(ins, mem):
     return out
 
 
+def _until(mem, start, end):
+    """How many bytes from START up to and including the first that ends
+    inline data (END a byte, or 'bit7'); None if the loaded bytes run out
+    first."""
+    n, a = 0, start
+    while a in mem and n < 0x10000:
+        b = mem[a]
+        n += 1
+        if (b & 0x80) if end == 'bit7' else b == end:
+            return n
+        a = (a + 1) & 0xFFFF
+    return None
+
+
 def _window(mem, addr):
     """The loaded bytes from ADDR on: enough for the longest instruction
     behind a run of prefixes the CPU drops (DD DD DD ... 21 nn nn)."""
@@ -299,17 +314,30 @@ def trace(segments, entries, hints=None):
             if prev is not None and res.insns[prev].op.mnemonic == 'PUSH':
                 res.computed.append(addr)
                 note += ' [after PUSH: possible computed jump]'
-        if falls and ins.op is not None and ins.op.kind == 'call' \
-                and ins.target in h.inline:
-            n = h.inline[ins.target]
-            for i in range(n):
-                b = (nxt + i) & 0xFFFF
-                if b in res.owner:
-                    res.conflicts.append(Conflict(b, res.owner[b], addr, 'data'))
-                else:
-                    res.data.setdefault(b, ('bytes', nxt))
-            note += ' [inline: %d data byte%s]' % (n, 's' if n > 1 else '')
-            nxt = (nxt + n) & 0xFFFF
+        call = falls and ins.op is not None and ins.op.kind == 'call'
+        if call and ins.target in h.noreturn and not any(
+                o.kind == 'cond' for o in ins.op.operands) and (
+                h.noreturn[ins.target] == 'call' or ins.op.mnemonic == 'RST'):
+            falls = False
+            note += ' [never returns]'
+        elif call and ins.target in h.inline:
+            spec = h.inline[ins.target]
+            n = spec if isinstance(spec, int) else _until(mem, nxt, spec[1])
+            if n is None:
+                # no terminator before the bytes end: the path stops
+                res.truncated.append(addr)
+                falls = False
+                note += ' [inline: no terminator before the end of the bytes]'
+            else:
+                typ = 'bytes' if isinstance(spec, int) else 'text'
+                for i in range(n):
+                    b = (nxt + i) & 0xFFFF
+                    if b in res.owner:
+                        res.conflicts.append(Conflict(b, res.owner[b], addr, 'data'))
+                    else:
+                        res.data.setdefault(b, (typ, nxt))
+                note += ' [inline: %d data byte%s]' % (n, 's' if n > 1 else '')
+                nxt = (nxt + n) & 0xFFFF
         queue = list(targets) + ([nxt] if falls else [])
         if falls:
             fell_from[nxt] = addr

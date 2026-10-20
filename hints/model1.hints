@@ -1,5 +1,6 @@
 ; model1.hints -- names for documented TRS-80 Model I Level II entry points
-; and RAM locations, for listings of programs that use them:
+; and RAM locations, and how two restarts behave, for listings of programs
+; that use them:
 ;
 ;     python3 -m z80.trace PROG.cmd --hints hints/model1.hints
 ;
@@ -83,6 +84,11 @@ label   0A9A  PUTANS    ; L2 p105; MP p17; RRD p38
 comment 0A9A  USR: return HL to BASIC as an integer
 label   1A19  READY     ; M3 p92; MP p20; FV p16
 comment 1A19  back to BASIC's command level
+
+; ---- how two restarts change the flow
+inline  0008  1         ; RRD p56: returns past the byte after the RST 08H
+noreturn 0000 rst       ; RRD p56: RST 0 restarts the machine.  Not CALL
+                        ; 0000H: programs patch that placeholder at run time
 
 ; ---- RAM locations (var: names (nn) operands only, never the program's
 ; own bytes).  Names marked "Sams" are Sams' Appendix D mnemonics, VIDEO

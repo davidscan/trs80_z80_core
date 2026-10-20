@@ -343,13 +343,19 @@ class TestHintsFile(unittest.TestCase):
             'data 0x7F40-7F4F text\n'
             'code 8200-8240\n'
             'inline 28 1\n'
+            'inline 5300 until 0DH\n'
+            'inline 5310 until bit7\n'
+            'noreturn 0\n'
+            'noreturn 38 rst\n'
             'table 8000 8\n'
             'comment 7F12 wait for vertical blank\n')
         self.assertEqual(h.entries, [0x8120])
         self.assertEqual(h.labels, {0x33: 'DSP'})
         self.assertEqual(h.data, [(0x7F40, 0x7F4F, 'text')])
         self.assertEqual(h.code, [(0x8200, 0x8240)])
-        self.assertEqual(h.inline, {0x28: 1})
+        self.assertEqual(h.inline, {0x28: 1, 0x5300: ('until', 0x0D),
+                                    0x5310: ('until', 'bit7')})
+        self.assertEqual(h.noreturn, {0: 'call', 0x38: 'rst'})
         self.assertEqual(h.tables, [(0x8000, 8)])
         self.assertEqual(h.comments, {0x8120: ['key handler'],
                                       0x7F12: ['wait for vertical blank']})
@@ -370,6 +376,10 @@ class TestHintsFile(unittest.TestCase):
             ('label 7000 2X', 'not a label'),
             ('label 7000 HL', 'not a label'),
             ('inline 28 0', 'count must be 1'),
+            ('inline 28 until 100', 'one byte'),
+            ('inline 28 upto 0', 'cannot read'),
+            ('noreturn', 'cannot read'),
+            ('noreturn 0 call', 'cannot read'),
             ('entry 10000', 'outside'),
             ('table 8000', 'cannot read'),
         ]
@@ -586,6 +596,42 @@ class TestHintEffects(unittest.TestCase):
         self.assertEqual(bytemap(res, segs), 'CDC.')
         round_trips(self, res, segs)
 
+    def test_inline_until_a_terminator(self):
+        src = "ST: CALL PR\n DM 'HI'\n DB 0\n RET\nPR: RET\n DB 9"
+        res, segs, _ = hinted(src, 'inline 7007 until 00')
+        self.assertEqual(bytemap(res, segs), 'CCC' + 'DDD' + 'CC.')
+        self.assertEqual(res.data[0x7003], ('text', 0x7003))
+        text = trace.source(res)
+        self.assertIn("DM 'HI'", text)
+        round_trips(self, res, segs)
+
+    def test_inline_until_bit7(self):
+        res, segs, _ = hinted("ST: RST 28H\n DM 'O'\n DB 'K'+80H\n RET",
+                              'inline 28 until bit7')
+        self.assertEqual(bytemap(res, segs), 'CDDC')
+        round_trips(self, res, segs)
+
+    def test_inline_with_no_terminator_stops_the_path(self):
+        res, segs, _ = hinted("ST: RST 28H\n DM 'NO END'", 'inline 28 until 0DH')
+        self.assertEqual(res.truncated, [0x7000])
+        self.assertEqual(bytemap(res, segs), 'C' + '.' * 6)
+        self.assertIn('no terminator', '\n'.join(res.steps))
+
+    def test_noreturn_ends_the_path(self):
+        res, segs, _ = hinted("ST: RST 0\n DM 'X'", 'noreturn 0')
+        self.assertEqual(bytemap(res, segs), 'C.')
+        self.assertIn('never returns', '\n'.join(res.steps))
+
+    def test_noreturn_rst_leaves_a_call_alone(self):
+        res, segs, _ = hinted('ST: CALL 0\n RET', 'noreturn 0 rst')
+        self.assertEqual(bytemap(res, segs), 'CCCC')
+        res, segs, _ = hinted('ST: RST 0\n RET', 'noreturn 0 rst')
+        self.assertEqual(bytemap(res, segs), 'C.')
+
+    def test_a_conditional_call_to_noreturn_still_falls_through(self):
+        res, segs, _ = hinted('ST: CALL Z,0\n RET', 'noreturn 0')
+        self.assertEqual(bytemap(res, segs), 'CCCC')
+
     def test_inline_without_the_hint_decodes_the_byte(self):
         res, segs, _ = run('ST: RST 28H\n DB 5\n RET\n DB 9')
         self.assertEqual(res.truncated, [])
@@ -677,6 +723,16 @@ class TestModel1Hints(unittest.TestCase):
                      'VDCHAR   EQU 0033H ; display the character in A'):
             self.assertIn(want, text)
         self.assertNotIn('RESET', text)          # an EQU only for what is used
+        round_trips(self, res, segs)
+
+    def test_the_two_restarts(self):
+        # RST 08H checks the byte after it and returns past it; RST 0
+        # restarts the machine, so what follows it is not reached; a CALL
+        # 0000H is a placeholder and falls through
+        segs, entry, _ = build("ST: RST 8\n DM ','\n RET\nX: RST 0\n DM 'NO'\n"
+                               "Y: CALL 0\n RET")
+        res = trace.trace(segs, [entry, 0x7003, 0x7006], hints.load(MODEL1))
+        self.assertEqual(bytemap(res, segs), 'CDCC..CCCC')
         round_trips(self, res, segs)
 
     def test_a_program_that_uses_the_ram_locations(self):

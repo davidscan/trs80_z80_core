@@ -11,11 +11,17 @@ A hints file is text, one hint per line, `;` starting a comment:
     data    7F40-7F7F text  bytes that are data: text, words or bytes
     code    8200-8240       bytes that are code, traced from 8200 on
     inline  0028  1         a CALL or RST to 0028 is followed by 1 data byte
+    inline  5300  until 00  ... by data bytes up to and including a 00
+    inline  5300  until bit7    ... up to and including a byte with bit 7 set
+    noreturn 0000           a CALL or RST to 0000 never comes back: an
+                            unconditional one has no fall-through
+    noreturn 0000 rst       ... only an RST to it (CALL 0000H is often a
+                            placeholder a program patches)
     table   8000  8         8 words at 8000, each the address of code
     comment 7F12  wait for vertical blank
 
-Addresses are hex: 7F40, 7F40H or 0x7F40.  Counts (inline, table) are
-decimal.  A range A-B includes both ends.  Free text after an entry's
+Addresses are hex: 7F40, 7F40H or 0x7F40, and so is a terminator byte.
+Counts (inline, table) are decimal.  A range A-B includes both ends.  Free text after an entry's
 address is a comment on it.  Anything the parser does not understand is
 an error naming the line: a typo is never skipped.
 
@@ -43,7 +49,10 @@ class Hints:
     vars: dict = field(default_factory=dict)        # addr -> name, RAM
     data: list = field(default_factory=list)        # (start, end, type)
     code: list = field(default_factory=list)        # (start, end)
-    inline: dict = field(default_factory=dict)      # call target -> bytes
+    inline: dict = field(default_factory=dict)      # call target -> bytes,
+    #                       or ('until', byte) / ('until', 'bit7')
+    noreturn: dict = field(default_factory=dict)    # call target -> 'call'
+    #                       (any CALL or RST) or 'rst' (an RST only)
     tables: list = field(default_factory=list)      # (addr, count)
     comments: dict = field(default_factory=dict)    # addr -> [text]
     overrides: list = field(default_factory=list)   # what a later file renamed
@@ -81,6 +90,7 @@ class Hints:
         self.data += other.data
         self.code += other.code
         self.inline.update(other.inline)
+        self.noreturn.update(other.noreturn)
         self.tables += other.tables
         for a, t in other.comments.items():
             self.comments.setdefault(a, []).extend(t)
@@ -131,6 +141,16 @@ def _count(text):
     return n
 
 
+def _terminator(text):
+    """`bit7`, or one byte in hex: the byte that ends inline data."""
+    if text.lower() == 'bit7':
+        return 'bit7'
+    v = addr(text)
+    if v > 0xFF:
+        raise ValueError('a terminator is one byte or bit7, not %s' % text)
+    return v
+
+
 def _name(text):
     from .asm import assemble
     if not _NAME.match(text) or assemble(
@@ -174,6 +194,11 @@ def parse(text, source='hints'):
                 h.code.append(_range(args[0]))
             elif kw == 'inline' and len(args) == 2:
                 h.inline[addr(args[0])] = _count(args[1])
+            elif kw == 'inline' and len(args) == 3 and args[1].lower() == 'until':
+                h.inline[addr(args[0])] = ('until', _terminator(args[2]))
+            elif kw == 'noreturn' and (len(args) == 1 or (
+                    len(args) == 2 and args[1].lower() == 'rst')):
+                h.noreturn[addr(args[0])] = 'rst' if len(args) == 2 else 'call'
             elif kw == 'table' and len(args) == 2:
                 h.tables.append((addr(args[0]), _count(args[1])))
             elif kw == 'comment' and len(args) >= 2:
