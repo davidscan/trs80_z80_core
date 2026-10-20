@@ -94,14 +94,17 @@ def input_files():
 # numbers measured on the 4,339 set (e2da2598, cbdf3348) are not compared
 # with numbers on this one.  The set was 182f231b at the intake and is
 # 3a7a5442 since trs80_programs ba11d1fb regenerated the listings with the
-# colon before ELSE taken back (3,874 changed, only ELSE lines).  A run on any other
-# set refuses unless told to
+# colon before ELSE taken back (3,874 changed, only ELSE lines).
+# Re-pinned 2026-10-20 at trs80_programs 6bdd29e1, A NEW BASELINE: the
+# LOAD-80 disk and tape listings joined (419 judged, 7 of them filed as
+# other dialects), so numbers on the 6,067 set (3a7a5442) are not compared
+# with numbers on this one.  A run on any other set refuses unless told to
 # accept it; re-pin only with the corpus change recorded beside the
 # numbers.  The fingerprint is shasum's over the files input_files() reads;
 # today those are exactly the shell's, so it can be checked by hand:
 #   cd corpus/programs && LC_ALL=C find runnable blocked -type f \( -iname '*.bas' \
 #     -o -iname '*.txt' \) -print0 | LC_ALL=C sort -z | xargs -0 shasum | shasum
-INPUT_SET = (6067, '3a7a5442de808c336fab2a534e7f45a89ddf7667')
+INPUT_SET = (6479, 'f8a7b965cdfd31ef9528626b1388f951d322eb71')
 
 
 def fingerprint(paths, root=None):
