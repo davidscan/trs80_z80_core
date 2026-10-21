@@ -812,6 +812,15 @@ class TestModel1Hints(unittest.TestCase):
         self.assertEqual(bytemap(res, segs), 'CDCC..CCCC')
         round_trips(self, res, segs)
 
+    def test_ready_never_returns(self):
+        # a CALL to READY (1A19H) is a way back to BASIC: what follows it
+        # is not reached; a JP there ends its path as any jump does
+        segs, entry, _ = build("ST: CALL 1A19H\n DM 'NO'\nX: JP 1A19H\n DB 1")
+        res = trace.trace(segs, [entry, 0x7005], hints.load(MODEL1))
+        self.assertEqual(bytemap(res, segs), 'CCC..CCC.')
+        self.assertIn('[never returns]', ' '.join(res.steps))
+        round_trips(self, res, segs)
+
     def test_a_program_that_uses_the_ram_locations(self):
         segs, entry, _ = build('ST: LD HL,(4020H)\n LD (409CH),A\n'
                                ' LD HL,4020H\n LD (40F2H),A\n RET')

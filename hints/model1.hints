@@ -85,10 +85,12 @@ comment 0A9A  USR: return HL to BASIC as an integer
 label   1A19  READY     ; M3 p92; MP p20; FV p16
 comment 1A19  back to BASIC's command level
 
-; ---- how two restarts change the flow
+; ---- how two restarts and READY change the flow
 inline  0008  1         ; RRD p56: returns past the byte after the RST 08H
 noreturn 0000 rst       ; RRD p56: RST 0 restarts the machine.  Not CALL
                         ; 0000H: programs patch that placeholder at run time
+noreturn 1A19           ; M3 p92; MP p20; FV p16: READY is BASIC's command
+                        ; level, so a CALL to it never comes back
 
 ; ---- RAM locations (var: names (nn) operands only, never the program's
 ; own bytes).  Names marked "Sams" are Sams' Appendix D mnemonics, VIDEO
