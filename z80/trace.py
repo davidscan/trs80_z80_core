@@ -109,6 +109,9 @@ class Result:
     vars: set = field(default_factory=set)          # names that are RAM vars
     overrides: list = field(default_factory=list)   # names a later file took
     comments: dict = field(default_factory=dict)    # addr -> [text]
+    why: dict = field(default_factory=dict)         # addr -> why it is what
+    #   it is: for an instruction's head, how the path reached it; for the
+    #   first byte of a data, guess or inline run, what made it data
     steps: list = field(default_factory=list)
 
     def map(self, start, length):
@@ -234,19 +237,24 @@ def trace(segments, entries, hints=None, guess=True):
     for lo, hi, typ in h.data:
         for a in range(lo, hi + 1):
             res.data[a] = (typ, lo)
-    starts = [(e & 0xFFFF, None) for e in list(entries) + h.entries]
-    starts += [(lo, None) for lo, _ in h.code]
+        res.why[lo] = 'data hint'
+    # the worklist holds (address, the instruction that led there or None,
+    # how it led there); `how` becomes the instruction's `why`
+    starts = [(e & 0xFFFF, None, 'entry') for e in entries]
+    starts += [(e & 0xFFFF, None, 'entry hint') for e in h.entries]
+    starts += [(lo, None, 'code hint') for lo, _ in h.code]
     for t, n in h.tables:
         for a in range(t, t + 2 * n):
             res.data[a & 0xFFFF] = ('words', t)
+        res.why[t] = 'table hint'
         for i in range(n):
             lo, hi = mem.get((t + 2 * i) & 0xFFFF), mem.get((t + 2 * i + 1) & 0xFFFF)
             if lo is not None and hi is not None:
-                starts.append((lo | hi << 8, (t + 2 * i) & 0xFFFF))
+                starts.append((lo | hi << 8, (t + 2 * i) & 0xFFFF, 'table'))
     uniq = []
-    for a, src in starts:
-        if (a, src) not in uniq:
-            uniq.append((a, src))
+    for a, src, how in starts:
+        if all(u[:2] != (a, src) for u in uniq):
+            uniq.append((a, src, how))
             if a not in res.entries:
                 res.entries.append(a)
             ref(a, src, 'table' if src is not None else 'entry')
@@ -265,9 +273,9 @@ def trace(segments, entries, hints=None, guess=True):
             if nxt is None:
                 break
             say('code hint: %s not reached yet' % _hex4(nxt))
-            work.append((nxt, None))
+            work.append((nxt, None, 'code hint'))
             continue
-        addr, src = work.pop()
+        addr, src, how = work.pop()
         popped.add(addr)
         if addr not in mem:
             res.external.setdefault(addr, []).append(src)
@@ -307,6 +315,7 @@ def trace(segments, entries, hints=None, guess=True):
         res.insns[addr] = ins
         for a in span:
             res.owner[a] = addr
+        res.why[addr] = _why(how, src)
         kind = undoc_kind(ins)
         if kind:
             res.undoc.append((addr, kind))
@@ -335,6 +344,7 @@ def trace(segments, entries, hints=None, guess=True):
                 res.computed.append(addr)
                 note += ' [after PUSH: possible computed jump]'
         call = falls and ins.op is not None and ins.op.kind == 'call'
+        skipped = 0
         if call and ins.target in h.noreturn and not any(
                 o.kind == 'cond' for o in ins.op.operands) and (
                 h.noreturn[ins.target] == 'call' or ins.op.mnemonic == 'RST'):
@@ -356,13 +366,19 @@ def trace(segments, entries, hints=None, guess=True):
                         res.conflicts.append(Conflict(b, res.owner[b], addr, 'data'))
                     else:
                         res.data.setdefault(b, (typ, nxt))
+                if nxt in res.data and res.data[nxt] == (typ, nxt):
+                    res.why.setdefault(nxt, 'inline data for the %s at %s'
+                                       % (ins.op.mnemonic, _hex4(addr)))
                 note += ' [inline: %d data byte%s]' % (n, 's' if n > 1 else '')
                 nxt = (nxt + n) & 0xFFFF
-        queue = list(targets) + ([nxt] if falls else [])
+                skipped = n
+        queue = [(t, ins.op.kind) for t in targets]
         if falls:
             fell_from[nxt] = addr
-        for t in queue:
-            work.append((t, addr))
+            queue.append((nxt, ('skip', skipped) if skipped else 'fall'))
+        for t, k in queue:
+            work.append((t, addr, k))
+        queue = [t for t, _ in queue]
         if queue:
             say('pop %s: %s%s -> queue %s' % (_hex4(addr), text, note,
                                               ', '.join(_hex4(t) for t in queue)))
@@ -379,6 +395,21 @@ def trace(segments, entries, hints=None, guess=True):
     _name(res, h)
     say('done: ' + res.summary())
     return res
+
+
+def _why(how, src):
+    """The reason an instruction is code: HOW its path reached it, from
+    the instruction at SRC."""
+    if isinstance(how, tuple):          # ('skip', n): the fall-through past
+        n = how[1]                      # a call's inline data
+        return 'continues from %s past %d inline byte%s' % (
+            _hex4(src), n, 's' if n > 1 else '')
+    if how in ('entry', 'entry hint', 'code hint'):
+        return how
+    if how == 'table':
+        return 'table at %s' % _hex4(src)
+    return {'jump': 'jump from %s', 'call': 'call from %s',
+            'fall': 'falls from %s'}[how] % _hex4(src)
 
 
 def _guess(res, say):
@@ -403,10 +434,11 @@ def _guess(res, say):
     Anything else stays unknown (DB in the listing)."""
     free = {a for a in res.mem if a not in res.owner and a not in res.data}
 
-    def mark(lo, n, typ):
+    def mark(lo, n, typ, why):
         for i in range(n):
             res.guess[(lo + i) & 0xFFFF] = (typ, lo)
             free.discard((lo + i) & 0xFFFF)
+        res.why[lo] = 'guessed %s: %s' % (typ, why)
         say('guess %s-%s: %s' % (_hex4(lo), _hex4((lo + n - 1) & 0xFFFF), typ))
 
     def word(a):
@@ -423,7 +455,7 @@ def _guess(res, say):
             if n >= MIN_WORDS:
                 for i in range(n):
                     res.refs.setdefault(word(a + 2 * i), []).append((a + 2 * i, 'word'))
-                mark(a, 2 * n, 'words')
+                mark(a, 2 * n, 'words', '%d, each the address of code' % n)
                 a += 2 * n
             else:
                 a += 1
@@ -438,9 +470,14 @@ def _guess(res, say):
             bit7 = last is not None and last & 0x80 and _printable(last & 0x7F)
             if (len(run) >= MIN_TEXT and len(set(run)) > 1
                     and any(chr(x).isalpha() for x in run)):
+                why = '%d printable' % len(run)
+                if bit7:
+                    why += ', then a character with bit 7 set'
+                elif last in TEXT_ENDS:
+                    why += ', then %02XH' % last
                 if bit7 or last in TEXT_ENDS:
                     b += 1
-                mark(a, b - a, 'text')
+                mark(a, b - a, 'text', why)
             a = max(b, a + 1)
     for start, length in _runs(res.mem):
         a, end = start, start + length
@@ -449,7 +486,7 @@ def _guess(res, say):
             while b < end and b in free and res.mem[b] == res.mem[a]:
                 b += 1
             if b - a >= MIN_FILL:
-                mark(a, b - a, 'fill')
+                mark(a, b - a, 'fill', '%d x %02XH' % (b - a, res.mem[a]))
             a = max(b, a + 1)
 
 
@@ -574,9 +611,31 @@ def _kind(res, a):
     return None
 
 
+def _reason(res, a):
+    """The listing's reason for the line at A, or '' where the line says
+    it already: a jump, call or table xref is printed as 'from', and a
+    fall-through from the instruction before needs no words.  Data,
+    guesses and unknown bytes get theirs on the first line of the run."""
+    if a in res.insns:
+        w = res.why.get(a, '')
+        return w if w in ('entry', 'entry hint', 'code hint') \
+            or w.startswith('continues') else ''
+    if a in res.data:
+        return res.why.get(a, '') if res.data[a][1] == a else ''
+    if a in res.guess:
+        return res.why.get(a, '') if res.guess[a][1] == a else ''
+    prev = (a - 1) & 0xFFFF
+    if prev not in res.mem or prev in res.owner or prev in res.data \
+            or prev in res.guess:
+        return 'nothing reaches it'
+    return ''
+
+
 def _note(res, a):
-    """The comment for the line at A: who refers to it, and hint comments."""
-    parts = []
+    """The comment for the line at A: why it is what it is, who refers
+    to it, and hint comments."""
+    why = _reason(res, a)
+    parts = [why] if why else []
     srcs = [(s, k) for s, k in res.refs.get(a, []) if s is not None]
     if srcs:
         parts.append('from ' + ', '.join('%s %s' % (_hex4(s), k)
@@ -620,7 +679,8 @@ def source(res, segments=None):
 
 def listing(res):
     """Address, bytes, flag (' ' code, D hinted data, t/w/f guessed
-    text/words/fill, ? unknown), label, text, and who refers to the line."""
+    text/words/fill, ? unknown), label, text, and the reason: why the
+    line is what it is (S4 (b)), who refers to it, and hint comments."""
     out = []
     for a, raw, text, flag in _lines(res):
         hexb = ' '.join('%02X' % b for b in raw)

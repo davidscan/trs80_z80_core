@@ -91,8 +91,15 @@ instruction, calls outside the loaded bytes, and undocumented opcodes.
 Every address the code names -- a jump or call target, an `(nn)` it reads
 or writes, a 16-bit constant that falls inside the program -- gets a
 label (`L7016`) and a comment saying who refers to it (`; from 7003
-call, 701D jump`). **Writes:** nothing; the listing and its report go to
-stdout.
+call, 701D jump`). The comment also says why a line is what it is, where
+the line does not show it already: `; entry`, `; code hint`, `; continues
+from 7005 past 1 inline byte`, `; inline data for the CALL at 7005`,
+`; data hint`, `; table hint`, `; guessed text: 19 printable, then 0DH`,
+`; guessed words: 3, each the address of code`, `; guessed fill: 4 x
+00H`, and `; nothing reaches it` on the first line of each unknown run.
+An instruction that follows from the line before, or that a `from` xref
+already explains, gets no words. **Writes:** nothing; the listing and
+its report go to stdout.
 
 A hints file tells the tracer what flow cannot show: more entry points,
 names, data ranges (text, words, bytes), code ranges, calls followed by
@@ -105,7 +112,8 @@ operands and never names bytes the program itself loads. With several
 and the report lists every name it took over. `hints/model1.hints` names the documented Model I Level II
 entry points (`CALL 0033H` lists as `CALL VDCHAR`) and RAM locations,
 each with its published sources, and says that RST 08H is followed by
-one byte and that RST 0 never returns; it is used only when you pass it.
+one byte and that RST 0 and a `CALL` to READY (1A19H) never return; it
+is used only when you pass it.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|

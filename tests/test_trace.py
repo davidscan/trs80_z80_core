@@ -248,8 +248,9 @@ class TestListing(unittest.TestCase):
         segs = [(0x7000, bytes.fromhex('C30C70' + '41' * 9 + 'C9'))]
         res = trace.trace(segs, [0x7000], guess=False)
         self.assertEqual(trace.listing(res).split('\n'), [
-            '7000  C3 0C 70                  L7000    JP L700C',
-            '7003  41 41 41 41 41 41 41 41 ?          DB 41H,41H,41H,41H,41H,41H,41H,41H',
+            '7000  C3 0C 70                  L7000    JP L700C ; entry',
+            '7003  41 41 41 41 41 41 41 41 ?          DB 41H,41H,41H,41H,41H,41H,41H,41H'
+            ' ; nothing reaches it',
             '700B  41                      ?          DB 41H',
             '700C  C9                        L700C    RET ; from 7000 jump',
         ])
@@ -527,7 +528,7 @@ class TestLabels(unittest.TestCase):
         res, segs, _ = hinted('ST: LD A,(T+1)\n RET\nT: DW 1234H,5678H',
                               'data 7004-7007 words')
         text = trace.source(res)
-        self.assertIn('         DB 34H\nL7005    DB 12H,78H,56H', text)
+        self.assertIn('         DB 34H ; data hint\nL7005    DB 12H,78H,56H', text)
         round_trips(self, res, segs)
 
     def test_a_hint_name_inside_the_image(self):
@@ -770,6 +771,72 @@ class TestGuess(unittest.TestCase):
             with redirect_stdout(out):
                 trace.main(args)
             self.assertRegex(out.getvalue(), r'7001  48 45 4C 4C 4F +%s ' % (re.escape(flag)))
+
+
+class TestReasons(unittest.TestCase):
+    """S4 (b): the listing says why each line is what it is.  `why` holds
+    the reason for every instruction and every data run; the listing
+    prints it where an xref does not already say it."""
+
+    def reasons(self, res):
+        return {a: line.split(' ; ', 1)[1] if ' ; ' in line else ''
+                for a, line in ((int(l[:4], 16), l)
+                                for l in trace.listing(res).split('\n'))}
+
+    def test_how_each_instruction_was_reached(self):
+        res, segs, syms = run('ST: CALL PRT\n JR NZ,X\n RET\nX: RET\nPRT: RET')
+        self.assertEqual(res.why, {
+            0x7000: 'entry', 0x7003: 'falls from 7000', 0x7005: 'falls from 7003',
+            0x7006: 'jump from 7003', 0x7007: 'call from 7000'})
+        why = self.reasons(res)
+        self.assertEqual(why[0x7000], 'entry')
+        self.assertEqual(why[0x7003], '')               # a fall-through: implied
+        self.assertEqual(why[0x7006], 'from 7003 jump')  # the xref is the reason
+        self.assertEqual(why[0x7007], 'from 7000 call')
+
+    def test_the_unknown_say_so_once_per_run(self):
+        res, _, _ = run('ST: RET\n DB 1,2,3,4,5,6,7,8,9\n DB 10\nX: RET\n DB 11',
+                        entries=[0x7000, 0x700B])
+        why = self.reasons(res)
+        self.assertEqual(why[0x7001], 'nothing reaches it')
+        self.assertEqual(why[0x7009], '')               # the same run, line two
+        self.assertEqual(why[0x700C], 'nothing reaches it')
+
+    def test_hints(self):
+        res, _, syms = hinted(
+            'ST: CALL PRT\n DB 3\n RET\nHND: RET\nPRT: RET\nK: NOP\n RET\n'
+            'TAB: DW RT\nRT: RET\n DB 1,2',
+            'inline %04X 1\nentry %04X key handler\ncode %04X-%04X\n'
+            'table %04X 1\ndata %04X-%04X bytes' % (
+                0x7006, 0x7005, 0x7007, 0x7008, 0x7009, 0x700C, 0x700D))
+        why = self.reasons(res)
+        self.assertEqual(why[0x7003], 'inline data for the CALL at 7000')
+        self.assertEqual(why[0x7004], 'continues from 7000 past 1 inline byte')
+        self.assertEqual(why[0x7005], 'entry hint; key handler')
+        self.assertEqual(why[0x7007], 'code hint')
+        self.assertEqual(why[0x7009], 'table hint')
+        self.assertEqual(why[0x700B], 'from 7009 table')
+        self.assertEqual(res.why[0x700B], 'table at 7009')
+        self.assertEqual(why[0x700C], 'data hint')
+
+    def test_guesses(self):
+        res, _, _ = run("ST: CALL A1\n RET\n DM 'HELLO'\n DB 0DH\n DM 'WORLD!'\n"
+                        " DB 0,0,0,0,0\nTAB: DW A1,ST\nA1: RET\n DM 'STOPP'\n"
+                        " DB 'S'+80H\n DM 'BYE'\n DB 1,2,3")
+        why = self.reasons(res)
+        self.assertEqual(why[0x7004], 'guessed text: 5 printable, then 0DH')
+        self.assertEqual(why[0x7009], '')               # the 0DH: the same run
+        self.assertEqual(why[0x700A], 'guessed text: 6 printable, then 00H')
+        self.assertEqual(why[0x7011], 'guessed fill: 4 x 00H')
+        self.assertEqual(why[0x7015], 'guessed words: 2, each the address of code')
+        self.assertEqual(why[0x701A], 'guessed text: 5 printable, then a character '
+                                      'with bit 7 set')
+        self.assertEqual(why[0x7020], 'nothing reaches it')   # too short for text
+
+    def test_the_source_still_assembles(self):
+        res, segs, _ = hinted("ST: CALL PRT\n DB 3\n RET\nPRT: RET\n DM 'HELLO'\n DB 0",
+                              'inline 7005 1')
+        round_trips(self, res, segs)
 
 
 MODEL1 = os.path.join(ROOT, 'hints', 'model1.hints')
