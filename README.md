@@ -85,7 +85,17 @@ text (`t`: five or more printable characters with a letter, and the
 00H/0DH/03H or bit-7 byte that ends them), a table of routines (`w`: two
 or more words in a row, each the address of a traced instruction) and
 fill (`f`: four or more identical bytes). Anything else is unknown (`?`).
-Nothing is traced from a guess. Indirect jumps (`JP (HL)`, `(IX)`, `(IY)`)
+Nothing is traced from a guess, unless `--guess-tables` is given: then a
+16-bit constant in traced code that points at a run of two or more words
+(or of key-byte-and-word records ended by a zero key, or of `JP nn`
+instructions), each word an address in the image, is taken for a jump
+table, its words' targets are traced, and everything they reach is code
+flagged `g` (the table's bytes `w`, its keys `k`): guessed, never proven.
+A table whose paths add a conflict, or run into a strong undocumented
+opcode, is dropped and reported; a weak one lowers the table's grade.
+Measured on 86 identical period source/object pairs: code found rose
+from 70.9% to 74.7% for 9 more data bytes called code. Indirect jumps
+(`JP (HL)`, `(IX)`, `(IY)`)
 stop their path and are reported, as are jumps into the middle of an
 instruction, calls outside the loaded bytes, and undocumented opcodes.
 Every address the code names -- a jump or call target, an `(nn)` it reads
@@ -94,7 +104,8 @@ label (`L7016`) and a comment saying who refers to it (`; from 7003
 call, 701D jump`). The comment also says why a line is what it is, where
 the line does not show it already: `; entry`, `; code hint`, `; continues
 from 7005 past 1 inline byte`, `; inline data for the CALL at 7005`,
-`; data hint`, `; table hint`, `; guessed text: 19 printable, then 0DH`,
+`; data hint`, `; table hint`, `; guessed table at 7F10`, `; guessed
+table: 4 words, each an address in the image, from 7F02`, `; guessed text: 19 printable, then 0DH`,
 `; guessed words: 3, each the address of code`, `; guessed fill: 4 x
 00H`, and `; nothing reaches it` on the first line of each unknown run.
 An instruction that follows from the line before, or that a `from` xref

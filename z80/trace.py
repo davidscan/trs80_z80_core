@@ -25,6 +25,14 @@ Targets outside the loaded bytes (a call into the ROM) are recorded as
 external, never followed.  Undocumented opcodes on a path are code -- the
 CPU runs them -- and are reported by kind.
 
+With `tables` (--guess-tables) the tracer also follows the jump tables an
+address constant in traced code names (`_guess_tables`): two or more words
+in a row, or records of a key byte and a word ended by a zero key, each
+word the address of bytes in the image.  Each table is traced on a copy
+first and dropped if it adds a conflict or runs into a strong undocumented
+opcode; everything a kept table reaches is code marked GUESSED, never
+proven.
+
 `steps` records the worklist as it runs, one line per step: --explain.
 
     python3 -m z80.trace FILE.cmd
@@ -89,6 +97,19 @@ class Conflict:
     kind: str = 'code'          # 'code': an instruction; 'data': a data hint
 
 
+@dataclass(frozen=True)
+class Table:
+    """A jump table `tables=True` guessed and kept."""
+    addr: int                   # its first byte
+    count: int                  # words, or keyed records
+    keyed: bool                 # DB key, DW address records, a zero key ends
+    #                             them; every key C3H: a vector of JP nn
+    #                             instructions, traced as code (`vector`)
+    source: int                 # the instruction whose constant names it
+    grade: str = 'strong'       # 'weak': an undocumented opcode of the weak
+    #                             kind on the path it opened (D6)
+
+
 @dataclass
 class Result:
     entries: list
@@ -112,30 +133,38 @@ class Result:
     why: dict = field(default_factory=dict)         # addr -> why it is what
     #   it is: for an instruction's head, how the path reached it; for the
     #   first byte of a data, guess or inline run, what made it data
+    guessed: set = field(default_factory=set)       # heads of instructions a
+    #                                                 guessed table led to
+    tables: list = field(default_factory=list)      # [Table] kept
+    dropped: list = field(default_factory=list)     # (addr, count, keyed, why)
     steps: list = field(default_factory=list)
 
     def map(self, start, length):
-        """'C' per code byte, 'D' per byte a hint makes data, a guess's
-        letter (t text, w words, f fill) per guessed byte, '.' per
-        unknown, over [start, start+length)."""
+        """'C' per code byte ('c' if a guessed table led there), 'D' per
+        byte a hint makes data, a guess's letter (t text, w words, k the
+        keys of a keyed table, f fill) per guessed byte, '.' per unknown,
+        over [start, start+length)."""
         out = []
         for i in range(length):
             a = (start + i) & 0xFFFF
-            out.append('C' if a in self.owner else 'D' if a in self.data
+            out.append(('c' if self.owner[a] in self.guessed else 'C')
+                       if a in self.owner else 'D' if a in self.data
                        else GUESS_FLAG[self.guess[a][0]] if a in self.guess
                        else '.')
         return ''.join(out)
 
     def summary(self):
         code = len(self.owner)
+        gcode = sum(1 for h in self.owner.values() if h in self.guessed)
         data = sum(1 for a in self.data if a in self.mem and a not in self.owner)
         kinds = {}
         for t, _ in self.guess.values():
             kinds[t] = kinds.get(t, 0) + 1
         guessed = sum(kinds.values())
         total = len(self.mem)
-        return '%d of %d bytes code, %s%s%d unknown' % (
-            code, total, '%d data, ' % data if data else '',
+        return '%d of %d bytes code%s, %s%s%d unknown' % (
+            code, total, ' (%d guessed)' % gcode if gcode else '',
+            '%d data, ' % data if data else '',
             '%d guessed data (%s), ' % (guessed, ', '.join(
                 '%d %s' % (kinds[t], t) for t in GUESS_TYPES if t in kinds))
             if guessed else '', total - code - data - guessed)
@@ -148,9 +177,10 @@ class Result:
 REF_KINDS = ('entry', 'jump', 'call', 'table', 'read', 'write', 'addr', 'word')
 
 # S3: what unknown bytes are guessed to be, and the listing's flag for each.
-GUESS_TYPES = ('words', 'text', 'fill')
-GUESS_FLAG = {'words': 'w', 'text': 't', 'fill': 'f'}
+GUESS_TYPES = ('words', 'keys', 'text', 'fill')
+GUESS_FLAG = {'words': 'w', 'keys': 'k', 'text': 't', 'fill': 'f'}
 MIN_WORDS = 2       # words in a row, each the address of a traced instruction
+#                     (S3), or of bytes in the image (a guessed table's)
 MIN_TEXT = 5        # printable bytes in a row, one of them a letter
 MIN_FILL = 4        # identical bytes in a row
 TEXT_ENDS = (0x00, 0x0D, 0x03)  # a terminator a text run takes with it
@@ -218,10 +248,12 @@ def _hex4(a):
     return '%04X' % a
 
 
-def trace(segments, entries, hints=None, guess=True):
+def trace(segments, entries, hints=None, guess=True, tables=False):
     """Trace SEGMENTS ([(org, bytes)], as z80.load returns) from ENTRIES,
-    with HINTS (a z80.hints.Hints) if given; then, unless GUESS is false,
-    guess what the bytes nothing reached are (S3, `_guess`)."""
+    with HINTS (a z80.hints.Hints) if given; with TABLES, follow the jump
+    tables the code's constants name, marked guessed (D5, `_guess_tables`);
+    then, unless GUESS is false, guess what the bytes nothing reached are
+    (S3, `_guess`)."""
     from .hints import Hints
     h = hints or Hints()
     mem = {}
@@ -259,10 +291,34 @@ def trace(segments, entries, hints=None, guess=True):
                 res.entries.append(a)
             ref(a, src, 'table' if src is not None else 'entry')
     say('entry ' + ', '.join(_hex4(e) for e in res.entries))
-    work = list(reversed(uniq))
-    fell_from = {}                   # addr -> the instruction falling into it
-    forced = [a for lo, hi in h.code for a in range(lo, hi + 1)]
-    popped = set()                   # every address a path has tried
+    st = {'fell_from': {},           # addr -> the instruction falling into it
+          'forced': [a for lo, hi in h.code for a in range(lo, hi + 1)],
+          'popped': set()}           # every address a path has tried
+    _run(res, h, list(reversed(uniq)), st)
+    if tables:
+        res = _guess_tables(res, h, st)
+    say = res.steps.append
+    if guess:
+        _guess(res, say)
+    res.conflicts.sort(key=lambda c: c.addr)
+    res.indirect.sort()
+    res.computed.sort()
+    res.truncated.sort()
+    res.undoc.sort()
+    _name(res, h)
+    say('done: ' + res.summary())
+    return res
+
+
+def _run(res, h, work, st):
+    """Run the worklist WORK ([(addr, the instruction that led there or
+    None, how)]) to exhaustion over RES, with the hints H; ST carries
+    the loop's state between runs (`fell_from`, `forced`, `popped`)."""
+    mem, say = res.mem, res.steps.append
+    fell_from, forced, popped = st['fell_from'], st['forced'], st['popped']
+
+    def ref(target, src, kind):
+        res.refs.setdefault(target & 0xFFFF, []).append((src, kind))
 
     while True:
         if not work:
@@ -277,6 +333,7 @@ def trace(segments, entries, hints=None, guess=True):
             continue
         addr, src, how = work.pop()
         popped.add(addr)
+        guessed = how in ('guessed table', 'guessed vector') or src in res.guessed
         if addr not in mem:
             res.external.setdefault(addr, []).append(src)
             say('pop %s: outside the loaded bytes (external)' % _hex4(addr))
@@ -305,16 +362,20 @@ def trace(segments, entries, hints=None, guess=True):
             say('pop %s: %s CONFLICT, overlaps the instruction at %s'
                 % (_hex4(addr), ins.text, _hex4(head)))
             continue
-        clash = next((a for a in span if a in res.data), None)
+        clash = next((a for a in span if a in res.data or a in res.guess), None)
         if clash is not None:
-            start = res.data[clash][1]
+            hinted = clash in res.data
+            start = (res.data if hinted else res.guess)[clash][1]
             res.conflicts.append(Conflict(addr, start, src, 'data'))
-            say('pop %s: %s CONFLICT, runs into the data hinted at %s'
-                % (_hex4(addr), ins.text, _hex4(start)))
+            say('pop %s: %s CONFLICT, runs into the %s at %s'
+                % (_hex4(addr), ins.text,
+                   'data hinted' if hinted else 'table guessed', _hex4(start)))
             continue
         res.insns[addr] = ins
         for a in span:
             res.owner[a] = addr
+        if guessed:
+            res.guessed.add(addr)
         res.why[addr] = _why(how, src)
         kind = undoc_kind(ins)
         if kind:
@@ -385,17 +446,6 @@ def trace(segments, entries, hints=None, guess=True):
         else:
             say('pop %s: %s%s -> end of path' % (_hex4(addr), text, note))
 
-    if guess:
-        _guess(res, say)
-    res.conflicts.sort(key=lambda c: c.addr)
-    res.indirect.sort()
-    res.computed.sort()
-    res.truncated.sort()
-    res.undoc.sort()
-    _name(res, h)
-    say('done: ' + res.summary())
-    return res
-
 
 def _why(how, src):
     """The reason an instruction is code: HOW its path reached it, from
@@ -408,8 +458,156 @@ def _why(how, src):
         return how
     if how == 'table':
         return 'table at %s' % _hex4(src)
+    if how == 'guessed table':
+        return 'guessed table at %s' % _hex4(src)
+    if how == 'guessed vector':
+        return 'guessed jump vector, named at %s' % _hex4(src)
     return {'jump': 'jump from %s', 'call': 'call from %s',
             'fall': 'falls from %s'}[how] % _hex4(src)
+
+
+def _guess_tables(res, h, st):
+    """D5: follow the jump tables the traced code's constants name.
+
+    A candidate is a 16-bit constant in a traced instruction (LD HL,TAB:
+    an `addr` ref) pointing at bytes nothing reached, where MIN_WORDS or
+    more words in a row each point at a byte inside the loaded image and
+    not into hinted data or another table (`_table_at`); first as plain
+    words, then as records of a key byte and a word that a zero key ends
+    (LD DE,TAB / DB key, DW routine ...); keyed records whose every key
+    is C3H are a vector of JP nn instructions, so the records are traced
+    as code themselves (a CP/M BIOS's jump vector).  Each candidate is traced on a
+    copy of the result and kept only if that adds no conflict and runs
+    into no undocumented opcode of the STRONG kind (D6); a WEAK one is
+    kept with the table's grade lowered.  Every instruction a kept table
+    leads to is marked guessed, never proven.  New constants in guessed
+    code can name more tables, so this repeats until none is new.
+
+    On the 86 identical period pairs with an entry in their own bytes
+    (2026-10-21) the plain pattern alone found nothing (their tables'
+    words point at ROM entries or 0 before the second word); the keyed
+    one found 2,033 code bytes for 9 data bytes called code, in 5 pairs.
+    Returns the result to go on with (the copy, where a table was kept)."""
+    say = lambda s: res.steps.append(s)       # noqa: E731 (res is rebound)
+    tried = set()
+    while True:
+        cands = [(t, n, keyed, src) for t, n, keyed, src in _table_candidates(res)
+                 if t not in tried]
+        if not cands:
+            return res
+        for t, n, keyed, src in cands:
+            tried.add(t)
+            say('guess table at %s: %d %s, from %s: trace it'
+                % (_hex4(t), n, 'keyed records' if keyed else 'words', _hex4(src)))
+            trial, tst = _fork(res), {'fell_from': dict(st['fell_from']),
+                                       'forced': [], 'popped': set(st['popped'])}
+            work = _mark_table(trial, t, n, keyed, src)
+            _run(trial, h, work, tst)
+            new = trial.conflicts[len(res.conflicts):]
+            undoc = [(a, k) for a, k in trial.undoc[len(res.undoc):] if a in trial.guessed]
+            strong = [(a, k) for a, k in undoc if UNDOC_STRONG[k]]
+            if new or strong:
+                why = ('a conflict at %s' % _hex4(new[0].addr) if new
+                       else 'an undocumented %s at %s' % (strong[0][1], _hex4(strong[0][0])))
+                res.dropped.append((t, n, keyed, why))
+                res.steps = trial.steps
+                say('drop the table at %s: %s' % (_hex4(t), why))
+                continue
+            trial.tables.append(Table(t, n, keyed, src, 'weak' if undoc else 'strong'))
+            if undoc:
+                say('keep the table at %s, graded weak: undocumented %s at %s'
+                    % (_hex4(t), undoc[0][1], _hex4(undoc[0][0])))
+            else:
+                say('keep the table at %s' % _hex4(t))
+            res, st = trial, tst
+
+
+def _table_candidates(res):
+    """[(addr, count, keyed, source)]: every `addr` constant in traced
+    code that starts a table by the rule in `_guess_tables`."""
+    out = []
+    for t, lst in sorted(res.refs.items()):
+        srcs = [s for s, k in lst if k == 'addr' and s is not None]
+        if not srcs or t not in res.mem or t in res.owner or t in res.data \
+                or t in res.guess:
+            continue
+        for keyed in (False, True):
+            n = _table_at(res, t, keyed)
+            if n >= MIN_WORDS:
+                out.append((t, n, keyed, min(srcs)))
+                break
+    return out
+
+
+def _table_at(res, t, keyed):
+    """How many records (a word, or a key byte and a word) in a row from
+    T each hold the address of a byte in the image, over bytes nothing
+    has claimed; a keyed table ends at a zero key."""
+    mem = res.mem
+
+    def free(a):
+        a &= 0xFFFF
+        return a in mem and a not in res.owner and a not in res.data \
+            and a not in res.guess
+
+    n, a = 0, t
+    while n < 0x8000:
+        if keyed and (not free(a) or mem[a & 0xFFFF] == 0):
+            break
+        slot = a + (1 if keyed else 0)
+        if not (free(slot) and free(slot + 1)):
+            break
+        w = mem[slot & 0xFFFF] | mem[(slot + 1) & 0xFFFF] << 8
+        if w not in mem or w in res.data or w in res.guess:
+            break
+        n += 1
+        a += 3 if keyed else 2
+    return n
+
+
+def _mark_table(res, t, n, keyed, src):
+    """Mark the table at T as guessed data in RES and return the worklist
+    of its words' targets; a vector of JP nn instructions is not marked
+    (its records are traced as code) and the worklist is the records."""
+    stride = 3 if keyed else 2
+    if keyed and _vector(res, t, n):        # each JP's `why` says it
+        return [((t + 3 * i) & 0xFFFF, src, 'guessed vector') for i in reversed(range(n))]
+    work = []
+    for i in range(n):
+        a = (t + stride * i) & 0xFFFF
+        if keyed:
+            res.guess[a] = ('keys', t)
+        slot = (a + stride - 2) & 0xFFFF
+        res.guess[slot] = res.guess[(slot + 1) & 0xFFFF] = ('words', t)
+        w = res.mem[slot] | res.mem[(slot + 1) & 0xFFFF] << 8
+        res.refs.setdefault(w, []).append((slot, 'table'))
+        work.append((w, slot, 'guessed table'))
+    res.why[t] = ('guessed keyed table: %d records of a key byte and an address '
+                  'in the image, ended by a zero key, from %s' if keyed else
+                  'guessed table: %d words, each an address in the image, from %s'
+                  ) % (n, _hex4(src))
+    return list(reversed(work))
+
+
+def _vector(res, t, n):
+    """Is the keyed table at T a run of N `JP nn` instructions?"""
+    return all(res.mem[(t + 3 * i) & 0xFFFF] == 0xC3 for i in range(n))
+
+
+def _fork(res):
+    """A copy of RES to trace a guess on: its image is shared, everything
+    a trace writes is copied."""
+    out = Result(list(res.entries), res.mem)
+    for name in ('insns', 'owner', 'data', 'guess', 'external', 'refs', 'names',
+                 'comments', 'why'):
+        v = getattr(res, name)
+        setattr(out, name, {k: list(x) if isinstance(x, list) else x
+                            for k, x in v.items()})
+    for name in ('conflicts', 'indirect', 'computed', 'truncated', 'undoc',
+                 'overrides', 'tables', 'dropped', 'steps'):
+        setattr(out, name, list(getattr(res, name)))
+    out.vars, out.guessed = set(res.vars), set(res.guessed)
+    return out
 
 
 def _guess(res, say):
@@ -432,7 +630,8 @@ def _guess(res, say):
       fill    MIN_FILL or more identical bytes
 
     Anything else stays unknown (DB in the listing)."""
-    free = {a for a in res.mem if a not in res.owner and a not in res.data}
+    free = {a for a in res.mem if a not in res.owner and a not in res.data
+            and a not in res.guess}             # a guessed table's bytes are taken
 
     def mark(lo, n, typ, why):
         for i in range(n):
@@ -574,14 +773,15 @@ def _word(w, res):
 
 def _lines(res):
     """(addr, raw, text, flag) for every run of the image; flag is ' ' for
-    code, 'D' for hinted data, t/w/f for data S3 guessed (text, words,
-    fill), '?' for unknown bytes."""
+    code, 'g' for code a guessed table led to, 'D' for hinted data,
+    t/w/k/f for guessed data (text, words, a keyed table's keys, fill),
+    '?' for unknown bytes."""
     for start, n in _runs(res.mem):
         a, end = start, start + n
         while a < end:
             ins = res.insns.get(a)
             if ins is not None and a + ins.length <= end:
-                yield a, ins.raw, _named_text(ins, res), ' '
+                yield a, ins.raw, _named_text(ins, res), 'g' if a in res.guessed else ' '
                 a += ins.length
                 continue
             kind = _kind(res, a)
@@ -619,7 +819,7 @@ def _reason(res, a):
     if a in res.insns:
         w = res.why.get(a, '')
         return w if w in ('entry', 'entry hint', 'code hint') \
-            or w.startswith('continues') else ''
+            or w.startswith(('continues', 'guessed')) else ''
     if a in res.data:
         return res.why.get(a, '') if res.data[a][1] == a else ''
     if a in res.guess:
@@ -678,8 +878,8 @@ def source(res, segments=None):
 
 
 def listing(res):
-    """Address, bytes, flag (' ' code, D hinted data, t/w/f guessed
-    text/words/fill, ? unknown), label, text, and the reason: why the
+    """Address, bytes, flag (' ' code, g guessed code, D hinted data,
+    t/w/k/f guessed text/words/keys/fill, ? unknown), label, text, and the reason: why the
     line is what it is (S4 (b)), who refers to it, and hint comments."""
     out = []
     for a, raw, text, flag in _lines(res):
@@ -703,6 +903,19 @@ def report(res):
                       ', from %s' % _hex4(c.source) if c.source is not None else ''))
     for a in res.indirect:
         out.append('indirect jump at %s: target unknown' % _hex4(a))
+    for t in res.tables:
+        weak = ''
+        if t.grade == 'weak':
+            u = next((a, k) for a, k in res.undoc if a in res.guessed and not UNDOC_STRONG[k])
+            weak = ' (weak: undocumented %s at %s)' % (u[1], _hex4(u[0]))
+        vec = t.keyed and _vector(res, t.addr, t.count)
+        out.append('guessed %s at %s: %d %s, from %s%s' % (
+            'jump vector' if vec else 'keyed table' if t.keyed else 'table',
+            _hex4(t.addr), t.count,
+            'JP instructions' if vec else 'records' if t.keyed else 'words',
+            _hex4(t.source), weak))
+    for t, n, keyed, why in res.dropped:
+        out.append('table guess at %s dropped: %s' % (_hex4(t), why))
     for a in res.computed:
         out.append('RET after PUSH at %s: possible computed jump' % _hex4(a))
     for t, srcs in sorted(res.external.items()):
@@ -732,7 +945,8 @@ def main(argv=None):
     entry point; raw bytes load at --base and start there.  --entry adds
     entry points; --hints reads a hints file (both repeatable).  The bytes
     nothing reaches are guessed at (text, word tables, fill; flagged t, w,
-    f) unless --no-guess.
+    f) unless --no-guess; --guess-tables also follows the jump tables the
+    code's constants name, what they reach flagged g.
     Addresses: decimal, 0x.., or ..H.
     """
     import argparse
@@ -750,6 +964,12 @@ def main(argv=None):
     ap.add_argument('--no-guess', action='store_true',
                     help='leave the bytes nothing reached unknown: no text, word '
                          'table or fill guesses')
+    ap.add_argument('--guess-tables', action='store_true',
+                    help='follow the jump tables an address constant in the code '
+                         'names (2+ words, or key byte + word records ended by a '
+                         'zero key, each word an address in the image); what they '
+                         'reach is code marked g, never proven; a conflict drops '
+                         'the table')
     a = ap.parse_args(argv)
     try:
         base = _addr(a.base) if a.base is not None else None
@@ -782,7 +1002,7 @@ def main(argv=None):
     else:
         ap.error('a file or --hex is required')
     entries = [entry] + [e for e in extra if e != entry]
-    res = trace(segments, entries, h, guess=not a.no_guess)
+    res = trace(segments, entries, h, guess=not a.no_guess, tables=a.guess_tables)
     # Under --source the notes are comments, so the whole output assembles.
     note = (lambda t: '\n'.join('; ' + x for x in t.split('\n'))) \
         if a.source else (lambda t: t)

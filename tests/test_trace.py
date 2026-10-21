@@ -773,6 +773,182 @@ class TestGuess(unittest.TestCase):
             self.assertRegex(out.getvalue(), r'7001  48 45 4C 4C 4F +%s ' % (re.escape(flag)))
 
 
+class TestGuessTables(unittest.TestCase):
+    """D5: `tables=True` (--guess-tables) follows the jump tables an
+    address constant in traced code names -- two or more words in a row,
+    or records of a key byte and a word ended by a zero key, each word the
+    address of bytes in the image -- and marks everything they reach as
+    guessed ('c' in the map, 'g' in the listing).  A conflict, or a strong
+    undocumented opcode on the new path, drops the table."""
+
+    JT = 'ST: LD HL,TAB\n JP (HL)\nTAB: DW A1,A2\nA1: RET\nA2: XOR A\n RET\n DB 7'
+    #    7000 21 04 70  7003 E9  7004 08 70 09 70  7008 C9  7009 AF C9  700B 07
+
+    def tables(self, src, text='', guess=True):
+        segs, entry, syms = build(src)
+        res = trace.trace(segs, [entry], hints.parse(text), guess=guess, tables=True)
+        return res, segs, syms
+
+    def test_a_plain_table(self):
+        res, segs, syms = self.tables(self.JT)
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'wwww' + 'ccc.')
+        self.assertEqual(res.tables, [trace.Table(0x7004, 2, False, 0x7000, 'strong')])
+        self.assertEqual(res.guessed, {0x7008, 0x7009, 0x700A})
+        self.assertEqual(res.refs[syms['A2']], [(0x7006, 'table')])
+        self.assertEqual(res.why[0x7004],
+                         'guessed table: 2 words, each an address in the image, from 7000')
+        self.assertEqual(res.why[0x7008], 'guessed table at 7004')
+        self.assertEqual(res.why[0x700A], 'falls from 7009')
+        self.assertEqual(res.summary(), '7 of 12 bytes code (3 guessed), '
+                         '4 guessed data (4 words), 1 unknown')
+        self.assertIn('guessed table at 7004: 2 words, from 7000', trace.report(res))
+        text = trace.source(res)
+        self.assertIn('DW L7008,L7009', text)
+        round_trips(self, res, segs)
+
+    def test_off_by_default(self):
+        res, segs, _ = run(self.JT)
+        self.assertEqual(bytemap(res, segs), 'CCCC' + '.' * 8)
+        self.assertEqual(res.tables, [])
+        self.assertEqual(res.guessed, set())
+
+    def test_a_keyed_table(self):
+        src = ("ST: LD DE,TAB\n CALL GO\n RET\nGO: RET\nTAB: DB 'A'\n DW A1\n DB 'B'\n"
+               " DW A2\n DB 0\nA1: RET\nA2: XOR A\n RET\n DB 7")
+        res, segs, syms = self.tables(src)
+        self.assertEqual(bytemap(res, segs), 'C' * 8 + 'kwwkww' + '.' + 'ccc.')
+        self.assertEqual(res.tables, [trace.Table(0x7008, 2, True, 0x7000, 'strong')])
+        self.assertEqual(res.why[0x7008], 'guessed keyed table: 2 records of a key '
+                         'byte and an address in the image, ended by a zero key, from 7000')
+        self.assertEqual(res.refs[syms['A2']], [(0x700C, 'table')])
+        self.assertIn('guessed keyed table at 7008: 2 records, from 7000', trace.report(res))
+        text = trace.source(res)
+        self.assertIn('DW L700F', text)
+        self.assertIn('DW L7010', text)
+        round_trips(self, res, segs)
+
+    def test_a_jump_vector_is_code(self):
+        # every key C3H: records of JP nn, a vector another program calls
+        # into; traced as code, each JP reaching its routine
+        src = ('ST: LD HL,VEC\n RET\nVEC: JP A1\n JP A2\n DB 0\nA1: RET\nA2: XOR A\n RET')
+        res, segs, syms = self.tables(src)
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'cccccc' + '.' + 'ccc')
+        self.assertEqual(res.tables, [trace.Table(0x7004, 2, True, 0x7000, 'strong')])
+        self.assertEqual(res.why[0x7004], 'guessed jump vector, named at 7000')
+        self.assertEqual(res.why[0x7007], 'guessed jump vector, named at 7000')
+        self.assertEqual(res.why[syms['A2']], 'jump from 7007')
+        self.assertIn('guessed jump vector at 7004: 2 JP instructions, from 7000',
+                      trace.report(res))
+        self.assertRegex(trace.listing(res), r'7007  C3 0C 70 +g +JP L700C ; guessed jump '
+                                             r'vector, named at 7000')
+        round_trips(self, res, segs)
+
+    def test_a_word_outside_the_image_ends_the_run(self):
+        res, segs, _ = self.tables('ST: LD HL,TAB\n JP (HL)\nTAB: DW 0,A1\nA1: RET')
+        self.assertEqual(bytemap(res, segs), 'CCCC' + '.' * 5)
+        self.assertEqual(res.tables, [])
+
+    def test_one_word_is_not_a_table(self):
+        res, segs, _ = self.tables('ST: LD HL,TAB\n JP (HL)\nTAB: DW A1\n DW 0\nA1: RET')
+        self.assertEqual(bytemap(res, segs), 'CCCC' + '.' * 5)
+
+    def test_a_word_into_hinted_data_ends_the_run(self):
+        res, segs, _ = self.tables('ST: LD HL,TAB\n JP (HL)\nTAB: DW A1,X\nA1: RET\nX: DB 1',
+                                   'data 7009-7009 bytes')
+        self.assertEqual(bytemap(res, segs), 'CCCC' + '.....' + 'D')
+
+    def test_a_table_the_constant_does_not_name_is_not_found(self):
+        res, segs, _ = self.tables('ST: LD HL,TAB-1\n INC HL\n JP (HL)\nTAB: DW A1,A2\n'
+                                   'A1: RET\nA2: RET')
+        self.assertEqual(bytemap(res, segs), 'CCCCC' + '.' * 6)
+
+    def test_a_conflict_drops_the_table(self):
+        res, segs, _ = self.tables('ST: LD HL,TAB\n JP (HL)\nTAB: DW A1,ST+1\nA1: RET')
+        self.assertEqual(bytemap(res, segs), 'CCCC' + '.' * 5)
+        self.assertEqual(res.conflicts, [])
+        self.assertEqual(res.tables, [])
+        self.assertEqual(res.dropped, [(0x7004, 2, False, 'a conflict at 7001')])
+        self.assertIn('table guess at 7004 dropped: a conflict at 7001', trace.report(res))
+        self.assertIn('drop', ' '.join(res.steps))
+
+    def test_a_strong_undocumented_opcode_drops_the_table(self):
+        res, segs, _ = self.tables('ST: LD HL,TAB\n JP (HL)\nTAB: DW A1,A2\nA1: RET\n'
+                                   'A2: DB 0EDH,0\n RET')
+        self.assertEqual(bytemap(res, segs), 'CCCC' + '.' * 8)
+        self.assertEqual(res.undoc, [])
+        self.assertEqual(res.dropped, [(0x7004, 2, False, 'an undocumented hole at 7009')])
+
+    def test_a_weak_one_lowers_the_grade(self):
+        res, segs, _ = self.tables('ST: LD HL,TAB\n JP (HL)\nTAB: DW A1,A2\nA1: RET\n'
+                                   'A2: DB 0CBH,30H\n RET')
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'wwww' + 'cccc')
+        self.assertEqual(res.tables, [trace.Table(0x7004, 2, False, 0x7000, 'weak')])
+        self.assertIn('guessed table at 7004: 2 words, from 7000 (weak: undocumented '
+                      'sll at 7009)', trace.report(res))
+
+    def test_a_hint_makes_the_table_proven(self):
+        res, segs, _ = self.tables(self.JT, 'table 7004 2')
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'DDDD' + 'CCC.')
+        self.assertEqual(res.tables, [])
+        self.assertEqual(res.guessed, set())
+
+    def test_a_table_found_from_guessed_code(self):
+        src = ('ST: LD HL,TAB\n JP (HL)\nTAB: DW A1,A2\nA1: RET\nA2: LD HL,TAB2\n JP (HL)\n'
+               'TAB2: DW B1,B2\nB1: RET\nB2: XOR A\n RET')
+        res, segs, syms = self.tables(src)
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'wwww' + 'ccccc' + 'wwww' + 'ccc')
+        self.assertEqual([t.addr for t in res.tables], [syms['TAB'], syms['TAB2']])
+        self.assertEqual(res.tables[1].source, syms['A2'])
+
+    def test_a_path_into_a_kept_table_is_a_conflict(self):
+        # the second table's word points at the first table's bytes: traced,
+        # it would decode them as code, so the second table is dropped
+        src = ('ST: LD HL,TAB\n LD DE,TAB2\n JP (HL)\nTAB: DW A1,A2\n DB 0FFH\n'
+               'TAB2: DW B1,TAB\nA1: RET\nA2: RET\nB1: RET')
+        res, segs, syms = self.tables(src)
+        self.assertEqual(bytemap(res, segs), 'CCCCCCC' + 'wwww' + '.' + '....' + 'cc.')
+        self.assertEqual([t.addr for t in res.tables], [syms['TAB']])
+        self.assertEqual(res.dropped, [(syms['TAB2'], 2, False,
+                                        'a conflict at %04X' % syms['TAB'])])
+        self.assertEqual(res.conflicts, [])
+        self.assertIn('runs into the table guessed at 7007', ' '.join(res.steps))
+
+    def test_adjacent_tables_read_as_one(self):
+        # a run of words knows no table boundary: one guess, which here
+        # points at itself and is dropped, not two
+        src = ('ST: LD HL,TAB\n LD DE,TAB2\n JP (HL)\nTAB: DW A1,A2\nTAB2: DW B1,TAB\n'
+               'A1: RET\nA2: RET\nB1: RET')
+        res, segs, syms = self.tables(src)
+        self.assertEqual(res.dropped, [(syms['TAB'], 4, False, 'a conflict at 7007'),
+                                       (syms['TAB2'], 2, False, 'a conflict at 700B')])
+        self.assertEqual(bytemap(res, segs), 'CCCCCCC' + '.' * 11)
+
+    def test_the_listing_and_the_cli(self):
+        res, _, _ = self.tables(self.JT)
+        listing = trace.listing(res)
+        self.assertRegex(listing, r'7004  08 70 09 70 +w +L7004 +DW L7008,L7009 +'
+                                  r'; guessed table: 2 words, each an address in the '
+                                  r'image, from 7000; from 7000 addr')
+        self.assertRegex(listing, r'7008  C9 +g +L7008 +RET +; guessed table at 7004; '
+                                  r'from 7004 table')
+        self.assertRegex(listing, r'(?m)^700A  C9 +g +RET$')
+        hexs = '21 04 70 E9 08 70 09 70 C9 AF C9 07'
+        for args, want in ((['--hex', hexs, '--base', '7000H'], r'7004  08 70 09 70 C9 AF C9 07 \? '),
+                           (['--hex', hexs, '--base', '7000H', '--guess-tables'], r'7008  C9 +g '),
+                           (['--hex', hexs, '--base', '7000H', '--guess-tables',
+                             '--no-guess'], r'7008  C9 +g ')):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                trace.main(args)
+            self.assertRegex(out.getvalue(), want)
+
+    def test_s3_guesses_run_after_and_around_the_tables(self):
+        res, segs, _ = self.tables(self.JT + "\n DM 'HELLO'\n DB 0")
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'wwww' + 'ccc.' + 't' * 6)
+        res, segs, _ = self.tables(self.JT + "\n DM 'HELLO'\n DB 0", guess=False)
+        self.assertEqual(bytemap(res, segs), 'CCCC' + 'wwww' + 'ccc.' + '.' * 6)
+
+
 class TestReasons(unittest.TestCase):
     """S4 (b): the listing says why each line is what it is.  `why` holds
     the reason for every instruction and every data run; the listing
