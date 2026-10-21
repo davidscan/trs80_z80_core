@@ -110,7 +110,11 @@ def input_files():
 # Re-pinned 2026-10-21, A NEW BASELINE: the Model III and Model 4 archives'
 # Level II-compatible listings joined (+2,831), so numbers on the 6,636
 # set (6fae9756) are not compared with numbers on this one.
-INPUT_SET = (9467, 'f4c61dfe4413f9a68027f027c565a2f88b25d78f')
+# Re-pinned 2026-10-21 (later), A NEW BASELINE: 9 Model 4 token-form files
+# misfiled in the Model I archive left blocked/ (their text was the wrong
+# token table's), so numbers on the 9,467 set (f4c61dfe) are not compared
+# with numbers on this one.
+INPUT_SET = (9458, '7c540535aebfd81ebd5a6cde35b96361be08d001')
 
 
 def fingerprint(paths, root=None):
