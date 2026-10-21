@@ -107,7 +107,10 @@ def input_files():
 # Re-pinned again 2026-10-20 (later that day), A NEW BASELINE: the CLOAD,
 # SoftSide and Micro-80 magazine-disk listings joined (+157), so numbers
 # on the 6,479 set (f8a7b965) are not compared with numbers on this one.
-INPUT_SET = (6636, '6fae9756e700a80b27b4361bd469b53ff45c31aa')
+# Re-pinned 2026-10-21, A NEW BASELINE: the Model III and Model 4 archives'
+# Level II-compatible listings joined (+2,831), so numbers on the 6,636
+# set (6fae9756) are not compared with numbers on this one.
+INPUT_SET = (9467, 'f4c61dfe4413f9a68027f027c565a2f88b25d78f')
 
 
 def fingerprint(paths, root=None):
