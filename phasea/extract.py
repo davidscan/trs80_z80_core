@@ -23,7 +23,7 @@ import os
 import re
 from dataclasses import dataclass, field, asdict
 
-from .basic import (parse_program, read_source, is_comment, data_items,
+from .basic import (parse_program, read_source, is_comment, data_items, data_texts,
                     eval_const, constant_symbols, parse_number, to_addr,
                     strip_quoted)
 
@@ -87,6 +87,19 @@ def build_data_index(prog):
                 continue
             for v in items:
                 out.append((lineno, si, v))
+    return out
+
+
+def build_data_texts(prog):
+    """The DATA stream's items as text, aligned with build_data_index."""
+    out = []
+    for _lineno, _body, stmts in prog:
+        for st in stmts:
+            if is_comment(st):
+                continue
+            items = data_texts(st)
+            if items is not None:
+                out += items
     return out
 
 
@@ -308,8 +321,8 @@ def symbols_at(table, lineno):
     return at(lineno) if at else table
 
 
-_SENTINEL_RE = re.compile(r'^\s*IF\s*([A-Za-z][A-Za-z0-9]*[%!#]?)\s*(?:<>|=)\s*'
-                          r'(\d+)\b', re.I)
+_SENTINEL_RE = re.compile(r'^\s*IF\s*([A-Za-z][A-Za-z0-9]*[%!#$]?)\s*(?:<>|=)\s*'
+                          r'(?:(\d+)\b|"([^"]*)")', re.I)
 
 
 def _bare_read_count(prog, li, lineno, si, tvars, ntargets):
@@ -317,7 +330,9 @@ def _bare_read_count(prog, li, lineno, si, tvars, ntargets):
     line order can be trusted with?  Returns ('count', n) for the loop
     count (a FOR below whose bound names a read variable), ('sentinel', N)
     for a marker search (the next statements test a read variable against
-    a number), or None."""
+    a number, or a string variable against a quoted marker: laddrrp1's
+    `READ A$:IF A$<>"MMM"THEN 25`), or None.  A number marker is an int,
+    a string marker a str."""
     seen = 0
     for lj in range(li, min(li + 1 + LOADER_SPAN, len(prog))):
         _ln2, _b2, stmts2 = prog[lj]
@@ -327,7 +342,9 @@ def _bare_read_count(prog, li, lineno, si, tvars, ntargets):
                 continue
             sm = _SENTINEL_RE.match(s2)
             if seen < 2 and sm and sm.group(1).upper() in tvars:
-                return ('sentinel', int(sm.group(2)))
+                if sm.group(2) is not None:
+                    return ('sentinel', int(sm.group(2)))
+                return ('sentinel', sm.group(3))
             seen += 1
             fm2 = FOR_RE.match(s2)
             if fm2:
@@ -361,6 +378,7 @@ def find_loaders(path, prog, stream, table):
     # carry to the next line (H-18 by another path: `10 RESTORE 900:FOR
     # ...` / `20 FOR ...` read the same block twice).
     prev_restore = None
+    texts = build_data_texts(prog)   # the stream's items as READ A$ sees them
     consumed = []                 # (start, end, pinned): what loaders above read
     claimed = set()               # (line, si) of READs that belong to a loader
     for li, (lineno, _body, stmts) in enumerate(prog):
@@ -413,7 +431,10 @@ def find_loaders(path, prog, stream, table):
                             rend = sp
                             while rend < len(stream):
                                 rend += 1
-                                if stream[rend - 1][2] == n2:
+                                if isinstance(n2, str):
+                                    if texts[rend - 1] == n2:
+                                        break
+                                elif stream[rend - 1][2] == n2:
                                     break
                         else:
                             _rv, rend, _rx = take_from(stream, sp, n2)

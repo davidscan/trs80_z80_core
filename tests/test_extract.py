@@ -155,6 +155,24 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertEqual(p.bytes, [62, 1, 211, 201])
         self.assertEqual(p.confidence, 'high')
 
+    def test_a_string_sentinel_read_consumes_through_its_marker(self):
+        """laddrrp1's shape: READ A$:IF A$<>"MMM" skips to a string
+        marker, and the next loader goes on where the first stopped."""
+        rep = run('25 READ A$:IF A$<>"MMM"THEN 25\n'
+                  '26 FOR I=32000 TO 32001:READ B:POKE I,B:NEXT\n'
+                  '30 FOR I=32100 TO 32103:READ B:POKE I,B:NEXT\n'
+                  '90 DATA 7,8,HHH,9\n'
+                  '91 DATA MMM,205,127,62,1,211,201\n')
+        ps = sorted(rep.payloads, key=lambda p: p.base)
+        self.assertEqual([p.bytes for p in ps], [[205, 127], [62, 1, 211, 201]])
+
+    def test_a_quoted_string_marker(self):
+        p = only(run('10 READ M$\n'
+                     '15 IF M$<>"END" THEN 10\n'
+                     '20 FOR I=0 TO 3:READ A:POKE 32713+I,A:NEXT\n'
+                     '90 DATA X, "END",62,1,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
     def test_a_free_read_above_the_loader_is_not_trusted(self):
         """GLOBE reads its display DATA on lines a GOSUB runs AFTER the
         loader, so a READ that is neither a count nor a sentinel must not

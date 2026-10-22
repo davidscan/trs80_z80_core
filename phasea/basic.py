@@ -140,6 +140,37 @@ def data_items(stmt):
     return out
 
 
+def data_texts(stmt):
+    """The DATA items of one statement as READ A$ would see them, or None
+    if not DATA: a quoted item is the text between its quotes, an unquoted
+    one loses its leading blanks.  Aligned with data_items position for
+    position, so a marker search on a string (READ A$:IF A$<>"MMM") can be
+    followed through the numeric stream."""
+    m = DATA_RE.match(stmt)
+    if not m:
+        return None
+    items, cur, in_q = [], [], False
+    for c in m.group(1):
+        if c == '"':
+            in_q = not in_q
+        elif c == ',' and not in_q:
+            items.append(''.join(cur))
+            cur = []
+            continue
+        cur.append(c)
+    items.append(''.join(cur))
+    out = []
+    for it in items:
+        t = it.lstrip()
+        if t.startswith('"'):
+            t = t[1:]
+            q = t.find('"')
+            if q >= 0:
+                t = t[:q]
+        out.append(t)
+    return out
+
+
 NUM_RE = re.compile(r'^[+-]?\d+$')
 HEX_RE = re.compile(r'^&H([0-9A-F]+)$', re.I)
 OCT_RE = re.compile(r'^&O?([0-7]+)$', re.I)
