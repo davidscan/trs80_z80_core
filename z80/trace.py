@@ -933,6 +933,91 @@ def report(res):
     return '\n'.join(out)
 
 
+def blocks(res):
+    """The image as maximal runs of one kind: (start, end, kind, type,
+    guessed, why).  kind is 'code' (type None), 'data' (a hint's type),
+    'guess' (S3's type) or 'unknown'; guessed is True for code a guessed
+    table led to; why is res.why for the run's first byte, or None."""
+    out = []
+    for start, n in _runs(res.mem):
+        a, end = start, start + n
+        while a < end:
+            if a in res.owner:
+                kind, typ, g = 'code', None, res.owner[a] in res.guessed
+                b = a
+                while b < end and b in res.owner \
+                        and (res.owner[b] in res.guessed) == g:
+                    b += 1
+            elif a in res.data:
+                kind, typ, g = 'data', res.data[a][0], False
+                b = a
+                while b < end and b in res.data and b not in res.owner \
+                        and res.data[b][0] == typ:
+                    b += 1
+            elif a in res.guess:
+                kind, typ, g = 'guess', res.guess[a][0], False
+                b = a
+                while b < end and b in res.guess and res.guess[b][0] == typ:
+                    b += 1
+            else:
+                kind, typ, g = 'unknown', None, False
+                b = a
+                while b < end and b not in res.owner and b not in res.data \
+                        and b not in res.guess:
+                    b += 1
+            out.append((a, b, kind, typ, g, res.why.get(a)))
+            a = b
+    return out
+
+
+def to_json(res):
+    """S4 (c): the result for tools, as a JSON text.  Every address is a
+    number.  blocks tile the loaded bytes; labels map address (as a
+    decimal string: JSON keys are strings) to name; xrefs are
+    {from, to, kind} with from null for an entry; the rest are the
+    report's lists (conflicts, indirect, computed, external, truncated,
+    undoc, tables, dropped, overrides) and the summary's counts."""
+    import json
+    code = len(res.owner)
+    gcode = sum(1 for h in res.owner.values() if h in res.guessed)
+    data = sum(1 for a in res.data if a in res.mem and a not in res.owner)
+    kinds = {}
+    for t, _ in res.guess.values():
+        kinds[t] = kinds.get(t, 0) + 1
+    total = len(res.mem)
+    doc = {
+        'entries': list(res.entries),
+        'summary': {'total': total, 'code': code, 'guessed_code': gcode,
+                    'data': data,
+                    'guessed_data': {t: kinds[t] for t in GUESS_TYPES if t in kinds},
+                    'unknown': total - code - data - sum(kinds.values())},
+        'blocks': [{'start': a, 'end': b, 'kind': k, 'type': t,
+                    'guessed': g, 'why': w}
+                   for a, b, k, t, g, w in blocks(res)],
+        'labels': {str(a): res.names[a] for a in sorted(res.names)},
+        'vars': sorted(res.vars),
+        'xrefs': [{'from': s, 'to': t, 'kind': k}
+                  for t in sorted(res.refs) for s, k in res.refs[t]],
+        'conflicts': [{'addr': c.addr, 'inside': c.inside, 'source': c.source,
+                       'kind': c.kind} for c in res.conflicts],
+        'indirect': list(res.indirect),
+        'computed': list(res.computed),
+        'external': [{'addr': t, 'from': srcs}
+                     for t, srcs in sorted(res.external.items())],
+        'truncated': list(res.truncated),
+        'undoc': [{'addr': a, 'kind': k, 'strong': UNDOC_STRONG[k]}
+                  for a, k in res.undoc],
+        'tables': [{'addr': t.addr, 'count': t.count, 'keyed': t.keyed,
+                    'vector': bool(t.keyed and _vector(res, t.addr, t.count)),
+                    'source': t.source, 'grade': t.grade} for t in res.tables],
+        'dropped': [{'addr': t, 'count': n, 'keyed': keyed, 'why': why}
+                    for t, n, keyed, why in res.dropped],
+        'overrides': list(res.overrides),
+        'comments': {str(a): c for a, c in sorted(res.comments.items())},
+    }
+    return json.dumps(doc, indent=1)
+
+
 def main(argv=None):
     """Trace a Z80 program from its entry points and list what is code.
 
@@ -961,6 +1046,9 @@ def main(argv=None):
     ap.add_argument('--explain', action='store_true', help='print the worklist as it runs')
     ap.add_argument('--source', action='store_true',
                     help='print assembler source (gives the same bytes back)')
+    ap.add_argument('--json', action='store_true',
+                    help='print the result as JSON for tools (blocks, labels, '
+                         'xrefs, conflicts, the report) and nothing else')
     ap.add_argument('--no-guess', action='store_true',
                     help='leave the bytes nothing reached unknown: no text, word '
                          'table or fill guesses')
@@ -1003,6 +1091,9 @@ def main(argv=None):
         ap.error('a file or --hex is required')
     entries = [entry] + [e for e in extra if e != entry]
     res = trace(segments, entries, h, guess=not a.no_guess, tables=a.guess_tables)
+    if a.json:
+        print(to_json(res))
+        return
     # Under --source the notes are comments, so the whole output assembles.
     note = (lambda t: '\n'.join('; ' + x for x in t.split('\n'))) \
         if a.source else (lambda t: t)

@@ -136,6 +136,7 @@ is used only when you pass it.
 | `--explain` | off | prints the worklist as it runs, one line per step | seeing why a byte was or was not reached |
 | `--source` | off | prints assembler source instead of the listing; `python3 -m z80.asm` gives the same bytes back | editing and reassembling a program |
 | `--no-guess` | off | leaves every byte nothing reached unknown: no text, table or fill guesses | seeing only what flow proves |
+| `--json` | off | prints the result as JSON and nothing else: `blocks` that tile the image (`kind` code/data/guess/unknown, `type`, `guessed`, `why`), `labels`, `xrefs`, `conflicts`, `tables`, the report's other lists and the `summary` counts; every address a number | feeding another tool, as `tools/trace_corpus.py` does |
 
 ### `python3 -m z80.asm SOURCE`
 

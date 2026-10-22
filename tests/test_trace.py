@@ -1093,6 +1093,94 @@ def _tmp():
     return _TMP[0].name
 
 
+class TestJson(unittest.TestCase):
+    """S4 (c): the result as JSON for tools -- blocks that tile the image,
+    labels, xrefs, conflicts and the report's lists, every address a
+    number.  Nothing in it is read back from the listing."""
+
+    def doc(self, res):
+        import json
+        return json.loads(trace.to_json(res))
+
+    def tiles(self, d, segs):
+        # blocks are sorted, contiguous within a segment, and cover every
+        # loaded byte once
+        covered = []
+        for b in d['blocks']:
+            self.assertLess(b['start'], b['end'])
+            covered.extend(range(b['start'], b['end']))
+        self.assertEqual(covered, sorted(covered))
+        self.assertEqual(covered,
+                         sorted(a for org, data in segs
+                                for a in range(org, org + len(data))))
+
+    def test_blocks_tile_the_image_and_match_the_map(self):
+        res, segs, syms = run("ST: JP OVER\n DM 'HELLO'\n DB 0\nOVER: RET")
+        d = self.doc(res)
+        self.tiles(d, segs)
+        kinds = [(b['kind'], b.get('type'), b['end'] - b['start'])
+                 for b in d['blocks']]
+        self.assertEqual(kinds, [('code', None, 3), ('guess', 'text', 6),
+                                 ('code', None, 1)])
+        self.assertEqual(d['entries'], [syms['ST']])
+        self.assertEqual(d['summary'],
+                         {'total': 10, 'code': 4, 'guessed_code': 0, 'data': 0,
+                          'guessed_data': {'text': 6}, 'unknown': 0})
+        self.assertEqual(d['blocks'][1]['why'], 'guessed text: 5 printable, then 00H')
+
+    def test_labels_and_xrefs(self):
+        res, segs, syms = run('ST: CALL SUB\n JR ST\nSUB: RET')
+        d = self.doc(res)
+        self.assertEqual(d['labels'], {str(syms['ST']): 'L7000',
+                                       str(syms['SUB']): 'L7005'})
+        self.assertIn({'from': syms['ST'], 'to': syms['SUB'], 'kind': 'call'},
+                      d['xrefs'])
+        self.assertIn({'from': None, 'to': syms['ST'], 'kind': 'entry'},
+                      d['xrefs'])
+
+    def test_conflicts_and_the_report_lists(self):
+        res, segs, syms = run('ST: JR NZ,MID+1\nMID: LD A,0C9H\n CALL 0FF00H\n'
+                              ' DB 0EDH,0FFH\n JP (HL)\n RET')
+        d = self.doc(res)
+        self.assertEqual(d['conflicts'],
+                         [{'addr': syms['MID'] + 1, 'inside': syms['MID'],
+                           'source': syms['ST'], 'kind': 'code'}])
+        self.assertEqual(d['indirect'], [syms['MID'] + 7])
+        self.assertEqual(d['external'], [{'addr': 0xFF00, 'from': [syms['MID'] + 2]}])
+        self.assertEqual([u['addr'] for u in d['undoc']], [syms['MID'] + 5])
+        self.assertIn('strong', d['undoc'][0])
+        self.assertEqual(d['computed'], [])
+        self.tiles(d, segs)
+
+    def test_hinted_data_and_a_guessed_table(self):
+        segs, entry, syms = build('ST: LD HL,T\n JP (HL)\nT: DW RA,RB\n'
+                                  'RA: RET\nRB: RET\nDD: DB 1,2,3')
+        h = hints.parse('data %04X-%04X bytes\n' % (syms['DD'], syms['DD'] + 2))
+        res = trace.trace(segs, [entry], h, tables=True)
+        d = self.doc(res)
+        self.tiles(d, segs)
+        by = {b['start']: b for b in d['blocks']}
+        self.assertEqual((by[syms['T']]['kind'], by[syms['T']]['type']),
+                         ('guess', 'words'))
+        self.assertTrue(by[syms['RA']]['guessed'])
+        self.assertEqual((by[syms['DD']]['kind'], by[syms['DD']]['type']),
+                         ('data', 'bytes'))
+        self.assertEqual(d['tables'], [{'addr': syms['T'], 'count': 2,
+                                        'keyed': False, 'vector': False,
+                                        'source': syms['ST'],
+                                        'grade': 'strong'}])
+        self.assertEqual(d['summary']['guessed_code'], 2)
+
+    def test_cli_json_is_only_json(self):
+        import json
+        out = io.StringIO()
+        with redirect_stdout(out):
+            trace.main(['--hex', 'C3 04 70 FF C9', '--base', '7000H', '--json'])
+        d = json.loads(out.getvalue())
+        self.assertEqual(d['summary']['code'], 4)
+        self.assertEqual(d['summary']['unknown'], 1)
+
+
 class _quiet:
     def __enter__(self):
         self.err = sys.stderr
