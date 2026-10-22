@@ -443,6 +443,27 @@ fingerprint, the controls and the host load. It takes about ten minutes.
 **Writes:** `out/usr_sweep/`. Its one argument, `--accept-input-set`,
 runs a set that is not the pinned one.
 
+#### `python3 tools/trace_corpus.py`
+
+Points `z80.trace` at the machine code the family's own tools already
+find and measures what control flow reaches: every loader payload with a
+concrete address that the extractor finds in the pinned input set, and
+the memory every `usr_sweep.py` run sent the core at its `USR` call, from
+every entry it called. Each item is traced twice, without and with
+`--guess-tables`. There is no truth for these bytes, so "code found" is
+what flow reaches, not a score; the unit scored is the run of bytes the
+entry sits in, with the whole frame beside it. **Writes:**
+`out/trace_corpus/`: `items.tsv` (a row per item and mode), `json/` (the
+`--json` result for each) and `summary.json` (the inputs: both commits,
+the input-set fingerprint, the sweep's own inputs, the hints, and the
+totals). About a minute and a half.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--hints FILE` | none | a hints file; repeatable | `hints/model1.hints`, always |
+| `--set extractor` / `--set sweep` | both | one population only | a quick re-run |
+| `--out DIR` | `out/trace_corpus` | where to write | keeping a run beside another |
+
 #### `python3 tools/usr_pty_sweep.py`
 
 The same listings, driven through a pseudo-terminal with a keystroke script,
@@ -673,6 +694,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 | `out/oracle/` | the instrumented interpreter build and its scratch listings | `phasea.oracle`, the test suite | yes; rebuilt on demand |
 | `out/usr_sweep/` | `results.json`, per-listing protocol logs in `runs/`, and the working directory | `usr_sweep.py` | yes; `usr_pty_sweep.py --class` reads `results.json` |
 | `out/usr_pty_sweep/` | `results.json` and per-listing logs | `usr_pty_sweep.py` | yes |
+| `out/trace_corpus/` | `items.tsv`, `json/` and `summary.json` | `trace_corpus.py` | yes; reads `out/usr_sweep/` |
 | `out/tick_probe.json`, `.json.bas` | the latest tick timings and the program used | `tick_probe.py` | yes |
 | `out/kbd_probe/` | the probe's programs, key files and proxy logs | `kbd_probe.py` | yes |
 | `demo/catch.bas` | the CATCH listing, ready to CLOAD | `mkgame.py` | yes; regenerate it |
