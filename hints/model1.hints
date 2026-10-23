@@ -1,6 +1,6 @@
 ; model1.hints -- names for documented TRS-80 Model I Level II entry points
-; and RAM locations, and how two restarts behave, for listings of programs
-; that use them:
+; and RAM locations, the disk system's file entries, and how two restarts
+; behave, for listings of programs that use them:
 ;
 ;     python3 -m z80.trace PROG.cmd --hints hints/model1.hints
 ;
@@ -20,6 +20,8 @@
 ;   RRD  TRS-80 ROM Routines Documented, The Alternate Source, 1983
 ;   FV   Microsoft BASIC Decoded & Other Mysteries, James Farvour, 1981
 ;   SAMS TRS-80 Assembly Language Made Simple, Howard W. Sams, 1982
+;   PH   TRS-80 Assembly Language, Hubert S. Howe Jr., Prentice-Hall, 1981
+;        (the TRSDOS file entries)
 
 ; ---- the restarts and CPU vectors
 label   0000  RESET     ; M3 p92; MP p6; RRD p56
@@ -84,6 +86,26 @@ label   0A9A  PUTANS    ; L2 p105; MP p17; RRD p38
 comment 0A9A  USR: return HL to BASIC as an integer
 label   1A19  READY     ; M3 p92; MP p20; FV p16
 comment 1A19  back to BASIC's command level
+
+; ---- the disk system's file entries (TRSDOS on the Model I): there only
+; under DOS, each takes the file's control block in DE and returns Z on
+; success, else NZ with the error code in A (PH p152)
+label   4420  INIT      ; PH p152
+comment 4420  DOS: open a file, creating it if it does not exist
+label   4424  OPEN      ; PH p152; FV p58
+comment 4424  DOS: open an existing file
+label   4428  CLOSE     ; PH p152
+comment 4428  DOS: close a file
+label   442C  KILL      ; PH p152
+comment 442C  DOS: kill a file
+label   4436  READ      ; PH p152; FV p58
+comment 4436  DOS: read a record
+label   4439  WRITE     ; PH p152
+comment 4439  DOS: write a record
+label   443C  VERF      ; PH p152
+comment 443C  DOS: write a record and verify it
+label   4442  POSN      ; PH p152
+comment 4442  DOS: position a file at the logical record in BC
 
 ; ---- how two restarts and READY change the flow
 inline  0008  1         ; RRD p56: returns past the byte after the RST 08H

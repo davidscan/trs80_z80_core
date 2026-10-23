@@ -1028,7 +1028,7 @@ class TestModel1Hints(unittest.TestCase):
         self.assertEqual(sorted({**h.labels, **h.vars}), sorted(h.comments))
 
     def test_every_label_cites_a_source(self):
-        keys = ('L2 ', 'M3 ', 'MP ', 'RRD ', 'FV ', 'SAMS ')
+        keys = ('L2 ', 'M3 ', 'MP ', 'RRD ', 'FV ', 'SAMS ', 'PH ')
         with open(MODEL1) as f:
             for line in f:
                 if line.startswith(('label', 'var')):
@@ -1043,6 +1043,17 @@ class TestModel1Hints(unittest.TestCase):
                      'VDCHAR   EQU 0033H ; display the character in A'):
             self.assertIn(want, text)
         self.assertNotIn('RESET', text)          # an EQU only for what is used
+        round_trips(self, res, segs)
+
+    def test_the_dos_file_entries(self):
+        # a routine that reads a disk record calls TRSDOS at 4436H, and
+        # 4442H positions the file first (F29 item 4)
+        segs, entry, _ = build('ST: CALL 4442H\n CALL 4436H\n RET')
+        res = trace.trace(segs, [entry], hints.load(MODEL1))
+        text = trace.source(res)
+        for want in ('CALL POSN', 'CALL READ',
+                     'READ     EQU 4436H ; DOS: read a record'):
+            self.assertIn(want, text)
         round_trips(self, res, segs)
 
     def test_the_two_restarts(self):
