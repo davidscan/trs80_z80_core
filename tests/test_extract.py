@@ -173,6 +173,40 @@ class TestLoaderIdioms(unittest.TestCase):
                      '90 DATA X, "END",62,1,211,201\n'))
         self.assertEqual(p.bytes, [62, 1, 211, 201])
 
+    def test_hex_strings_decoded_with_val(self):
+        """demons' shape: READ X$:L=VAL("&H"+X$):POKE X,L -- the bytes
+        are the hex digits, not the decimal reading of the items without
+        a letter (F29 item 5 (d))."""
+        p = only(run('10 FOR X=32000 TO 32003:READ X$:L=VAL("&H"+X$)'
+                     ':POKE X,L:NEXT X\n'
+                     '20 DATA 3E,01,D3,C9\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+        self.assertIn('hex-string-decoded', p.flags)
+        self.assertNotIn('poke-value-transformed', p.flags)
+
+    def test_hex_strings_decoded_with_asc(self):
+        """maze_ae6f5c's shape: the two digits taken apart with LEFT$ and
+        RIGHT$ and put together with 16*, the POKE on the next line."""
+        p = only(run('10 FOR A=32000 TO 32003\n'
+                     '20 READ A$:B$=LEFT$(A$,1):MZ=16*(VAL(B$)-(B$>"9")*(ASC(B$)-55))\n'
+                     '30 B$=RIGHT$(A$,1):MZ=MZ+VAL(B$)-(B$>"9")*(ASC(B$)-55):POKE A,MZ:NEXT\n'
+                     '40 DATA 3E,01,D3,C9\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
+    def test_a_string_poked_as_a_character_is_not_hex(self):
+        # POKE I,ASC(A$) stores one character's code: no 16*, no &H
+        p = only(run('10 FOR I=32000 TO 32001:READ A$:POKE I,ASC(A$):NEXT\n'
+                     '20 DATA 12,34\n'))
+        self.assertIn('poke-value-transformed', p.flags)
+        self.assertNotIn('hex-string-decoded', p.flags)
+
+    def test_an_item_that_is_not_two_hex_digits_keeps_the_old_reading(self):
+        p = only(run('10 FOR X=32000 TO 32001:READ X$:L=VAL("&H"+X$)'
+                     ':POKE X,L:NEXT X\n'
+                     '20 DATA 3E,ZZ\n'))
+        self.assertNotIn('hex-string-decoded', p.flags)
+        self.assertIn('poke-value-transformed', p.flags)
+
     def test_a_free_read_above_the_loader_is_not_trusted(self):
         """GLOBE reads its display DATA on lines a GOSUB runs AFTER the
         loader, so a READ that is neither a count nor a sentinel must not

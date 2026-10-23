@@ -465,6 +465,7 @@ def find_loaders(path, prog, stream, table):
             # no-ml-in-listing).  read_line is the READ's own line, which
             # is where the DATA pointer is taken from.
             read_targets = None
+            between = []          # the loop's statements from the READ to the POKE
             read_si = None
             read_line = lineno
             poke = None
@@ -486,6 +487,7 @@ def find_loaders(path, prog, stream, table):
                             done = True
                             break
                     else:
+                        between.append(s2)
                         pm = POKE_RE.match(s2)
                         if pm:
                             poke = (pm.group(1), pm.group(2), sj)
@@ -622,6 +624,21 @@ def find_loaders(path, prog, stream, table):
                 by = [v & 0xFF for v in vals if v is not None]
             else:
                 by = []
+
+            # Bytes kept as hex strings (the 2026-10-22 F29 item 5 (d)):
+            # `READ X$:L=VAL("&H"+X$):POKE X,L`, or the two digits taken
+            # apart with ASC and put together with 16*: every item is one
+            # or two hex digits, and the bytes are those digits, not the
+            # decimal reading that keeps only the items without a letter.
+            hexd = (_hex_decoded(read_targets, between)
+                    and _hex_items(texts[sp:end]))
+            if per_iter == 1 and hexd:
+                vals = hexd
+                stale = set(cflags) | {'poke-value-transformed'}
+                conf, cflags = grade(vals, need, exact, restore_target)
+                flags = [f for f in flags if f not in stale]
+                flags.extend(cflags + ['hex-string-decoded'])
+                by = list(vals)
 
             if step != 1:
                 flags.append('step-%d' % step)
@@ -771,6 +788,39 @@ def find_string_packed(path, prog, table, min_len=8):
             confidence='low' if flags else 'high', flags=flags,
             kind='candidate-ml'))
     return out
+
+
+_HEXITEM_RE = re.compile(r'^\s*([0-9A-Fa-f]{1,2})\s*$')
+
+
+def _hex_decoded(read_targets, between):
+    """Does the loop decode a string it READs as two hex digits?  The one
+    read target is a string, and the statements up to the POKE name it and
+    either build a VAL("&H"+...) or put a digit pair together with 16*
+    (demons' VAL("&H"+X$); maze's and zoneprg6's ASC/VAL arithmetic)."""
+    if not read_targets or len(read_targets) != 1:
+        return False
+    mv = re.match(r'\s*([A-Za-z][A-Za-z0-9]*\$)', read_targets[0])
+    if not mv:
+        return False
+    text = ' '.join(between).upper()
+    name = re.escape(mv.group(1).upper())
+    if not re.search(r'(?<![A-Z0-9])%s' % name, text):
+        return False
+    if not re.search(r'\b(ASC|VAL)\s*\(', text):
+        return False
+    return '"&H"' in text or bool(re.search(r'\b16\s*\*|\*\s*16\b', text))
+
+
+def _hex_items(texts):
+    """The items as bytes if every one is one or two hex digits, else None."""
+    out = []
+    for t in texts:
+        m = _HEXITEM_RE.match(t)
+        if not m:
+            return None
+        out.append(int(m.group(1), 16))
+    return out or None
 
 
 def _pinned(restore_target, consumed, sp):
