@@ -357,6 +357,17 @@ class TestLoaderIdioms(unittest.TestCase):
                      '30 DATA 1,2,3\n'))
         self.assertEqual(p.bytes, [1, 2, 3])
 
+    def test_data_ahead_of_the_read_on_its_own_line(self):
+        """Where the walk stops, adjacency takes a DATA standing ahead of
+        the READ on the READ's own line (crushv2's loader at 109): the
+        first DATA AFTER the READ ran off the end, data-short."""
+        p = only(run('5 INPUT X:ON X GOTO 10,10\n'
+                     '10 DATA 1,2,3\n'
+                     '20 DATA 62,1,211,201:FOR I=0 TO 3:READ A'
+                     ':POKE 30000+I,A:NEXT\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+        self.assertEqual(p.confidence, 'high')
+
     def test_a_walked_start_does_not_carry_across_a_read_between(self):
         """The walk gives the first loader's start, then stops at a skip
         loop of typed-in length.  The loader below does not continue

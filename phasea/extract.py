@@ -902,7 +902,8 @@ def _next_reads(prog):
 def _data_start(stream, restore_target, read_line, read_si, consumed=()):
     """Where the loader's READ starts in the DATA stream: after a RESTORE n
     at line n's DATA, after a bare RESTORE at the program's first DATA,
-    otherwise adjacent -- the first DATA after the READ itself.
+    otherwise adjacent -- the first DATA after the READ itself, or the
+    first DATA on the READ's own line when one stands ahead of it.
 
     Level II READ has ONE pointer (the 2026-09-19 audit, H-18: two loaders
     sharing a block came out with the same bytes, the second at confidence
@@ -926,7 +927,12 @@ def _data_start(stream, restore_target, read_line, read_si, consumed=()):
         return 0
     if consumed and _pin_holds(consumed[-1][2], (read_line, read_si)):
         return consumed[-1][1]
-    sp = stream_pos_after(stream, read_line, read_si)
+    # DATA ahead of the READ on its own line is the loader's own DATA
+    # (crushv2's `109 DATA 205,...:FOR I=1555 TO 1596:READ J:POKE ...`):
+    # adjacency from the READ onward passed it.
+    own = [i for i, (ln, si, _v) in enumerate(stream)
+           if ln == read_line and si < read_si]
+    sp = own[0] if own else stream_pos_after(stream, read_line, read_si)
     moved = True
     while moved:
         moved = False
