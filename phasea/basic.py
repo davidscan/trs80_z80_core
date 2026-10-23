@@ -112,31 +112,25 @@ DATA_RE = re.compile(r'^\s*DATA(.*)$', re.S | re.I)
 def data_items(stmt):
     """Numeric DATA items in one DATA statement, or None if not DATA.
 
-    Non-numeric items are returned as None entries so a caller counting
-    positions stays aligned with the real READ stream.  An EMPTY item is
+    Non-numeric items, quoted ones among them, are returned as None
+    entries so a caller counting positions stays aligned with the real
+    READ stream.  An EMPTY item is
     0, a bare DATA one such item: the ROM's number reader (224DH) finds
     nothing and returns 0 (the 2026-09-19 audit, L-59).
     """
     m = DATA_RE.match(stmt)
     if not m:
         return None
-    body = m.group(1)
-    items = []
-    cur = []
-    in_q = False
-    for c in body:
-        if c == '"':
-            in_q = not in_q
-        elif c == ',' and not in_q:
-            items.append(''.join(cur))
-            cur = []
-            continue
-        cur.append(c)
-    items.append(''.join(cur))
     out = []
-    for it in items:
-        t = it.strip()
-        out.append(0 if t == '' else parse_number(t))
+    for quoted, t, _tail in _data_split(m.group(1)):
+        if quoted:
+            # a quoted item is a string: READ A of "14337" is ?SN (the
+            # Level II manual, DATA: the types must match the READ's), and
+            # so is 14344" below, whose quote stays in the number's text
+            out.append(None)
+        else:
+            t = t.strip()
+            out.append(0 if t == '' else parse_number(t))
     return out
 
 
@@ -149,26 +143,35 @@ def data_texts(stmt):
     m = DATA_RE.match(stmt)
     if not m:
         return None
-    items, cur, in_q = [], [], False
-    for c in m.group(1):
-        if c == '"':
-            in_q = not in_q
-        elif c == ',' and not in_q:
-            items.append(''.join(cur))
-            cur = []
-            continue
-        cur.append(c)
-    items.append(''.join(cur))
-    out = []
-    for it in items:
-        t = it.lstrip()
-        if t.startswith('"'):
-            t = t[1:]
-            q = t.find('"')
-            if q >= 0:
-                t = t[:q]
-        out.append(t)
-    return out
+    return [t if quoted else t.lstrip()
+            for quoted, t, _tail in _data_split(m.group(1))]
+
+
+def _data_split(body):
+    """A DATA statement's text cut into items as READ takes them: blanks
+    skipped, then an item that opens with a quote runs to the next quote,
+    any other item to the next comma.  A quote inside an unquoted item is
+    a character of it, not an opening quote: `DATA "REA",BRE","SMA"` is
+    the three items REA, BRE" and SMA (irvkaptz line 270).  -> [(quoted, text, tail)]: tail is what stands
+    between a closing quote and the next comma."""
+    out, i, n = [], 0, len(body)
+    while True:
+        j = i
+        while j < n and body[j] in ' \t':
+            j += 1
+        if j < n and body[j] == '"':
+            k = body.find('"', j + 1)
+            if k < 0:
+                out.append((True, body[j + 1:], ''))
+                return out
+            c = body.find(',', k + 1)
+            out.append((True, body[j + 1:k], body[k + 1:] if c < 0 else body[k + 1:c]))
+        else:
+            c = body.find(',', i)
+            out.append((False, body[i:] if c < 0 else body[i:c], ''))
+        if c < 0:
+            return out
+        i = c + 1
 
 
 NUM_RE = re.compile(r'^[+-]?\d+$')
@@ -178,10 +181,10 @@ OCT_RE = re.compile(r'^&O?([0-7]+)$', re.I)
 
 def parse_number(tok):
     """Literal -> int, or None when the token is not an integer literal."""
-    t = tok.strip().strip('"')
+    t = tok.strip()
     if not t:
         return None
-    t = t.replace(' ', '')
+    t = t.replace(' ', '').replace('\t', '')
     if NUM_RE.match(t):
         return int(t)
     m = HEX_RE.match(t)

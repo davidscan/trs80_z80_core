@@ -642,7 +642,14 @@ def find_loaders(path, prog, stream, table):
                     conf = 'low'
 
             if per_iter == 1:
-                by = [v & 0xFF for v in vals if v is not None]
+                # READ stops with ?SN at an item that is not a number, so
+                # the bytes end there; dropping it slid the rest one place
+                # (drossdos's screen bytes).
+                by = []
+                for v in vals:
+                    if v is None:
+                        break
+                    by.append(v & 0xFF)
             else:
                 by = []
 

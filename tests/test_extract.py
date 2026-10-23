@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from phasea.extract import extract_file                       # noqa: E402
 from phasea.basic import (eval_const, parse_program,          # noqa: E402
-                          split_statements, data_items)
+                          split_statements, data_items, data_texts)
 
 
 def run(src):
@@ -78,6 +78,38 @@ class TestBasicSurface(unittest.TestCase):
                      '20 DATA 62,,50,,60,33,,201\n'))
         self.assertEqual(p.bytes, [62, 0, 50, 0, 60, 33, 0, 201])
         self.assertEqual(p.confidence, 'high')
+
+    def test_a_quote_inside_an_unquoted_item_is_a_character(self):
+        # READ takes an unquoted item to the next comma, quote and all:
+        # irvkaptz's `"REA",BRE","SMA"` is three items, and taking the
+        # stray quote for an opening one merged the rest of the line.
+        self.assertEqual(data_texts('DATA"REA",BRE","SMA","DES"'),
+                         ['REA', 'BRE"', 'SMA', 'DES'])
+        self.assertEqual(data_texts('DATA A,CHARM"," T",X'),
+                         ['A', 'CHARM"', ' T', 'X'])
+        self.assertEqual(data_items('DATA"REA",BRE","SMA",7'),
+                         [None, None, None, 7])
+        p = only(run('10 READ A$,B$,C$\n'
+                     '20 FOR I=0 TO 3:READ A:POKE 30000+I,A:NEXT\n'
+                     '30 DATA"REA",BRE","SMA",62,1,211,201\n'))
+        self.assertEqual((p.bytes, p.confidence), ([62, 1, 211, 201], 'high'))
+
+    def test_a_quoted_item_is_not_a_number(self):
+        # READ A of a quoted item is ?SN: the Level II manual's DATA
+        # wants the types to match.  The interpreter agrees.
+        self.assertEqual(data_items('DATA "14337",14344",7'), [None, None, 7])
+
+    def test_tabs_inside_a_number_are_skipped(self):
+        # drossdos line 76: `3<tabs>2` reads as 32, as `12 3` reads 123.
+        self.assertEqual(data_items('DATA 129,3\t\t\t2,12 3'), [129, 32, 123])
+
+    def test_the_bytes_end_at_an_item_that_is_not_a_number(self):
+        # READ stops with ?SN there; dropping the item slid every byte
+        # behind it one place.
+        p = only(run('10 FOR I=0 TO 4:READ A:POKE 30000+I,A:NEXT\n'
+                     '20 DATA 62,1,X,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1])
+        self.assertIn('non-numeric-data', p.flags)
 
     def test_eval_const(self):
         self.assertEqual(eval_const('16446'), 16446)
@@ -365,6 +397,14 @@ class TestLoaderIdioms(unittest.TestCase):
         p = only(run('10 FOR I=1 TO 3:READ A:IF A>0 THEN B=A:NEXT IELSE PRINT\n'
                      '20 FOR I=32000 TO 32003:READ B:POKE I,B:NEXT\n'
                      '30 DATA 1,2,3,62,1,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
+    def test_the_walk_passes_a_data_with_no_space(self):
+        """`DATA62,...` is DATA to the walk too: read as a statement, its
+        STOP item ended the walk and the loader fell back to adjacency."""
+        p = only(run('10 DATA62,1,211,201,STOP\n'
+                     '20 FOR I=0 TO 3:READ A:POKE 30000+I,A:NEXT\n'
+                     '30 DATA 9,9,9,9\n'))
         self.assertEqual(p.bytes, [62, 1, 211, 201])
 
     def test_two_loaders_share_one_data_block(self):

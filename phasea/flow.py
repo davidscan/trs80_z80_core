@@ -230,7 +230,7 @@ NEXT_RE = re.compile(r'^\s*NEXT\s*(.*)$', re.I | re.S)
 READ_RE = re.compile(r'^\s*READ\s*(.+)$', re.I | re.S)
 INPUT_RE = re.compile(r'^\s*(LINE\s*)?INPUT\b(.*)$', re.I | re.S)
 CLEAR_RE = re.compile(r'^\s*CLEAR\b', re.I)
-DATA_RE = re.compile(r'^\s*DATA\b', re.I)
+DATA_RE = re.compile(r'^\s*DATA', re.I)   # no \b: `DATA205,...` (basic.py)
 ELSE_RE = re.compile(r'^\s*ELSE(.*)$', re.I | re.S)
 ELSE_ANY = re.compile(r'ELSE', re.I)
 ASSIGN_RE = re.compile(r'^\s*(?:LET\s*)?([A-Z][A-Z0-9]*[%!#$]?)\s*(\(([^=]*)\))?\s*=\s*(.+)$',
