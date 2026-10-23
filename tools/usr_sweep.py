@@ -24,7 +24,8 @@ menu, a quiet end).
 
 Controls (the corpus measurement traps): --seed 1, the oracle's stdin feed
 of 400 "1" lines, a same-build control run, gawk diagnostics and the two
-USR notices dropped before comparing, cwd outside both repos.  Batch has
+USR notices dropped before comparing, a fresh cwd per run (under the
+gitignored out/usr_sweep/cwd, never a repo's own tree).  Batch has
 no keyboard: a routine that polls the matrix sees 0 and, at the end of
 stdin, BREAK; a program's INKEY$ menu gets "1".
 """

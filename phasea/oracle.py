@@ -17,12 +17,14 @@ Z80 executes anywhere in this module.
 HOW THE INTERPRETER IS INSTRUMENTED, AND WHY IT IS NOT MODIFIED. The
 interpreter is a PEER (../trs80basic since the 2026-08-28 split; the
 corpus archive, reached through the `corpus` link, is only read),
-and its repo is not touched. `build()` copies its `src/p*.awk` into out/, adds
-two lines, and concatenates a scratch interpreter exactly the way the
-interpreter's own build does (`cat src/p*.awk > trs80basic.awk`). Both added
-lines are gated on TRS80_POKELOG being present in the environment, so
-with the variable unset the scratch build is behaviorally identical to
-the shipped one -- the instrumentation cannot perturb what it measures.
+and its repo is not touched. `build()` copies its `src/p*.awk` into out/,
+applies three additive patches (PATCHES below), and concatenates a scratch
+interpreter exactly the way the interpreter's own build does (`cat src/p*.awk
+> trs80basic.awk`). Each patch is gated on an environment variable (the
+poke log and the USR marker on TRS80_POKELOG, the line trace on
+TRS80_LINELOG), so with both unset the scratch
+build is behaviorally identical to the shipped one -- the instrumentation
+cannot perturb what it measures.
 Interpreter-owned code stays interpreter-owned (the standing
 split); this is a harness in THIS repo that happens to drive a peer's code.
 
@@ -31,6 +33,9 @@ split); this is a harness in THIS repo that happens to drive a peer's code.
                                and BEFORE its device dispatch, so we see
                                what the program wrote regardless of where
                                it landed.
+    p70_exec.awk  run loop  -- log the line number each time it changes
+                               (TRS80_LINELOG), to tell a loop that waits
+                               on a USR result from one that never could.
     p60_eval.awk  USR stub  -- emit a marker when a USR call is reached.
 
 The log is flushed per line on purpose: a listing that never halts is
@@ -40,7 +45,7 @@ loader bytes with it.
 WHY THE MARKER RATHER THAN AN EXIT. Stopping the interpreter mid-
 expression would mean surgery on its control flow; a marker plus a
 timeout gets the same cut point (we read pokes up to the first USR)
-with two purely additive lines. Pokes after the marker are ignored.
+with purely additive patches. Pokes after the marker are ignored.
 
 TRUST DISCIPLINE. The ANCHORS BEFORE TRUST rule applies to the
 oracle exactly as it applied to the opcode table and the classifier:
