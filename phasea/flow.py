@@ -15,7 +15,9 @@ the flow, ON n GOTO/GOSUB, a READ inside a loop whose count it does not
 know, a RETURN with no GOSUB, running out of DATA, a CLEAR after a READ,
 or its step budget.  An IF it cannot evaluate whose branches only assign
 or print (or jump over / back across code that reads nothing) is passed,
-and what those branches assign becomes unknown.
+and what those branches assign becomes unknown; one whose THEN branch only
+ends the program (a MEMORY SIZE check's `THEN PRINT ...:STOP`) is taken as
+false, since a branch that stops reaches no READ.
 """
 import re
 
@@ -255,6 +257,18 @@ def _split_else(text):
     if not m:
         return text, None
     return text[:m.start()], text[m.end():]
+
+
+def _ends_program(text):
+    """Does this branch only do what cannot matter to a later READ --
+    print, assign, poke -- and then END or STOP?  (`IF MEM>24497 THEN
+    CLS:PRINT"...":STOP`: a branch that ends the program never reaches a
+    READ, so the walk goes on as if the condition were false.)"""
+    parts = [x.strip() for x in _blank_strings(text).split(':')]
+    if not parts or not re.match(r'^(END|STOP)$', parts[-1], re.I):
+        return False
+    return not any(FLOWY.search(x) or re.match(r'^IF\b', x, re.I)
+                   for x in parts[:-1])
 
 
 def _assigned(text):
@@ -598,6 +612,10 @@ class Walker:
         except Unknown:
             truth = None
         stmts = self.prog[li][2]
+        if truth is None and not re.match(r'^\s*\d+\s*$', then_part) and _ends_program(
+                then_part if else_part is not None
+                else ':'.join([then_part] + stmts[si + 1:])):
+            truth = False
         if truth is True:
             return self.branch(li, si, then_part)
         if truth is False:

@@ -377,6 +377,22 @@ class TestLoaderIdioms(unittest.TestCase):
                      '20 FOR I=0 TO 3:READ A:POKE 30000+I,A:NEXT\n'))
         self.assertEqual(p.bytes, [62, 1, 211, 201])
 
+    def test_an_if_that_only_ends_the_program_does_not_stop_the_walk(self):
+        """`IF MEM>... THEN PRINT ...:STOP` cannot be decided, but a branch
+        that ends the program reaches no READ: the walk goes on, and the
+        loader continues behind the table read above it (sq, MORLOC)."""
+        p = only(run('5 IF MEM>24497 THEN CLS:PRINT"PROTECT MEMORY":STOP\n'
+                     '6 DATA 1,2,3:FOR I=0 TO 2:READ T(I):NEXT\n'
+                     '10 DATA 62,1,211,201\n'
+                     '20 DATA 9,9,9,9\n'
+                     '30 FOR I=0 TO 3:READ A:POKE 30000+I,A:NEXT\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+        p = only(run('5 IF PEEK(14312)<>63 THEN STOP ELSE GOTO 6\n'
+                     '6 READ Q\n'
+                     '10 DATA 9,62,1,211,201\n'
+                     '20 FOR I=0 TO 3:READ A:POKE 30000+I,A:NEXT\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
     def test_a_walked_start_does_not_carry_across_a_read_between(self):
         """The walk gives the first loader's start, then stops at a skip
         loop of typed-in length.  The loader below does not continue
