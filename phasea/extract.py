@@ -382,6 +382,7 @@ def find_loaders(path, prog, stream, table):
     texts = build_data_texts(prog)   # the stream's items as READ A$ sees them
     walked = _LazyWalk(prog, stream, texts)   # the pointer by flow (flow.py)
     after = _next_reads(prog)     # (line, si) of a READ -> the next READ's
+    first_read = next(iter(after), None)   # the listing's first READ
     consumed = []                 # (start, end, pinned): what loaders above read
     claimed = set()               # (line, si) of READs that belong to a loader
     for li, (lineno, _body, stmts) in enumerate(prog):
@@ -431,7 +432,8 @@ def find_loaders(path, prog, stream, table):
                         else:
                             rsi = None
                             rtarget = carried
-                        sp = _data_start(stream, rtarget, lineno, si, consumed)
+                        sp = _data_start(stream, rtarget, lineno, si, consumed,
+                                         (lineno, si) == first_read)
                         wpin = (lineno, si) in walked and after.get((lineno, si))
                         if (lineno, si) in walked:
                             sp = walked[(lineno, si)]
@@ -537,7 +539,7 @@ def find_loaders(path, prog, stream, table):
                 if count <= 0:
                     continue
                 sp = _data_start(stream, restore_target, read_line, read_si,
-                                 consumed)
+                                 consumed, (read_line, read_si) == first_read)
                 wpin = ((read_line, read_si) in walked
                         and after.get((read_line, read_si)))
                 if (read_line, read_si) in walked:
@@ -616,7 +618,7 @@ def find_loaders(path, prog, stream, table):
                 flags.append('multi-value-read-%d' % per_iter)
 
             sp = _data_start(stream, restore_target, read_line, read_si,
-                             consumed)
+                             consumed, (read_line, read_si) == first_read)
             walked_here = ((read_line, read_si) in walked
                            and walked[(read_line, read_si)] != sp)
             if walked_here:
@@ -899,11 +901,14 @@ def _next_reads(prog):
     return dict(zip(keys, keys[1:] + [None]))
 
 
-def _data_start(stream, restore_target, read_line, read_si, consumed=()):
+def _data_start(stream, restore_target, read_line, read_si, consumed=(),
+                first=False):
     """Where the loader's READ starts in the DATA stream: after a RESTORE n
     at line n's DATA, after a bare RESTORE at the program's first DATA,
     otherwise adjacent -- the first DATA after the READ itself, or the
-    first DATA on the READ's own line when one stands ahead of it.
+    first DATA on the READ's own line when one stands ahead of it, or the
+    program's first DATA when there is none below and the READ is the
+    listing's first.
 
     Level II READ has ONE pointer (the 2026-09-19 audit, H-18: two loaders
     sharing a block came out with the same bytes, the second at confidence
@@ -933,6 +938,11 @@ def _data_start(stream, restore_target, read_line, read_si, consumed=()):
     own = [i for i, (ln, si, _v) in enumerate(stream)
            if ln == read_line and si < read_si]
     sp = own[0] if own else stream_pos_after(stream, read_line, read_si)
+    # No DATA below and no READ above it in the listing (`first`): the
+    # pointer has not moved, so it is at the program's first DATA (solitr2,
+    # GEOMETRY, tape2: the DATA stands above the loader).
+    if first and sp >= len(stream):
+        sp = 0
     moved = True
     while moved:
         moved = False

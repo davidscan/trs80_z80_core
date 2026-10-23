@@ -368,6 +368,15 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertEqual(p.bytes, [62, 1, 211, 201])
         self.assertEqual(p.confidence, 'high')
 
+    def test_no_data_below_the_first_read(self):
+        """Where the walk stops and no DATA stands below the listing's
+        first READ, nothing has moved the pointer: it is at the program's
+        first DATA (solitr2, tape2), not off the end."""
+        p = only(run('5 INPUT X:ON X GOTO 10,10\n'
+                     '10 DATA 62,1,211,201\n'
+                     '20 FOR I=0 TO 3:READ A:POKE 30000+I,A:NEXT\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
     def test_a_walked_start_does_not_carry_across_a_read_between(self):
         """The walk gives the first loader's start, then stops at a skip
         loop of typed-in length.  The loader below does not continue
