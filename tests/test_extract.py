@@ -207,12 +207,19 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertNotIn('hex-string-decoded', p.flags)
         self.assertIn('poke-value-transformed', p.flags)
 
-    def test_a_free_read_above_the_loader_is_not_trusted(self):
-        """GLOBE reads its display DATA on lines a GOSUB runs AFTER the
-        loader, so a READ that is neither a count nor a sentinel must not
-        shift the loader below it."""
+    def test_a_free_read_counts_where_the_flow_runs_it(self):
+        """A READ the program runs before the loader moves the pointer
+        (`10 READ Q` first: the loader reads 1 211 201 99); GLOBE's shape,
+        a READ on a line above the loader that a GOSUB runs AFTER it,
+        does not."""
         p = only(run('10 READ Q\n'
                      '20 FOR I=0 TO 3:READ A:POKE 32000+I,A:NEXT\n'
+                     '90 DATA 62,1,211,201,99\n'))
+        self.assertEqual(p.bytes, [1, 211, 201, 99])
+        p = only(run('10 GOTO 30\n'
+                     '20 READ Q:RETURN\n'
+                     '30 FOR I=0 TO 3:READ A:POKE 32000+I,A:NEXT\n'
+                     '40 GOSUB 20\n'
                      '90 DATA 62,1,211,201,99\n'))
         self.assertEqual(p.bytes, [62, 1, 211, 201])
 
@@ -302,12 +309,63 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertIn('poke-value-transformed', p.flags)
         self.assertNotEqual(p.confidence, 'high')
 
-    def test_adjacency_not_program_order(self):
-        """DATA earlier in the file must not be stolen by a later loader."""
+    def test_the_pointer_by_flow_and_adjacency_where_the_walk_stops(self):
+        """Level II's one READ pointer starts at the first DATA, wherever
+        it is (H-18 re-ruled 2026-10-22: the walk from the first line
+        replaces adjacency where it reaches the READ).  Where the walk
+        cannot know the flow -- an ON n GOTO on a value typed in -- the
+        loader keeps adjacency: the first DATA below its READ."""
         p = only(run('10 DATA 99,98,97\n'
                      '20 FOR I=100 TO 102:READ J:POKE I,J:NEXT\n'
                      '30 DATA 1,2,3\n'))
+        self.assertEqual(p.bytes, [99, 98, 97])
+        p = only(run('5 INPUT X:ON X GOTO 20,20\n'
+                     '10 DATA 99,98,97\n'
+                     '20 FOR I=100 TO 102:READ J:POKE I,J:NEXT\n'
+                     '30 DATA 1,2,3\n'))
         self.assertEqual(p.bytes, [1, 2, 3])
+
+    def test_a_walked_start_does_not_carry_across_a_read_between(self):
+        """The walk gives the first loader's start, then stops at a skip
+        loop of typed-in length.  The loader below does not continue
+        behind the first (9 9 62 1): a READ lies between them (ENDGAME's
+        shape)."""
+        rep = run('10 FOR I=31000 TO 31003:READ A:POKE I,A:NEXT\n'
+                  '20 INPUT N:FOR I=1 TO N:READ X:NEXT\n'
+                  '30 DATA 1,2,3,4,9,9\n'
+                  '40 FOR I=32000 TO 32003:READ B:POKE I,B:NEXT\n'
+                  '50 DATA 62,1,211,201\n')
+        self.assertEqual([p.bytes for p in rep.payloads if p.base == 32000],
+                         [[62, 1, 211, 201]])
+
+    def test_a_gosub_that_reads_before_the_loader(self):
+        """meltdown's shape: a routine below the loader reads a title
+        first, so the loader starts behind it, not at its adjacent DATA."""
+        p = only(run('10 GOSUB 100\n'
+                     '20 FOR I=32000 TO 32003:READ B:POKE I,B:NEXT\n'
+                     '30 END\n'
+                     '100 READ N$,M:RETURN\n'
+                     '110 DATA "TITLE",5\n'
+                     '120 DATA 62,1,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
+    def test_next_steps_the_variable_the_loop_assigned(self):
+        """`IF A=0 THEN J=10` ends the loop at the next NEXT J: the walk
+        steps J itself, not a count of its own (TOSTYPER's `J=NW:NEXT J`),
+        so the loop reads 2 items, not 10."""
+        p = only(run('10 FOR J=1 TO 10:READ A:IF A=0 THEN J=10\n'
+                     '15 NEXT J\n'
+                     '20 FOR I=32000 TO 32003:READ B:POKE I,B:NEXT\n'
+                     '30 DATA 7,0,62,1,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
+
+    def test_a_crunched_else_after_next(self):
+        """`NEXT IELSE ...` (TOSTYPER: no colon or space before ELSE) is
+        the THEN branch's NEXT followed by its ELSE: the loop runs."""
+        p = only(run('10 FOR I=1 TO 3:READ A:IF A>0 THEN B=A:NEXT IELSE PRINT\n'
+                     '20 FOR I=32000 TO 32003:READ B:POKE I,B:NEXT\n'
+                     '30 DATA 1,2,3,62,1,211,201\n'))
+        self.assertEqual(p.bytes, [62, 1, 211, 201])
 
     def test_two_loaders_share_one_data_block(self):
         """Level II READ has one sequential pointer, so the second loader

@@ -23,6 +23,7 @@ import os
 import re
 from dataclasses import dataclass, field, asdict
 
+from .flow import follow
 from .basic import (parse_program, read_source, is_comment, data_items, data_texts,
                     eval_const, constant_symbols, parse_number, to_addr,
                     strip_quoted)
@@ -379,6 +380,8 @@ def find_loaders(path, prog, stream, table):
     # ...` / `20 FOR ...` read the same block twice).
     prev_restore = None
     texts = build_data_texts(prog)   # the stream's items as READ A$ sees them
+    walked = _LazyWalk(prog, stream, texts)   # the pointer by flow (flow.py)
+    after = _next_reads(prog)     # (line, si) of a READ -> the next READ's
     consumed = []                 # (start, end, pinned): what loaders above read
     claimed = set()               # (line, si) of READs that belong to a loader
     for li, (lineno, _body, stmts) in enumerate(prog):
@@ -408,6 +411,8 @@ def find_loaders(path, prog, stream, table):
                 #     below whose bound names N consumes its items;
                 #   - the sentinel search: `READ J:IF J<>999 ...` consumes
                 #     through the first item that equals the marker.
+                # Where the walk from the first line (flow.py) reached a
+                # READ, its start is used instead of either rule.
                 rm = READ_RE.match(st)
                 if rm and (lineno, si) not in claimed:
                     tvars = set()
@@ -427,6 +432,9 @@ def find_loaders(path, prog, stream, table):
                             rsi = None
                             rtarget = carried
                         sp = _data_start(stream, rtarget, lineno, si, consumed)
+                        wpin = (lineno, si) in walked and after.get((lineno, si))
+                        if (lineno, si) in walked:
+                            sp = walked[(lineno, si)]
                         if kind2 == 'sentinel':
                             rend = sp
                             while rend < len(stream):
@@ -439,7 +447,8 @@ def find_loaders(path, prog, stream, table):
                         else:
                             _rv, rend, _rx = take_from(stream, sp, n2)
                         consumed.append((sp, rend,
-                                         _pinned(rtarget, consumed, sp)))
+                                         _pinned(rtarget, consumed, sp,
+                                                 (lineno, si)) or wpin))
                         if rsi is None:
                             carried = None
                         else:
@@ -529,8 +538,13 @@ def find_loaders(path, prog, stream, table):
                     continue
                 sp = _data_start(stream, restore_target, read_line, read_si,
                                  consumed)
+                wpin = ((read_line, read_si) in walked
+                        and after.get((read_line, read_si)))
+                if (read_line, read_si) in walked:
+                    sp = walked[(read_line, read_si)]
                 vals, end, exact = take_from(stream, sp, count)
-                consumed.append((sp, end, _pinned(restore_target, consumed, sp)))
+                consumed.append((sp, end, _pinned(restore_target, consumed, sp,
+                                                  (read_line, read_si)) or wpin))
                 pl = _make_varptr_payload(fname, arr, lineno, count, vals,
                                           exact, restore_target)
                 if arr.rstrip('%')[:2] not in arrays_ok:
@@ -603,9 +617,16 @@ def find_loaders(path, prog, stream, table):
 
             sp = _data_start(stream, restore_target, read_line, read_si,
                              consumed)
+            walked_here = ((read_line, read_si) in walked
+                           and walked[(read_line, read_si)] != sp)
+            if walked_here:
+                sp = walked[(read_line, read_si)]
+            wpin = ((read_line, read_si) in walked
+                    and after.get((read_line, read_si)))
             need = count * per_iter
             vals, end, exact = take_from(stream, sp, need)
-            consumed.append((sp, end, _pinned(restore_target, consumed, sp)))
+            consumed.append((sp, end, _pinned(restore_target, consumed, sp,
+                                              (read_line, read_si)) or wpin))
 
             conf, cflags = grade(vals, need, exact, restore_target)
             flags.extend(cflags)
@@ -651,7 +672,8 @@ def find_loaders(path, prog, stream, table):
                 length=len(by), bytes=by,
                 provenance={'loader_line': lineno, 'count_declared': count,
                             'values_found': len(vals),
-                            'data_from': ('restore-%d' % restore_target
+                            'data_from': ('walked' if walked_here else
+                                          'restore-%d' % restore_target
                                           if restore_target else
                                           'restore-first' if restore_target == 0
                                           else 'adjacent'),
@@ -823,12 +845,51 @@ def _hex_items(texts):
     return out or None
 
 
-def _pinned(restore_target, consumed, sp):
+class _LazyWalk:
+    """follow()'s result, computed the first time a READ asks for it."""
+
+    def __init__(self, prog, stream, texts):
+        self.args, self.reads, self.why = (prog, stream, texts), None, None
+
+    def _get(self):
+        if self.reads is None:
+            self.reads, self.why = follow(*self.args)
+        return self.reads
+
+    def __contains__(self, k):
+        return k in self._get()
+
+    def __getitem__(self, k):
+        return self._get()[k]
+
+
+def _pinned(restore_target, consumed, sp, read_at):
     """Is this loader's place in the stream KNOWN -- a RESTORE of its own,
     or the continuation of a loader whose place was known?"""
     if restore_target is not None:
         return True
-    return bool(consumed) and consumed[-1][2] and sp == consumed[-1][1]
+    return (bool(consumed) and _pin_holds(consumed[-1][2], read_at)
+            and sp == consumed[-1][1])
+
+
+def _pin_holds(pin, read_at):
+    """A loader above is pinned for the READ at read_at: True, or (a loader
+    whose start the walk gave) the key of the READ statement that follows it
+    in the listing.  The walk knows where that loader STARTED, not that
+    nothing reads between it and the next loader; the extractor sees only
+    loaders, so the continuation holds only where no other READ statement
+    lies between (ENDGAME's text and table reads between its arrays and its
+    loader)."""
+    return pin is True or (bool(pin) and pin == read_at)
+
+
+def _next_reads(prog):
+    """{(line, si): (line, si) of the next statement that reads, in listing
+    order} for every statement with a READ in it."""
+    keys = [(lineno, si) for lineno, _b, stmts in prog
+            for si, st in enumerate(stmts)
+            if not is_comment(st) and re.search(r'\bREAD\b', strip_quoted(st), re.I)]
+    return dict(zip(keys, keys[1:] + [None]))
 
 
 def _data_start(stream, restore_target, read_line, read_si, consumed=()):
@@ -849,12 +910,14 @@ def _data_start(stream, restore_target, read_line, read_si, consumed=()):
         or the continuation of a pinned one -- continues where it stopped,
         wherever its adjacent DATA is (ld8509b puts each DATA line ABOVE
         its loader, and only the pointer reaches them).
-    A RESTORE of the loader's own is an explicit pointer and stands."""
+    A RESTORE of the loader's own is an explicit pointer and stands.
+    The caller overrides all of this with the walked start (flow.py)
+    wherever the walk from the first line reached the READ."""
     if restore_target:
         return stream_pos_at_line(stream, restore_target)
     if restore_target == 0:
         return 0
-    if consumed and consumed[-1][2]:
+    if consumed and _pin_holds(consumed[-1][2], (read_line, read_si)):
         return consumed[-1][1]
     sp = stream_pos_after(stream, read_line, read_si)
     moved = True
