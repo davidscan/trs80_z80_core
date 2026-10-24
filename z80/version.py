@@ -10,7 +10,7 @@ handshake carries only `name` and `proto` (PROTOCOL.md); this is what
 import os
 import subprocess
 
-VERSION = 'v2.1.1'
+VERSION = 'v2.1.2'
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
