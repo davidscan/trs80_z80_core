@@ -153,6 +153,28 @@ CASES = [
     ('POP AF loads the flag byte', 'F1', {'sp': 0x7FFE, 'mem': {0x7FFE: 0x51, 0x7FFF: 0xCD}},
      {'a': 0xCD, 'f': 'ZHC', 'sp': 0x8000}, 10),
     ('HALT halts', '76', {}, {'pc': 0x0001}, 4),
+
+    # ---- outside the fetched vectors (ZL-5): prefix chains and the ED
+    # page's undefined bytes, which the SingleStepTests sets do not hold
+    # (no 'dd dd', 'dd ed', 'dd fd'; 80 of the 256 ED files).  A DD or FD
+    # followed by another prefix is a 4-T no-op of its own, one M1
+    # fetch, and the next byte starts the next instruction; an undefined
+    # ED pair is an 8-T no-op of two fetches (S. Young, The Undocumented
+    # Z80 Documented). ----
+    ('DD DD: the first DD is a no-op', 'DDDD213412', {'ix': 0x5555, 'f': 'C'},
+     {'pc': 0x0001, 'r': 1, 'ix': 0x5555, 'f': 'C'}, 4),
+    ('DD FD: the DD is a no-op', 'DDFD213412', {'ix': 0x5555, 'iy': 0x6666},
+     {'pc': 0x0001, 'r': 1, 'ix': 0x5555, 'iy': 0x6666}, 4),
+    ('DD ED: the DD is a no-op', 'DDED6B0080', {}, {'pc': 0x0001, 'r': 1}, 4),
+    ('FD DD: the FD is a no-op', 'FDDD213412', {}, {'pc': 0x0001, 'r': 1}, 4),
+    ('FD FD: the first FD is a no-op', 'FDFD213412', {}, {'pc': 0x0001, 'r': 1}, 4),
+    ('FD ED: the FD is a no-op', 'FDED6B0080', {}, {'pc': 0x0001, 'r': 1}, 4),
+    ('ED 00 undefined: 8 T, nothing changed', 'ED00', {'a': 0x12, 'f': 'C', 'h': 0x40},
+     {'pc': 0x0002, 'r': 2, 'a': 0x12, 'f': 'C', 'h': 0x40}, 8),
+    ('ED 77 undefined', 'ED77', {'a': 0x34}, {'pc': 0x0002, 'r': 2, 'a': 0x34}, 8),
+    ('ED 80 undefined (beside the block ops)', 'ED80', {'b': 0x02},
+     {'pc': 0x0002, 'r': 2, 'b': 0x02}, 8),
+    ('ED FF undefined', 'EDFF', {}, {'pc': 0x0002, 'r': 2}, 8),
 ]
 
 
@@ -194,6 +216,24 @@ class TestFlags(unittest.TestCase):
         for case in CASES:
             with self.subTest(case[0]):
                 self.run_case(*case)
+
+    def test_a_prefix_chain_runs_the_last_prefix(self):
+        # the instruction after the no-op prefix: DD FD 21 is LD IY,nn,
+        # FD DD 21 is LD IX,nn, DD ED 6B is ED's own LD HL,(nn) (ZL-5)
+        for code, reg, t2 in (('DDFD213412', 'iy', 14), ('FDDD213412', 'ix', 14),
+                              ('DDED6B0080', 'hl', 20), ('FDED6B0080', 'hl', 20),
+                              ('DDDD213412', 'ix', 14)):
+            with self.subTest(code):
+                mem = bytearray(65536)
+                mem[0:5] = bytes.fromhex(code)
+                mem[0x8000:0x8002] = b'\x34\x12'
+                cpu = Z80(lambda a: mem[a], lambda a, v: mem.__setitem__(a, v))
+                cpu.ix, cpu.iy, cpu.hl = 0x5555, 0x6666, 0x7777
+                self.assertEqual((cpu.step(), cpu.step()), (4, t2))
+                self.assertEqual((getattr(cpu, reg), cpu.pc, cpu.r), (0x1234, 5, 3))   # three M1 fetches
+                for other in {'ix', 'iy', 'hl'} - {reg}:
+                    self.assertEqual(getattr(cpu, other),
+                                     {'ix': 0x5555, 'iy': 0x6666, 'hl': 0x7777}[other])
 
     def test_halt_flag(self):
         mem = bytearray(65536)
