@@ -25,7 +25,7 @@ where the cases take both paths. Not checked against anything outside
 this file: the 176 'invalid' ED entries (upstream ships no tests for
 them), and the 16 T-state exit of LDIR, LDDR, CPDR and OTDR, which no
 upstream case reaches (every case repeats). An earlier, narrower check
-(2026-09-07, FINDING 21) still stands in tests/test_table.py: the Nano
+(2026-09-07) still stands in tests/test_table.py: the Nano
 Systems reference card's rule that every index-half instruction costs
 its H/L-operand equivalent plus 4 T-states holds for all 92 of them.
 
@@ -575,8 +575,8 @@ def _build_ed():
             elif z == 6:
                 # Documented: ED46 IM 0, ED56 IM 1, ED5E IM 2 (y = 0, 2, 3).
                 # ED4E/ED66/ED6E/ED76/ED7E are the undocumented duplicates.
-                # The set was INVERTED until 2026-09-11 (trs80basic seam
-                # audit, REPLY 4 item 4): ED46/ED5E were flagged undocumented
+                # The set was INVERTED until 2026-09-11 (the trs80basic
+                # seam audit of 2026-09-10): ED46/ED5E were flagged undocumented
                 # and ED4E/ED6E/ED76 documented, so the inverse index
                 # resolved `IM 0` to ED 4E.
                 add(op, 'IM', [FIXED(IM_T[y])], 2, [8], kind='ctl',

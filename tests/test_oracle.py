@@ -1,4 +1,5 @@
-"""The dynamic extraction oracle -- FINDING 7's escalation path.
+"""The dynamic extraction oracle -- the escalation path for unresolvable
+loaders.
 
 The oracle drives the companion interpreter (../trs80basic since the
 2026-08-28 split), so most of what can go wrong here is a mismatch with
@@ -163,7 +164,7 @@ class TestAfterTheFirstUsr(unittest.TestCase):
 
 
 class TestRegionDiscrimination(unittest.TestCase):
-    """FINDING 5's not-every-POKE-loop-is-a-loader, applied dynamically."""
+    """Not every POKE loop is a loader, applied dynamically."""
 
     def test_video_fill_is_screen_data(self):
         self.assertEqual(oracle.region_of(15360, bytes(1024)), 'screen-data')
@@ -427,7 +428,7 @@ class TestInstrumentedBuild(unittest.TestCase):
         self.assertEqual(got['verdict'], 'unconditional-loop')
 
     def test_interpreter_answers_the_dos_probe_with_a_ret(self):
-        """PEEK(16396) must be 201 -- FINDING 16, now shipped upstream.
+        """PEEK(16396) must be 201 -- now shipped upstream.
 
         This began life as a gated COUNTERFACTUAL in the oracle: the
         interpreter answered 255 (absent RAM), which sent every listing using
@@ -448,7 +449,7 @@ class TestInstrumentedBuild(unittest.TestCase):
                          [(32000, bytes([201] * 4))])
 
     def test_interpreter_accepts_the_spaced_usr_call_form(self):
-        """X=USR 0(n) must parse -- FINDING 17, now shipped upstream.
+        """X=USR 0(n) must parse -- now shipped upstream.
 
         The loader POKEs come BEFORE the call on purpose: run_listing
         truncates the log at the first USR marker, which is the whole

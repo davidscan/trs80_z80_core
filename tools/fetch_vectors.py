@@ -14,7 +14,7 @@ instruction executed from a fully-specified random state --
 pure library with no TRS-80 knowledge and no devices). The test format
 and the architecture ruling agree; that is not a coincidence.
 
-WHAT THIS VALIDATES THAT PHASE A COULD NOT. FINDING 1 validated the
+WHAT THIS VALIDATES THAT PHASE A COULD NOT. Phase A validated the
 table's STRUCTURE -- 185 hand-authored vectors (six lists in
 tests/test_table.py; the count read 176 until 2026-09-11), mnemonics,
 declared-length-equals-consumed, inverse round-trip -- and recorded

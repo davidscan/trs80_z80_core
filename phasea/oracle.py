@@ -1,4 +1,5 @@
-"""FINDING 7's dynamic extraction oracle -- the escalation path, built.
+"""The dynamic extraction oracle -- the escalation path for the loaders
+the static extractor flags unresolvable, built.
 
 96 USR listings have a real machine-language loader whose address or
 bounds static extraction cannot resolve: bases computed from INPUT,
@@ -347,7 +348,8 @@ def runs_from_pokes(pokes, min_len=4):
 
 
 def region_of(base, data):
-    """FINDING 5's discrimination applied to a dynamic run: the static
+    """Not every POKE loop is a machine-code loader, applied to a dynamic
+    run: the static
     extractor's own (classify_destination -- video RAM, the keyboard
     matrix, the printer window, anything below 4000H), plus the RND seed
     a listing pokes at run time.  It had only video, two printer bytes and
@@ -360,7 +362,7 @@ def region_of(base, data):
 
 
 # --------------------------------------------------------------------
-# FINDING 15: is a hanging listing actually waiting on a USR result?
+# Is a hanging listing actually waiting on a USR result?
 # --------------------------------------------------------------------
 # This is the analysis that holds the gate number down, so it lives in
 # the module rather than in a scratch script: 13 of the resolved
@@ -687,7 +689,7 @@ def main():
     ap.add_argument('--validate', action='store_true')
     ap.add_argument('--run', action='store_true')
     ap.add_argument('--hangs', action='store_true',
-                    help='FINDING 15: do the hanging listings wait on USR?')
+                    help='do the hanging listings wait on USR?')
     ap.add_argument('--files', help='JSON list of corpus-relative keys')
     ap.add_argument('--timeout', type=float, default=10.0)
     ap.add_argument('--limit', type=int)

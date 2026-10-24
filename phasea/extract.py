@@ -110,7 +110,7 @@ def take_from(stream, start_idx, count):
     Returns (values, end_idx, exact_boundary). exact_boundary is True
     when the consumed run ends exactly at the end of a DATA statement --
     the signal that the loader and its DATA block agree, which is what
-    makes the endgame FINDING 29 lock checkable.
+    makes the endgame anchor's lock checkable (tests/test_anchors.py).
     """
     vals = []
     i = start_idx
@@ -156,7 +156,7 @@ READ_RE = re.compile(r'^\s*READ\s*(.+)$', re.I | re.S)
 POKE_RE = re.compile(r'^\s*POKE\s*(.+?)\s*,\s*(.+)$', re.I | re.S)
 RESTORE_RE = re.compile(r'^\s*RESTORE\s*(\d*)\s*$', re.I)
 NEXT_RE = re.compile(r'^\s*NEXT\b', re.I)
-# String packing (REPLY 4 item b): a routine built as a string and run at
+# String packing (a gap the 2026-09-10 seam audit found): a routine built as a string and run at
 # VARPTR -- A$=CHR$(205)+CHR$(127)+... or STRING$(n,c) terms, or appended
 # one byte per loop pass, A$=A$+CHR$(V), from READ.
 STR_ASSIGN_RE = re.compile(r'^\s*(?:LET\s*)?([A-Za-z][A-Za-z0-9]*\$)\s*=\s*(.+)$', re.I | re.S)
@@ -367,8 +367,8 @@ def find_loaders(path, prog, stream, table):
     arrays_ok = varptr_arrays(prog)
     int_letters = defint_letters(prog)
 
-    # A RESTORE on the line BEFORE the loader redirects it too (REPLY 4
-    # item c: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
+    # A RESTORE on the line BEFORE the loader redirects it too (the
+    # 2026-09-10 seam audit: `100 RESTORE 900` / `110 FOR ...` was read as adjacent).
     # None: no RESTORE; 0: a bare RESTORE, the program's first DATA.
     #
     # A RESTORE belongs to the first loader BEHIND it: one after the loader
@@ -472,7 +472,7 @@ def find_loaders(path, prog, stream, table):
 
             # Find READ then POKE (or array READ) after the FOR: on this
             # line, or on the next few lines up to the NEXT that closes the
-            # loop (REPLY 4 item a: a loader split across lines was filed
+            # loop (the 2026-09-10 seam audit: a loader split across lines was filed
             # no-ml-in-listing).  read_line is the READ's own line, which
             # is where the DATA pointer is taken from.
             read_targets = None
@@ -633,7 +633,7 @@ def find_loaders(path, prog, stream, table):
             conf, cflags = grade(vals, need, exact, restore_target)
             flags.extend(cflags)
 
-            # The POKE's VALUE expression (REPLY 4 item c): `POKE I,A` stores
+            # The POKE's VALUE expression (the 2026-09-10 seam audit): `POKE I,A` stores
             # the DATA byte; `POKE I,255-A` or `POKE I,A XOR K` stores a
             # transform of it, so the raw DATA is not the routine.  Flag it
             # and never call it high confidence.

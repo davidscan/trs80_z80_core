@@ -268,7 +268,7 @@ class TestCalls(unittest.TestCase):
 
     def test_rom_from_an_unwritten_entry_says_no_routine(self):
         # nothing stored at the entry: the FFH bytes are RST 38H, and the
-        # text says the routine was never there (FINDING 25)
+        # text says the routine was never there (the 2026-09-15 USR sweep)
         m, sc = machine(b'')
         with self.assertRaises(Exception) as cm:
             m.run(0x7000, 0, 0xF000)

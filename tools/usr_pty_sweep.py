@@ -1,5 +1,5 @@
-"""The corpus USR sweep through a pseudo-terminal (FINDING 25's second
-recommendation).  Batch cannot reach a USR call that sits behind an INKEY$
+"""The corpus USR sweep through a pseudo-terminal (the second follow-up
+the batch sweep recommended).  Batch cannot reach a USR call that sits behind an INKEY$
 menu -- INKEY$ reads whole lines there and a matrix poll sees nothing -- so
 this drives each listing the way a person would: the interpreter's
 interactive prompt on a pty, ENTER at MEM SIZE?, CLOAD, RUN, then a

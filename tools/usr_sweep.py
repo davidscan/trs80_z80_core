@@ -1,4 +1,4 @@
-"""The corpus USR sweep (FINDING 25): every listing with USR evidence
+"""The corpus USR sweep: every listing with USR evidence
 (a call, a DEF USR or a vector POKE: phasea.extract.has_usr), run three ways in batch -- no core, the real core, and the
 real core again as the same-build control -- and classified by what the
 core changed.  Measurement, not emulator: the corpus is read in place

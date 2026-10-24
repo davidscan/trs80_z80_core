@@ -307,7 +307,7 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertEqual(p.bytes, [7, 8, 9])
 
     def test_loader_split_across_lines(self):
-        """READ and POKE on the lines after the FOR (REPLY 4 item a)."""
+        """READ and POKE on the lines after the FOR (the 2026-09-10 seam audit)."""
         p = only(run('10 FOR I=32000 TO 32002\n'
                      '20 READ J\n'
                      '30 POKE I,J\n'

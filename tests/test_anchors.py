@@ -13,8 +13,8 @@ but the sweep refuses to publish counts if they did not run.
 
 ON THE ENDGAME ANCHOR. The design notes described it as "endgame SCAN3
 (keyboard scan)". Phase A measured it as a PURE-COMPUTE routine with no
-3800H-38FFH access at all, and the archive's own FINDING 29
-notes agree:
+3800H-38FFH access at all, and the tracer's notes on the corpus's
+machine code agree:
 SCAN3 is "the whole EVENT-CLOCK scan", and line 1240 calls it as
 USR 1(VARPTR(IC(1))) where IC() is the event-clock array. The
 expectation was a mis-gloss; the measurement stands. These tests assert
@@ -91,7 +91,7 @@ class TestSpaceChaseAnchor(unittest.TestCase):
 
 @unittest.skipUnless(os.path.exists(ENDGAME), 'the ocr transcriptions are not present')
 class TestEndgameAnchor(unittest.TestCase):
-    """The FINDING 29 lock: count-, address- and entry-offset-checked."""
+    """The anchor lock: count-, address- and entry-offset-checked."""
 
     @classmethod
     def setUpClass(cls):
@@ -116,7 +116,7 @@ class TestEndgameAnchor(unittest.TestCase):
     def test_finding29_entry_offset_lock(self):
         """USR1 - USR0 = 13 = CALL(3) + 6 NOPs + LD (nn),HL(3) + RET(1).
 
-        FINDING 29 verified that offset against the PRINTED assembly
+        The tracer work verified that offset against the PRINTED assembly
         listing by hand. Re-deriving it from the bytes is an external
         check on the opcode table's lengths.
         """
@@ -162,7 +162,7 @@ class TestEndgameAnchor(unittest.TestCase):
 
 
 class TestByteRangeLint(unittest.TestCase):
-    """FINDING 29 wished for this lint; the extractor now has it.
+    """The tracer work wished for this lint; the extractor now has it.
 
     'A byte impossible as Z80 (281 at 4420) pinpointed the last digit
     error -- a POKE-loop DATA range lint (items 0..255) would have

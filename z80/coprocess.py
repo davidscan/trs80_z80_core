@@ -336,7 +336,7 @@ class Machine:
     def reset_ram(self):
         self.ram = bytearray(b'\xff' * 65536)
         # which bytes a frame or a routine has ever stored: the difference
-        # between "no ROM here" and "no routine here" (FINDING 25: 25 of the
+        # between "no ROM here" and "no routine here" (the 2026-09-15 USR sweep: 25 of the
         # sweep's 89 ERRs were calls into memory nothing had written)
         self.known = bytearray(65536)
         self.cpu = Z80(self.read, self.write, self.port_in, self.port_out)
