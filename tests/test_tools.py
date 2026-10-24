@@ -1,4 +1,5 @@
-"""The small tools beside the core: render_frames and tick_probe.
+"""The small tools beside the core: render_frames, tick_probe, kbd_probe
+and mkgame.
 
 Both are scripts rather than modules -- render_frames reads sys.argv at
 import -- so they are driven as subprocesses, the way they are used.
@@ -131,6 +132,55 @@ class TestTickProbeWaiting(unittest.TestCase):
             self.assertIsNone(mod.wait_for(r, [b'READY'], b'READY', 2))
         finally:
             os.close(r)
+
+
+BASIC = os.path.join(os.path.dirname(ROOT), 'trs80basic')
+
+
+def load_tool(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        name + '_under_test', os.path.join(ROOT, 'tools', name + '.py'))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@unittest.skipUnless(os.path.exists(os.path.join(BASIC, 'basic')),
+                     'no ../trs80basic/basic beside this repo')
+class TestPtyProbesReachThePrompt(unittest.TestCase):
+    """kbd_probe and tick_probe waited for "MEMORY SIZE" after the
+    interpreter's prompt became "MEM SIZE?", and every interactive row
+    aborted on a timeout (fixed 2026-09-28; no test failed without the
+    fix, the 2026-09-30 audit, ZM-5).  Each drives the real interpreter
+    through a pty to READY and out again."""
+
+    def test_kbd_probe_session(self):
+        mod = load_tool('kbd_probe')
+        with tempfile.TemporaryDirectory() as d:
+            t = mod.session(BASIC, mod.base_env(), ['PRINT 6*7'], d)
+            t.until(b'42', 15)
+            mod.leave(t)
+
+    def test_tick_probe_interactive(self):
+        mod = load_tool('tick_probe')
+        with tempfile.TemporaryDirectory() as d:
+            wall = mod.interactive(BASIC, 1, os.path.join(d, 'tick.json'), '0')
+        self.assertGreater(wall, 0)
+
+
+class TestMkgameRefusesNoRoom(unittest.TestCase):
+    """--org near the top used to build a routine that ran off 0FFFFH;
+    the check is pinned through the command line it guards (ZM-5)."""
+
+    def test_no_room_is_a_usage_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'mkgame.py'),
+                                '--org', '65500', '--out', os.path.join(d, 'g.bas')],
+                               capture_output=True, text=True, cwd=ROOT)
+            self.assertEqual(r.returncode, 2, r.stdout)
+            self.assertIn('leaves no room', r.stderr)
+            self.assertFalse(os.path.exists(os.path.join(d, 'g.bas')))
 
 
 if __name__ == '__main__':

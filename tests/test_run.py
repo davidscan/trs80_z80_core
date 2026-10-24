@@ -223,6 +223,10 @@ class TestCommandLine(Bounded):
             rc, out = self.main(neg, '--arg', '-3')
             self.assertEqual(rc, 0, out)
             self.assertIn('HL = 65533 (FFFDH)', out)
+            # and its 16-bit form is the same -3, not 65533 (?OV at 0A7FH)
+            rc, out = self.main(neg, '--arg', '0FFFDH')
+            self.assertEqual(rc, 0, out)
+            self.assertIn('HL = 65533 (FFFDH)', out)
             # a program loaded where the default stack is: the sentinel push
             # must not land on it (0FEFEH holds the RET this routine jumps to)
             high = os.path.join(d, 'high.asm')
