@@ -9,8 +9,9 @@ FILE is a .cmd load module, a .cas SYSTEM tape, raw .bin bytes (then
 --org is required) or .asm source, which is assembled first.  The
 program is loaded into the core's RAM and called the way `USR` calls a
 routine: the sentinel return address on the stack, the argument (--arg)
-answered at 0A7FH, HL back through 0A9AH, the other served ROM entries
-and `ERR rom` for any other.  There is no screen and no keyboard: video
+an integer in WRA1 (4121H, with type 2 at 40AFH and in A) and answered
+at 0A7FH, HL back through 0A9AH, the other served ROM entries and
+`ERR rom` for any other.  There is no screen and no keyboard: video
 bytes land in memory and are printed afterwards as the 16 by 64 screen,
 and every keyboard-matrix read sees no key.  The tick that would poll
 BREAK counts the budget instead: --cycles T-states (default 20 million,
@@ -68,8 +69,13 @@ class Headless:
         """Returns (how, detail): how is 'ret', 'result', 'budget' or an
         error code ('rom', 'halt', ...); detail is the text."""
         m = self.machine
+        # the state USR leaves for an integer argument (PROTOCOL.md, proto
+        # 3): type 2 at 40AFH and A, the value at 4121/4122H.  Without them
+        # a routine that reads 4121H, as 13 corpus listings do, saw 0
+        # where 0A7FH answered --arg (the 2026-09-30 audit, ZM-3).
+        v = arg & 0xFFFF
         try:
-            m.run(entry, arg, sp)
+            m.run(entry, arg, sp, 2, (0, 0, 0, 0, v & 0xFF, v >> 8, 0, 0))
         except CoreError as e:
             return e.code, e.text
         fields = dict(f.split('=') for f in self.lines[-1][4:].split())

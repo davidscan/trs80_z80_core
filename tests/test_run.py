@@ -175,6 +175,15 @@ class TestHeadless(Bounded):
         h, (how, detail) = self.run_src('  ORG 8000H\n  HALT\n')
         self.assertEqual(how, 'halt')
 
+    def test_the_argument_is_where_usr_leaves_it(self):
+        # ZM-3: an integer in WRA1 (4121H) and type 2 at 40AFH and in A,
+        # not only behind 0A7FH; -3 is FFFDH in both
+        for arg, want in ((21, 21), (-3, 0xFFFD)):
+            h, (how, _) = self.run_src('  ORG 8000H\n  LD HL,(4121H)\n  JP 0A9AH\n', arg=arg)
+            self.assertEqual((how, h.machine.cpu.hl), ('result', want))
+        h, _ = self.run_src('  ORG 8000H\n  LD L,A\n  LD A,(40AFH)\n  LD H,A\n  JP 0A9AH\n', arg=5)
+        self.assertEqual(h.machine.cpu.hl, 0x0202)
+
     def test_keyboard_reads_see_no_key(self):
         h, (how, _) = self.run_src('  ORG 8000H\n  LD A,(38FFH)\n  LD L,A\n  LD H,0\n  JP 0A9AH\n')
         self.assertEqual((how, h.machine.cpu.hl), ('result', 0))
