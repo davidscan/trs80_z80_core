@@ -230,7 +230,9 @@ def source_text(ins):
 
 def listing(data, base=0):
     """Human-readable listing -- used by the anchor validation.  The text
-    column is source: assembled at `base` it gives `data` back."""
+    column is source: assembled at `base` it gives `data` back, unless
+    the bytes run past 0FFFFH into 0000H, where the memory wraps but the
+    assembler's location counter may not (z80.asm refuses it)."""
     lines = []
     for ins in disassemble(data, base):
         hexb = ' '.join('%02X' % b for b in ins.raw)

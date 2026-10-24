@@ -171,7 +171,9 @@ class TestHeadless(Bounded):
         h, (how, detail) = self.run_src('  ORG 8000H\nLOOP JP LOOP\n', cycles=50_000)
         self.assertEqual(how, 'budget')
         self.assertGreaterEqual(h.machine.cycles, 50_000)
-        self.assertLess(h.machine.cycles, 50_000 + 9000)  # stopped at the next tick
+        self.assertLess(h.machine.cycles, 50_000 + 23)    # within one instruction (N-6)
+        h, (how, _) = self.run_src('  ORG 8000H\nLOOP JP LOOP\n', cycles=1)
+        self.assertEqual((how, h.machine.cycles), ('budget', 10))   # one JP, not a tick's 8880
         h, (how, detail) = self.run_src('  ORG 8000H\n  HALT\n')
         self.assertEqual(how, 'halt')
 
@@ -215,6 +217,9 @@ class TestCommandLine(Bounded):
                 f.write('  ORG 8000H\nLOOP JP LOOP\n')
             rc, out = self.main(loop, '--cycles', '1000')
             self.assertEqual(rc, 3)          # 2 is argparse's usage error (ZL-4)
+            with self.assertRaises(SystemExit) as e, redirect_stderr(io.StringIO()):
+                self.main(loop, '--cycles', '-5')
+            self.assertEqual(e.exception.code, 2)
             self.assertIn('budget', out)
             # --arg takes a negative as USR does: -3 reaches 0A7FH as 0FFFDH
             neg = os.path.join(d, 'neg.asm')

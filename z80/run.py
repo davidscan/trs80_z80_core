@@ -31,7 +31,7 @@ import argparse
 import sys
 
 from .version import add_version_argument
-from .coprocess import CoreError, Machine, VIDEO_HI, VIDEO_LO
+from .coprocess import CoreError, Machine, TICK_TSTATES, VIDEO_HI, VIDEO_LO
 from .load import LoadError, load_file
 
 MHZ = 1.77408
@@ -44,6 +44,11 @@ class Headless:
     def __init__(self, cycles):
         self.budget = cycles
         self.machine = Machine(self._send, self._recv, 0.0)
+        # the budget is read at a tick, every 8870 T-states, so --cycles 1
+        # ran 8880 and 100000 ran 106560 (the 2026-09-30 audit, N-6): the
+        # next tick is put at the budget instead, and a run stops within
+        # one instruction of it
+        self.machine.tick_every = max(1, min(self.machine.tick_every, cycles))
         self.last = ''
         self.lines = []
 
@@ -55,8 +60,10 @@ class Headless:
     def _recv(self):
         if self.last.startswith('K '):
             return 'K 0'
-        if self.machine.cycles >= self.budget:
+        m = self.machine
+        if m.cycles >= self.budget:
             return 'BREAK'
+        m.tick_every = max(1, min(TICK_TSTATES, self.budget - m.cycles))
         return 'OK'
 
     def load(self, segments):
@@ -219,6 +226,8 @@ def main(argv=None):
                          "of EDTASM's left to right (z80.asm's --precedence)")
     add_version_argument(ap)
     a = ap.parse_args(argv)
+    if a.cycles < 1:
+        ap.error('--cycles is a T-state budget, 1 or more')
 
     try:
         segments, entry, name = load_file(a.file, org=a.org, entry=a.entry,

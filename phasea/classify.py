@@ -39,6 +39,11 @@ PRINTER_LO, PRINTER_HI = 0x37E0, 0x37FF
 ROM_HI = 0x37FF
 
 # The two ROM entry points Stage 1 was specified with (the USR idiom).
+# This is Stage 1's DEFINITION, which the published gate counts by
+# ("Stage 2 needed"), not what the core serves today: that is
+# z80.coprocess.SERVED, a superset (01C9H CLS, 1A19H READY, the keyboard
+# scan and more).  A file classed as needing Stage 2 HLE may run in the
+# core as it is; tools/romcalls.py says which calls it answers.
 STAGE1_TRAPS = {0x0A7F, 0x0A9A}
 
 # Names for what we find: the entry points named in hints/model1.hints,

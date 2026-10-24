@@ -164,9 +164,11 @@ checks them when the corpus is linked beside the repo, reading the
 archive's zips in place). Every instruction comes from the same opcode table the core
 executes and the disassembler prints from, so a disassembly listing is
 valid source again: assembled at the same address it gives the same bytes
-(bytes the assembler would encode another way -- an undefined `ED` opcode,
-a second encoding, a prefix that changes nothing -- are listed as `DB`
-with the mnemonic as a comment). Errors are printed as `file:line: message`, all of
+(unless they run past 0FFFFH into 0000H: memory wraps there, and the
+assembler refuses a location counter past the top; bytes the assembler
+would encode another way -- an undefined `ED` opcode, a second encoding,
+a prefix that changes nothing -- are listed as `DB` with the mnemonic as
+a comment). Errors are printed as `file:line: message`, all of
 them, and nothing is written. **Writes:** the `-o` file and the `--list`
 file; with neither, the listing goes to stdout.
 

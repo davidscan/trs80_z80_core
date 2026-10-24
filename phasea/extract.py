@@ -965,7 +965,10 @@ def grade(vals, need, exact, restored):
     if not exact:
         flags.append('data-run-not-on-boundary')
         return 'medium', flags
-    return ('high' if not restored else 'high'), flags
+    # a restored run grades as a scanned one: the repair leaves no
+    # signal of its own to grade by (`restored` stays in the signature
+    # for the callers that record it)
+    return 'high', flags
 
 
 def _make_varptr_payload(fname, arr, lineno, count, vals, exact, restored):
