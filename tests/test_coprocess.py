@@ -861,6 +861,20 @@ class TestTransport(unittest.TestCase):
         # CALL's return address and the sentinel -- one coalesced run each
         self.assertEqual(out[2:5], ['W 16559:2', 'W 16669:0,0,0,0,42,0,0,0', 'W 61436:3,112,253,47'])
 
+    def test_0a7fh_leaves_the_integer_in_wra1_without_0a9ah(self):
+        """ZM-4: 0A7FH's own exit stores (WRA1 4121/4122H, 2 at 40AFH,
+        A = 2), seen with a single argument and no 0A9AH after it to
+        make the same stores."""
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=-3.5 argtype=4 mbf=0,0,0,0,0,0,224,130 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'M 28672:205,127,10,111,201',             # CALL 0A7FH / LD L,A / RET
+            'GO',
+            'BYE'])
+        self.assertTrue(out[1].startswith('RET hl=65282 result=0'), out)   # L = A = 2, H = FFH
+        # -3.5 floors to -4: FFFCH over the single's first two bytes
+        self.assertEqual(out[2:4], ['W 16559:2', 'W 16669:0,0,0,0,252,255,224,130'])
+
     def test_printer_status_reads_ready_after_a_write(self):
         """ZL-6: a routine prints by writing 37E8H and polls it for ready;
         the written byte must not read back as the status."""
