@@ -94,6 +94,7 @@ import os
 import re
 import sys
 
+from .version import add_version_argument
 from .table import INVERSE
 
 REGS = {'A', 'B', 'C', 'D', 'E', 'H', 'L', 'F', 'I', 'R',
@@ -1092,6 +1093,7 @@ def main(argv=None):
                     help="evaluate expressions with the usual operator precedence (2+3*4 is 14) "
                          "instead of EDTASM's left to right (20): for a listing written for a "
                          "Zilog-style assembler, or new code")
+    add_version_argument(ap)
     a = ap.parse_args(argv)
 
     # An output that IS the source would be opened for writing over it: a

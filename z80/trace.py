@@ -43,6 +43,7 @@ proven.
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .version import add_version_argument
 from .disasm import decode, source_text, db_text
 
 # Undocumented opcodes by kind, and whether the kind is a
@@ -1058,6 +1059,7 @@ def main(argv=None):
                          'zero key, each word an address in the image); what they '
                          'reach is code marked g, never proven; a conflict drops '
                          'the table')
+    add_version_argument(ap)
     a = ap.parse_args(argv)
     try:
         base = _addr(a.base) if a.base is not None else None

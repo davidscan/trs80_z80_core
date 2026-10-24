@@ -13,6 +13,7 @@ callers can report confidence instead of pretending certainty.
 from dataclasses import dataclass
 from typing import Optional
 
+from .version import add_version_argument
 from .table import TABLE, _hex
 
 
@@ -254,6 +255,7 @@ def main(argv=None):
     ap.add_argument('--base', default='0', help='load address (decimal, 0x.., or ..H)')
     ap.add_argument('--skip', type=int, default=0, help='bytes of the file to skip first')
     ap.add_argument('--length', type=int, default=None, help='bytes to disassemble')
+    add_version_argument(ap)
     a = ap.parse_args(argv)
     b = a.base.strip()
     try:

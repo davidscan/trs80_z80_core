@@ -1032,6 +1032,10 @@ def fields(line):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if '--version' in argv:
+        from .version import version_text
+        sys.stdout.write(version_text() + '\n')
+        return 0
     fixture = Fixture() if '--fixture' in argv else None
     out = sys.stdout
 

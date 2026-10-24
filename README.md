@@ -44,6 +44,7 @@ file named by `TRS80_SOUND_WAV`.
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
 | `--fixture` | off | adds machine-code routines behind the interpreter's reference stub's canned entry addresses (7000H-7010H and 7777H) | running trs80basic's conformance suite against the real core: `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh` |
+| `--version` | | prints the core's release, its exact build in a checkout (as `git describe` names it), and the protocol, then exits; `python3 -m z80.asm`, `z80.disasm`, `z80.run` and `z80.trace` take it too | a bug report: which core ran |
 
 The core reads these from the environment it inherits from the interpreter:
 
@@ -651,8 +652,8 @@ back and the core executes.
 - **A failed player is silent.** A player that cannot start, or that exits,
   turns live sound off for the session without a message. The core may not
   write to the terminal. The WAV carries on.
-- **`core.py` has no `--help`.** Started by hand, it silently waits for the
-  interpreter's first message. Leave with Ctrl-D.
+- **`core.py` has no `--help`** (only `--version`). Started by hand, it
+  silently waits for the interpreter's first message. Leave with Ctrl-D.
 - **`tools/usr_sweep.py` ignores any argument but `--accept-input-set`.**
   `--help` starts the ten-minute sweep.
 

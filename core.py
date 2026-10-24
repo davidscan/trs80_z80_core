@@ -6,7 +6,8 @@
 Speaks PROTOCOL.md version 3 on stdin/stdout (see z80/coprocess.py).
 `--fixture` adds the machine-code routines behind the stub's canned entry
 addresses so trs80basic's `sh programs/tests/z80.sh` can run against a
-real core (DD-17).
+real core (DD-17).  `--version` prints the core's release, its exact build
+in a checkout, and the protocol, then exits.
 """
 import os
 import sys

@@ -30,6 +30,7 @@ Standard library only.
 import argparse
 import sys
 
+from .version import add_version_argument
 from .coprocess import CoreError, Machine, VIDEO_HI, VIDEO_LO
 from .load import LoadError, load_file
 
@@ -216,6 +217,7 @@ def main(argv=None):
     ap.add_argument('--precedence', action='store_true',
                     help="assemble a source file with the usual operator precedence instead "
                          "of EDTASM's left to right (z80.asm's --precedence)")
+    add_version_argument(ap)
     a = ap.parse_args(argv)
 
     try:
