@@ -183,6 +183,8 @@ def delay_count(fps, overhead):
     (DEC DE 6, LD A,D 4, OR E 4, JR NZ 12), read from the table."""
     per_turn = (cycles_of('DEC', ('DE',)) + cycles_of('LD', ('A', 'D'))
                 + cycles_of('OR', ('E',)) + cycles_of('JR', ('NZ', 'd')))
+    if fps <= 0:
+        raise ValueError('--fps is frames a second, 1 or more')
     frame = MHZ * 1e6 / fps
     n = int((frame - overhead) / per_turn)
     # the loop counts down in DE, so it cannot be told to run more than
@@ -192,7 +194,12 @@ def delay_count(fps, overhead):
         raise ValueError('%g fps needs a delay of %d turns, and DE counts to '
                          '65535: the slowest this loop reaches is %.2f fps'
                          % (fps, n, MHZ * 1e6 / (0xFFFF * per_turn + overhead)))
-    return max(1, n), per_turn
+    # and at the other end a frame shorter than the loop's own overhead
+    # was clamped to one turn and reported at the asked-for rate (ZL-8)
+    if n < 1:
+        raise ValueError('%g fps leaves no time for the delay: the fastest this loop '
+                         'reaches is %d fps' % (fps, int(MHZ * 1e6 / (overhead + per_turn))))
+    return n, per_turn
 
 
 def build(org, fps, scan=0):
@@ -518,7 +525,14 @@ def main():
 
     if not 0 <= a.org <= 65535:
         ap.error('--org is an address, 0-65535')
-    asm, code, delay, per_turn = build(a.org, a.fps, a.scan)
+    # --scan is the B of a DJNZ loop: 0 adds none, 1-255 that many reads,
+    # and -1 became LD B,255 reported as 0 reads (ZL-8)
+    if not 0 <= a.scan <= 255:
+        ap.error('--scan is extra reads a frame, 0-255')
+    try:
+        asm, code, delay, per_turn = build(a.org, a.fps, a.scan)
+    except ValueError as e:              # a rate the delay loop cannot make
+        ap.error(str(e))
     if a.org + len(code) > 65536:
         ap.error('--org %d leaves no room for the %d-byte routine' % (a.org, len(code)))
     if a.disasm:

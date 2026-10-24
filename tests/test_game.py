@@ -8,6 +8,7 @@ the only way to know the catch, ramp and life paths run at all.
 """
 import os
 import sys
+import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -178,6 +179,30 @@ class TestValuesThatDoNotFitAreRefused(unittest.TestCase):
                       below)
         self.assertNotIn('55 POKE', below)
         self.assertIn('40 E=-32768 : C=0', mkgame.listing(code, 0x8000, delay, 30))
+
+    def test_the_command_line_refuses_what_it_would_misreport(self):
+        """ZL-8: --fps 0 was a ZeroDivisionError, --fps -5 and 100000 built
+        a one-turn delay reported at the asked-for rate, --scan -1 was LD
+        B,255 reported as 0 reads; each is a usage error now."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, 'g.bas')
+            for args, said in ((['--fps', '0'], '1 or more'), (['--fps', '-5'], '1 or more'),
+                               (['--fps', '100000'], 'fastest this loop reaches is 4164 fps'),
+                               (['--fps', '1'], 'slowest'),
+                               (['--scan', '-1'], '0-255'), (['--scan', '256'], '0-255')):
+                with self.subTest(args):
+                    r = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'mkgame.py'),
+                                        '--out', out] + args, capture_output=True, text=True)
+                    self.assertEqual(r.returncode, 2, r.stderr)
+                    self.assertIn(said, r.stderr)
+                    self.assertNotIn('Traceback', r.stderr)
+                    self.assertFalse(os.path.exists(out))
+            r = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'mkgame.py'),
+                                '--out', out, '--fps', '2', '--scan', '255'],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn('256 keyboard reads a frame', r.stdout)
 
     def test_the_shipped_demo_is_unchanged(self):
         """The fix must not move demo/catch.bas."""

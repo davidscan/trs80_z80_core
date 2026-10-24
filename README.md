@@ -291,8 +291,8 @@ the host can. **Writes:** `demo/catch.bas`.
 |---|---|---|---|
 | `--out PATH` | `demo/catch.bas` | where the listing goes | keeping a variant |
 | `--org N` | `32000` | where the routine is POKEd | leaving room for other code |
-| `--fps N` | `30` | frames a second, which sets the frame delay | a faster or slower game |
-| `--scan N` | `0` | extra keyboard reads a frame | stressing the interactive path |
+| `--fps N` | `30` | frames a second, which sets the frame delay (2 to 4164; outside that the delay loop cannot make it, a usage error) | a faster or slower game |
+| `--scan N` | `0` | extra keyboard reads a frame, 0-255 | stressing the interactive path |
 | `--disasm` | off | prints the routine instead of writing it | checking the generated code |
 | `--selftest` | off | plays it in the core with a bot at the keyboard | checking the game logic |
 | `--frames N` | `400` | frames for `--selftest` | a longer self-test |
