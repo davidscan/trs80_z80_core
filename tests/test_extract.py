@@ -125,6 +125,20 @@ class TestBasicSurface(unittest.TestCase):
                              '10 PRINT 1\n')
         self.assertEqual([ln for ln, _b, _s in prog], [10])
 
+    def test_lines_are_cut_as_the_interpreter_loads_them(self):
+        # N-6: a CR-only file (the TRS-80's own ASCII save) ran together as
+        # one line; an LF inside it is the down-arrow line feed in a string
+        prog = parse_program('10 PRINT 1\r20 PRINT "A\nB"\r30 END\r')
+        self.assertEqual([(ln, b) for ln, b, _s in prog],
+                         [(10, 'PRINT 1'), (20, 'PRINT "A\nB"'), (30, 'END')])
+        # LF and CR LF files as before
+        for text in ('10 PRINT 1\n20 END\n', '10 PRINT 1\r\n20 END\r\n'):
+            self.assertEqual([(ln, b) for ln, b, _s in parse_program(text)],
+                             [(10, 'PRINT 1'), (20, 'END')])
+        # a line given twice is the later one, and the program is in line order
+        prog = parse_program('20 PRINT 2\n10 PRINT 1\n20 PRINT 3\n')
+        self.assertEqual([(ln, b) for ln, b, _s in prog], [(10, 'PRINT 1'), (20, 'PRINT 3')])
+
 
 class TestUsrPopulation(unittest.TestCase):
     """ZM-9: the sweeps' population is the extractor's USR evidence, the

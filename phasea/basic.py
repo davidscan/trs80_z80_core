@@ -68,11 +68,24 @@ def split_statements(body):
     return [s for s in out]
 
 
+def cut_lines(text):
+    """The family's line cut (trs80basic's prog_load and tools/tok.py): LF,
+    CR LF, or CR alone -- a file with no CR LF pair and more CRs than LFs
+    is a TRS-80 ASCII save, cut at CR only, and an LF inside it is the
+    down-arrow line feed in a REM or a string, not a line end.  Cutting
+    at LF alone ran such a file together as one line (the 2026-09-30
+    audit, N-6)."""
+    if '\r\n' not in text and text.count('\r') > text.count('\n'):
+        return text.split('\r')
+    return [raw.rstrip('\r') for raw in text.split('\n')]
+
+
 def parse_program(text, drop_blocked_header=True):
-    """-> list of (lineno, raw_body, [statements]) in file order."""
-    prog = []
-    for raw in text.split('\n'):
-        raw = raw.rstrip('\r')
+    """-> list of (lineno, raw_body, [statements]) in line-number order,
+    as the interpreter stores a loaded file: a line number given twice is
+    the later line, as typing it again replaces it (N-6)."""
+    prog = {}
+    for raw in cut_lines(text):
         if not raw.strip():
             continue
         if drop_blocked_header and BLOCKED_HDR.match(raw):
@@ -82,8 +95,8 @@ def parse_program(text, drop_blocked_header=True):
             continue
         lineno = int(m.group(1))
         body = m.group(2)
-        prog.append((lineno, body, split_statements(body)))
-    return prog
+        prog[lineno] = (lineno, body, split_statements(body))
+    return [prog[n] for n in sorted(prog)]
 
 
 def strip_quoted(stmt):
