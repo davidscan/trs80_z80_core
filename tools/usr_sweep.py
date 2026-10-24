@@ -11,7 +11,9 @@ frame it was given and the calls it made can be read afterwards.
     python3 tools/usr_sweep.py            # ~10 minutes; writes out/usr_sweep/
 
 It refuses (exit 2, results.json untouched) on an empty population or an
-input set that is not phasea/sweep.py's pinned one (--accept-input-set).
+input set that is not phasea/sweep.py's pinned one (--accept-input-set),
+and publishes nothing (exit 1) when the core never started in a run:
+such a listing is `core-failed`, not a class of the measurement.
 
 results.json is {"inputs": ..., "results": [...]}: the inputs are the
 core's and the interpreter's commits (+dirty), the interpreter's
@@ -123,6 +125,17 @@ def stop(r):
 
 BASIC_ERROR_RE = re.compile(r'^\?[A-Z/0-9]{2} ERROR')
 
+# the interpreter's notices for a core that never ran: it could not be
+# started, or it answered the handshake with another protocol (p77)
+NEVER_STARTED_RE = re.compile(r"^USR CORE: (cannot start '|'.*' speaks protocol )")
+
+
+def never_started(r):
+    """True when the run's core never ran and USR fell back to the stub:
+    then the run measured the stub twice, and a listing whose stub run
+    counted calls was published as 'stub-only-reached' (ZL-7)."""
+    return any(NEVER_STARTED_RE.match(l) for l in r['err'].splitlines())
+
 
 def git_state(repo):
     """'<commit>' or '<commit>+dirty' for the repo at `repo`; '?' if none."""
@@ -193,7 +206,8 @@ def one(path):
     tally = int(m.group(1)) if m else 0
     notices = [l for l in core['err'].splitlines() if l.startswith('USR CORE:')]
     equal = norm(stub) == norm(core); stable = norm(core) == norm(ctrl)
-    if errs: cls = 'err'
+    if never_started(core) or never_started(ctrl): cls = 'core-failed'   # not a measurement
+    elif errs: cls = 'err'
     elif core['timeout'] and not stub['timeout']: cls = 'timeout-core-only'
     elif core['timeout']: cls = 'timeout-both'
     elif calls == 0 and tally == 0 and BASIC_ERROR_RE.match(stop(stub)):
@@ -229,6 +243,11 @@ def main(argv=None):
         for i, r in enumerate(ex.map(one, pop)):
             res.append(r)
             if i % 25 == 0: print(i, r['file'], r['cls'], flush=True)
+    failed = sum(1 for r in res if r['cls'] == 'core-failed')
+    if failed:
+        print('REFUSING TO PUBLISH: the core never started in %d of %d listings (%s); '
+              'results.json is left as it was.' % (failed, len(res), CORE), flush=True)
+        return 1
     meta.update(finished=time.strftime('%Y-%m-%dT%H:%M:%S'),
                 load_end=[round(x, 2) for x in os.getloadavg()])
     publish(dict(inputs=meta, results=res), OUT + '/results.json')

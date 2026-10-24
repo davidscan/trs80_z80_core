@@ -12,8 +12,11 @@ REACHED and what happened to it; the output is not compared.
     python3 tools/usr_pty_sweep.py --files a.bas b.bas  # named listings (corpus-relative)
 
 Reads out/usr_sweep/results.json (tools/usr_sweep.py) for the population
-unless --files is given; writes out/usr_pty_sweep/results.json and the
-per-file protocol logs under out/usr_pty_sweep/runs/.
+unless --files is given, and refuses one recorded on another core,
+interpreter, corpus or input set than this run's (--accept-stale takes
+it anyway); refuses a named listing that is not there; writes
+out/usr_pty_sweep/results.json and the per-file protocol logs under
+out/usr_pty_sweep/runs/.
 """
 import argparse, glob, json, os, pty, re, select, shutil, signal, sys, time
 from collections import Counter
@@ -30,6 +33,15 @@ SPAN = 12.0          # seconds of keystrokes after RUN
 KEY_EVERY = 0.35
 
 
+def listings():
+    return sorted(glob.glob(CORPUS + '/runnable/*.bas') + glob.glob(CORPUS + '/blocked/*/*.bas'))
+
+
+def batch_results():
+    with open(os.path.join(HERE, 'out', 'usr_sweep', 'results.json')) as fh:
+        return json.load(fh)
+
+
 def population(cls, files):
     if files:
         return [os.path.join(CORPUS, f) for f in files]
@@ -37,23 +49,48 @@ def population(cls, files):
         # the extractor's USR evidence, as usr_sweep (ZM-9)
         sys.path.insert(0, HERE)
         from phasea.extract import has_usr
-        return [f for f in sorted(glob.glob(CORPUS + '/runnable/*.bas') +
-                                  glob.glob(CORPUS + '/blocked/*/*.bas'))
-                if has_usr(f)]
-    res = json.load(open(os.path.join(HERE, 'out', 'usr_sweep', 'results.json')))
+        return [f for f in listings() if has_usr(f)]
+    res = batch_results()
     if isinstance(res, dict):        # {inputs, results} since ZM-8
         res = res['results']
     return [os.path.join(CORPUS, r['file']) for r in res if r['cls'] == cls]
 
 
+def batch_results_problem():
+    """Why the batch sweep's results.json is not this run's population, or
+    None.  The class it names was measured on the builds and corpus it
+    records; read on others it is a population of another day (ZL-7)."""
+    sys.path.insert(0, HERE)
+    from tools.usr_sweep import git_state
+    from phasea.sweep import fingerprint
+    try:
+        res = batch_results()
+    except (OSError, ValueError) as e:
+        return 'no batch sweep results to take the class from (%s)' % e
+    rec = res.get('inputs') if isinstance(res, dict) else None
+    if not rec:
+        return "the batch sweep's results.json records no inputs (older than ZM-8)"
+    now = dict(core=git_state(HERE), interpreter=git_state(BASIC),
+               corpus=git_state(os.path.dirname(CORPUS)),
+               input_set=fingerprint(listings(), CORPUS))
+    moved = ['%s %s, now %s' % (k, rec.get(k), v) for k, v in now.items() if rec.get(k) != v]
+    if moved:
+        return "the batch sweep's results.json was recorded on another build or set (%s)" % '; '.join(moved)
+    return None
+
+
 def population_problem(cls, files, pop):
     """Why this population must not be measured, or None (ZM-11's sibling:
     an empty one printed DONE and overwrote results.json with [])."""
+    missing = [os.path.relpath(f, CORPUS) for f in pop if not os.path.isfile(f)]
+    if missing:
+        # CLOAD of a name that is not there ran nothing, and the listing
+        # was counted 'not-reached' (ZL-7)
+        return '%d listing(s) not in the corpus: %s' % (len(missing), ', '.join(missing[:5]))
     if cls == 'all' and not files:
         sys.path.insert(0, HERE)
         from phasea.sweep import input_set_problem
-        why = input_set_problem(sorted(glob.glob(CORPUS + '/runnable/*.bas') +
-                                       glob.glob(CORPUS + '/blocked/*/*.bas')), CORPUS)
+        why = input_set_problem(listings(), CORPUS)
         if why:
             return why
     if not pop:
@@ -196,11 +233,18 @@ def main():
                     help="batch sweep class to take, or 'all' (default: no-usr-reached)")
     ap.add_argument('--files', nargs='*', help='corpus-relative listings instead')
     ap.add_argument('--workers', type=int, default=5)
+    ap.add_argument('--accept-stale', action='store_true',
+                    help="take the class from a batch results.json recorded on other builds")
     a = ap.parse_args()
     if not os.path.isdir(CORPUS):
         sys.exit('no corpus archive at %s: link the listing archive as `corpus` at this '
                  "repo's root, or set TRS80_CORPUS (README, Commands)" % os.path.dirname(CORPUS))
     os.makedirs(RUNS, exist_ok=True); os.makedirs(CWD, exist_ok=True)
+    why = None if (a.files or a.cls == 'all' or a.accept_stale) else batch_results_problem()
+    if why:
+        print('REFUSING TO MEASURE: %s; --accept-stale takes it anyway, results.json '
+              'is left as it was.' % why, flush=True)
+        return 2
     pop = population(a.cls, a.files)
     print('population', len(pop), flush=True)
     why = population_problem(a.cls, a.files, pop)

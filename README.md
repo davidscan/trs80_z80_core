@@ -441,7 +441,9 @@ run is classified by what the core changed, and `results.json` records
 the inputs beside the classes: both builds, the corpus commit and
 fingerprint, the controls and the host load. It takes about ten minutes.
 **Writes:** `out/usr_sweep/`. Its one argument, `--accept-input-set`,
-runs a set that is not the pinned one.
+runs a set that is not the pinned one. If the core never started in a
+run (it could not be launched, or it speaks another protocol) the listing
+is `core-failed` and the sweep exits 1 without writing `results.json`.
 
 #### `python3 tools/trace_corpus.py`
 
@@ -468,6 +470,9 @@ totals). About a minute and a half.
 
 The same listings, driven through a pseudo-terminal with a keystroke script,
 for routines that sit behind an `INKEY$` menu batch mode cannot reach.
+It refuses (exit 2) a `--class` population whose `results.json` was
+recorded on another core, interpreter, corpus or input set, and a
+listing that is not in the archive.
 **Writes:** `out/usr_pty_sweep/`.
 
 | argument | default | what it does | when you'd use it |
@@ -475,6 +480,7 @@ for routines that sit behind an `INKEY$` menu batch mode cannot reach.
 | `--class CLS` | `no-usr-reached` | takes the listings `usr_sweep.py` put in this class, or `all` | the normal follow-up to `usr_sweep.py` |
 | `--files KEY...` | none | archive-relative listings instead of a class | re-running a few |
 | `--workers N` | `5` | listings run in parallel | a slower or faster machine |
+| `--accept-stale` | off | takes the `--class` population from a `results.json` of other builds | knowingly following up an older batch sweep |
 
 ### Measurement probes
 

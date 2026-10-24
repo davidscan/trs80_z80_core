@@ -311,7 +311,105 @@ class TestTheInputSetIsPinned(unittest.TestCase):
 
     def test_pty_sweep_refuses_an_empty_population(self):
         self.assertIn('empty', usr_pty_sweep.population_problem('no-usr-reached', None, []))
-        self.assertIsNone(usr_pty_sweep.population_problem('x', ['a.bas'], ['a']))
+        with tempfile.TemporaryDirectory() as d:
+            progs = tree(d, ['runnable/a.bas'])
+            saved = usr_pty_sweep.CORPUS
+            usr_pty_sweep.CORPUS = progs
+            try:
+                a = os.path.join(progs, 'runnable/a.bas')
+                self.assertIsNone(usr_pty_sweep.population_problem('x', ['runnable/a.bas'], [a]))
+                # ZL-7: a named listing that is not there was driven anyway
+                # (CLOAD of nothing) and counted 'not-reached'
+                why = usr_pty_sweep.population_problem(
+                    'x', ['runnable/a.bas', 'runnable/typo.bas'],
+                    [a, os.path.join(progs, 'runnable/typo.bas')])
+                self.assertIn('runnable/typo.bas', why)
+            finally:
+                usr_pty_sweep.CORPUS = saved
+
+
+class TestAFailureIsNotAMeasurement(unittest.TestCase):
+    """ZL-7: a core that could not start left USR to the stub, and the
+    listing was published as 'stub-only-reached'; the pty sweep took its
+    population from a results.json of any age."""
+
+    def one_with(self, core_err):
+        with tempfile.TemporaryDirectory() as d:
+            saved = (usr_sweep.CORPUS, usr_sweep.RUNS, usr_sweep.run)
+            usr_sweep.CORPUS, usr_sweep.RUNS = os.path.join(d, 'corpus'), os.path.join(d, 'runs')
+            stub_err = 'USR STUB: 1 CALL NOT EXECUTED (UNDEFINED x1)\n'
+            usr_sweep.run = lambda path, z80, cwd: dict(
+                rc=0, timeout=False, out=' 5\n', secs=0.0,
+                err=stub_err if z80 == '' else core_err + stub_err)
+            try:
+                return usr_sweep.one(os.path.join(usr_sweep.CORPUS, 'runnable', 'x.bas'))
+            finally:
+                usr_sweep.CORPUS, usr_sweep.RUNS, usr_sweep.run = saved
+
+    def test_a_core_that_never_started_is_core_failed(self):
+        for notice in ("USR CORE: cannot start 'python3 /x/core.py'; USR is the stub for this session",
+                       "USR CORE: 'python3 core.py' speaks protocol 2, this interpreter 3; USR is the stub"):
+            with self.subTest(notice):
+                self.assertEqual(self.one_with(notice + '\n')['cls'], 'core-failed')
+        # a core that ran and died is still the measurement's own class
+        died = 'USR CORE: no reply within 5000 ms; the core is dead for this session, USR is the stub\n'
+        self.assertNotEqual(self.one_with(died)['cls'], 'core-failed')
+
+    def test_usr_sweep_publishes_nothing_when_a_core_failed(self):
+        m = usr_sweep
+        with tempfile.TemporaryDirectory() as d:
+            saved = m.CORPUS, m.OUT, m.RUNS, m.CWD, m.refusal, m.one, m.inputs
+            m.CORPUS = tree(os.path.join(d, 'programs'), ['runnable/usr1.bas'])
+            m.OUT = os.path.join(d, 'out')
+            m.RUNS, m.CWD = m.OUT + '/runs', m.OUT + '/cwd'
+            os.makedirs(m.OUT)
+            with open(m.OUT + '/results.json', 'w') as f:
+                f.write('[{"file": "earlier"}]')
+            m.refusal = lambda files, pop, accept=False: None
+            m.inputs = lambda files, pop: {}
+            m.one = lambda path: dict(file='runnable/usr1.bas', cls='core-failed', errs=[])
+            out = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out):
+                    rc = m.main([])
+            finally:
+                with open(m.OUT + '/results.json') as f:
+                    kept = f.read()
+                m.CORPUS, m.OUT, m.RUNS, m.CWD, m.refusal, m.one, m.inputs = saved
+        self.assertEqual(rc, 1)
+        self.assertIn('never started', out.getvalue())
+        self.assertNotIn('DONE', out.getvalue())
+        self.assertEqual(kept, '[{"file": "earlier"}]')
+
+    def test_the_pty_sweep_refuses_a_batch_population_of_other_builds(self):
+        import json
+        m = usr_pty_sweep
+        with tempfile.TemporaryDirectory() as d:
+            progs = tree(os.path.join(d, 'corpus', 'programs'), ['runnable/usr1.bas'])
+            out = os.path.join(d, 'out', 'usr_sweep')
+            os.makedirs(out)
+            saved = m.HERE, m.CORPUS, m.BASIC
+            m.HERE, m.CORPUS, m.BASIC = d, progs, os.path.join(d, 'basic')
+            try:
+                def write(inputs):
+                    with open(os.path.join(out, 'results.json'), 'w') as f:
+                        json.dump(dict(inputs=inputs, results=[]), f)
+                now = dict(core=usr_sweep.git_state(d), interpreter=usr_sweep.git_state(m.BASIC),
+                           corpus=usr_sweep.git_state(os.path.dirname(progs)),
+                           input_set=sweep.fingerprint(
+                               [os.path.join(progs, 'runnable/usr1.bas')], progs))
+                write(now)
+                self.assertIsNone(m.batch_results_problem())
+                write(dict(now, interpreter='5f5c320'))
+                self.assertIn('interpreter 5f5c320', m.batch_results_problem())
+                write(dict(now, input_set='0' * 40))
+                self.assertIn('input_set', m.batch_results_problem())
+                write({})
+                self.assertIn('records no inputs', m.batch_results_problem())
+                os.remove(os.path.join(out, 'results.json'))
+                self.assertIn('no batch sweep results', m.batch_results_problem())
+            finally:
+                m.HERE, m.CORPUS, m.BASIC = saved
 
 
 if __name__ == '__main__':
