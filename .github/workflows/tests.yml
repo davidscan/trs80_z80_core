@@ -61,4 +61,13 @@ jobs:
           Z80_VECTORS: all
           Z80_VECTORS_REQUIRE: '1'
           Z80_INTERP_REQUIRE: '1'
-        run: python3 -m unittest discover -s tests
+        # -v so every skip is named; check_skips fails on any but the
+        # private inputs CI cannot have (the corpus, the ocr transcriptions)
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s tests -v 2>&1 | tee test.log
+      - name: Name the skipped tests
+        if: always()
+        run: |
+          set -o pipefail
+          python3 tools/check_skips.py test.log | tee -a "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,5 @@
-"""The small tools beside the core: render_frames, tick_probe, kbd_probe
-and mkgame.
+"""The small tools beside the core: render_frames, tick_probe, kbd_probe,
+mkgame and check_skips.
 
 Both are scripts rather than modules -- render_frames reads sys.argv at
 import -- so they are driven as subprocesses, the way they are used.
@@ -181,6 +181,40 @@ class TestMkgameRefusesNoRoom(unittest.TestCase):
             self.assertEqual(r.returncode, 2, r.stdout)
             self.assertIn('leaves no room', r.stderr)
             self.assertFalse(os.path.exists(os.path.join(d, 'g.bas')))
+
+
+class TestCheckSkips(unittest.TestCase):
+    """tools/check_skips.py: CI printed "OK (skipped=17)" and nothing said
+    which, so a test whose input went missing passed silently."""
+
+    LOG = (
+        "test_a (test_x.T.test_a) ... ok\n"
+        "test_b (test_x.T.test_b) ... skipped 'the corpus is not linked beside this repo'\n"
+        "test_c (test_y.U.test_c)\n"
+        "What it checks, from the docstring ... skipped 'vectors not fetched (tools/fetch_vectors.py --all)'\n"
+        "test_d (test_y.U.test_d) ... skipped 'the ocr transcriptions are not present'\n"
+        "OK (skipped=3)\n")
+
+    def check(self, log):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'test.log')
+            with open(path, 'w') as f:
+                f.write(log)
+            return subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'check_skips.py'), path],
+                                  capture_output=True, text=True)
+
+    def test_an_unexpected_skip_is_named_and_fails(self):
+        r = self.check(self.LOG)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn('UNEXPECTED SKIP test_c (test_y.U.test_c): vectors not fetched', r.stdout)
+        self.assertIn('skipped test_b (test_x.T.test_b): the corpus is not linked', r.stdout)
+        self.assertIn('3 skipped, 1 unexpected', r.stdout)
+
+    def test_only_the_private_inputs_may_be_missing(self):
+        r = self.check(self.LOG.replace("'vectors not fetched (tools/fetch_vectors.py --all)'",
+                                        "'raw transcription absent'"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn('3 skipped, 0 unexpected', r.stdout)
 
 
 if __name__ == '__main__':
