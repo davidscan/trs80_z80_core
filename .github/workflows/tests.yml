@@ -16,6 +16,9 @@
 name: tests
 
 on:
+  # every push, a tag push too: a release pushes its commit and its tag
+  # together, and only the tag's run is sure to see the new tag (the
+  # core's test_version holds VERSION to it), so the second run is kept
   push:
   pull_request:
 
@@ -31,12 +34,12 @@ jobs:
       run:
         working-directory: trs80_z80_core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: trs80_z80_core
           # the tags, so test_version can hold VERSION to the latest release
           fetch-depth: 0
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: davidscan/trs80basic
           path: trs80basic
@@ -49,7 +52,7 @@ jobs:
           echo "trs80basic at $(git -C ../trs80basic log --oneline -1)" | tee -a "$GITHUB_STEP_SUMMARY"
       # keyed on the lock alone: a re-pin gets a fresh cache, never an old one
       - name: Restore the CPU vectors
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: trs80_z80_core/tests/vectors
           key: z80-vectors-${{ hashFiles('trs80_z80_core/tools/vectors.lock') }}
