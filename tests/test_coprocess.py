@@ -98,6 +98,42 @@ class TestCalls(unittest.TestCase):
                 m.run(0x7000, arg, 0xF000)
             self.assertEqual(cm.exception.code, 'ov', arg)
 
+    def test_entry_registers_are_the_roms_dispatch(self):
+        """XL-2: the ROM's USR (27FE-2818H) jumps with A = the type and
+        DE = what HL held at 2814H's EX DE,HL: 0890H, the continuation
+        address 2806H pushed, for a number; the descriptor for a string."""
+        code = bytes.fromhex('ED530071' '320271' 'C9')   # LD (7100H),DE / LD (7102H),A / RET
+        for arg, t, de in ((1.5, 4, 0x0890), (7, 2, 0x0890), (7, 8, 0x0890), (17141, 3, 17141)):
+            m, sc = machine(code)
+            m.run(0x7000, arg, 0xF000, t)
+            self.assertEqual(m.ram[0x7100] | m.ram[0x7101] << 8, de, (arg, t))
+            self.assertEqual(m.ram[0x7102], t, (arg, t))
+
+    def test_0a7f_on_an_integer_is_ret_m(self):
+        """XL-2: WRA1 that is already an integer leaves 0A7FH at 0A83H's
+        RET M: HL = (4121H), nothing stored, A = FFH with RST 20H's flags
+        (25D9H: SUB 03H / OR A / SCF: sign and carry, not zero).  A type
+        flag of 1 is in the integer class too, and stays 1."""
+        # [LD A,t / LD (40AFH),A] / CALL 0A7FH / LD (7100H),HL / PUSH AF /
+        # POP DE / LD (7102H),DE / RET
+        tail = 'CD7F0A' '220071' 'F5' 'D1' 'ED530271' 'C9'
+        for pre, flag in (('', 2), ('3E01' '32AF40', 1)):
+            m, sc = machine(bytes.fromhex(pre + tail))
+            m.run(0x7000, -5, 0xF000, 2, (0, 0, 0, 0, 0xFB, 0xFF, 0, 0))
+            self.assertEqual(m.ram[0x7100] | m.ram[0x7101] << 8, 0xFFFB, flag)
+            self.assertEqual(m.ram[0x7103], 0xFF, 'A = FFH')
+            self.assertEqual(m.ram[0x7102] & 0xC1, 0x81, 'sign and carry, not zero')
+            self.assertEqual(m.ram[0x40AF], flag, 'nothing stored')
+
+    def test_wra1_reads_by_rst_20hs_classes(self):
+        """A type flag of 1 is an integer to RST 20H (25D9H: 1 - 3 is
+        negative), so 14C9H takes RND(5) from 4121H, not a single."""
+        m, sc = machine(bytes.fromhex('3E01' '32AF40' '210500' '222141' 'CDC914'
+                                      '2A2141' '220071' 'C9'))
+        m.run(0x7000, 0, 0xF000, 2)
+        self.assertEqual(m.ram[0x40AF], 2)
+        self.assertIn(m.ram[0x7100] | m.ram[0x7101] << 8, range(1, 6))
+
     def test_0a7f_is_tm_for_a_string(self):
         # 0A7FH (CINT) on a string argument is the machine's ?TM, sent as
         # `ERR tm` (proto 3 / M-17)
@@ -860,6 +896,20 @@ class TestTransport(unittest.TestCase):
         # image with 0A9AH's accumulator over its 4121/4122H bytes, then
         # CALL's return address and the sentinel -- one coalesced run each
         self.assertEqual(out[2:5], ['W 16559:2', 'W 16669:0,0,0,0,42,0,0,0', 'W 61436:3,112,253,47'])
+
+    def test_a_non_finite_arg_is_a_bad_header_and_the_core_stays_up(self):
+        """XL-3's sibling: arg=nan reached 0A7FH and crashed the core."""
+        lines = ['HELLO proto=3 mhz=0 ramtop=65535']
+        for a in ('nan', 'inf', '-inf'):
+            lines += ['CALL gen=1 full=1 slot=0 entry=28672 arg=%s argtype=4 sp=61440 himem=65535 ramtop=65535 runs=1' % a,
+                      'M 28672:205,127,10,201', 'GO']
+        lines += ['CALL gen=1 full=1 slot=0 entry=28672 arg=7 argtype=2 mbf=0,0,0,0,7,0,0,0 sp=61440 himem=65535 ramtop=65535 runs=1',
+                  'M 28672:205,127,10,195,154,10', 'GO', 'BYE']
+        out, err, rc = self.talk(lines)
+        self.assertEqual((rc, err), (0, ''))
+        for i, a in enumerate(('nan', 'inf', '-inf')):
+            self.assertEqual(out[1 + i], 'ERR bad CALL header: arg=%s is not a number' % a)
+        self.assertTrue(out[4].startswith('RET hl=7 result=1'), out)
 
     def test_0a7fh_leaves_the_integer_in_wra1_without_0a9ah(self):
         """ZM-4: 0A7FH's own exit stores (WRA1 4121/4122H, 2 at 40AFH,

@@ -23,13 +23,16 @@ the RET the ROM routine would have.
     0A7FH  the USR argument as a 16-bit integer in HL (the number the
            frame carried in `arg=`, rounded to a 24-bit single and then
            floored, as the ROM's CINT does -- the reference stub
-           converts the same way).
-    0A9AH  HL becomes the value of the USR expression (`result=1`), and
-           the trap RETs to its caller as the ROM routine does (it ends
-           in a plain RET; the ROM itself CALLs it).  The usual exit,
-           JP 0A9AH, ends the call because that RET pops the sentinel;
-           after a CALL 0A9AH the routine runs on, and the value stays
-           the HL it handed over -- the last one, if it calls twice.
+           converts the same way); the integer and type flag 2 go to
+           WRA1, so a plain RET after it makes USR that integer.  WRA1
+           that is already an integer is only read: A = FFH.
+    0A9AH  HL to WRA1 with type flag 2 (`result=1`), and the trap RETs
+           to its caller as the ROM routine does (it ends in a plain
+           RET; the ROM itself CALLs it).  The usual exit, JP 0A9AH,
+           ends the call because that RET pops the sentinel; after a
+           CALL 0A9AH the routine runs on.  The value of the USR
+           expression is WRA1 as the routine leaves it, by the type flag
+           (PROTOCOL.md "The return"): the write-set carries both.
     1A19H  the ROM's READY entry: the call ends and the reply carries
            `ready=1`, so BASIC ends the program at the prompt.
     002BH  the keyboard scan: A = the ASCII code of a key pressed since
@@ -497,11 +500,19 @@ class Machine:
         # 2026-09-19 audit, L-43; ruled 2026-09-21).  On success the
         # ROM leaves the integer in WRA1 with the type flag 2 and
         # A = 2, ordinary stores that reach the write-set (ZM-4).
+        # WRA1 that is ALREADY an integer leaves at 0A83H's RET M: HL =
+        # (4121H), nothing stored, and A = FFH with RST 20H's flags
+        # (25D9H: 2 - 3, OR A, SCF) (XL-2).
         # Once the routine (or a trap: 14C9H) has stored into WRA1 or
         # the type flag, 0A7FH converts WRA1 as it now stands, which is
         # what the ROM reads; until then the frame's `arg`, as before
         # (the two agree: the frame seeded WRA1 from it).  Eliminator
         # CALLs 14C9H and then 0A7FH to fetch RND's integer.
+        if self.ram[TYPE_FLAG] < 3:
+            cpu.hl = self.ram[0x4121] | self.ram[0x4122] << 8
+            cpu.a = 0xFF
+            cpu.f = SZ53P[0xFF] | C
+            return
         if self.wra1_moved:
             v = self.cint(self.wra1(0x0A7F), '0A7FH')
         else:
@@ -649,15 +660,17 @@ class Machine:
         2 an integer in 4121/4122H, 4 a single in 4121-4124H, 8 a double in
         all eight (Microsoft binary format: exponent byte last, biased 128,
         0 meaning zero; the top mantissa bit is the sign).  A string is
-        ?TM, as the ROM's CINT makes it."""
+        ?TM, as the ROM's CINT makes it.  Any other flag falls in RST 20H's
+        classes (25D9H): below 3 an integer, 8 and up a double, the rest
+        a single."""
         t = self.ram[TYPE_FLAG]
         r = self.ram
-        if t == 2:
+        if t < 3:
             v = r[0x4121] | r[0x4122] << 8
             return float(v - 0x10000 if v & 0x8000 else v)
         if t == 3:
             raise CoreError('tm', 'WRA1 holds a string at %04XH' % where)
-        lo = 0x411D if t == 8 else 0x4121
+        lo = 0x411D if t >= 8 else 0x4121
         exp = r[0x4124]
         if exp == 0:
             return 0.0
@@ -950,13 +963,15 @@ class Machine:
         self.wall0 = time.monotonic()
         # the state the ROM's USR dispatch leaves at the jump (27FE-2818,
         # proto 3 / ZM-4): A = the type from 40AFH (2 I, 3 $, 4 S, 8 D),
-        # DE = the string's descriptor address for a string, HL = the
-        # entry; the argument's WRA1 image (411D-4124H) and the type flag
-        # are its stores, made here so they reach the write-set like the
-        # 0A9AH trap's own.
+        # HL = the entry, DE = what HL held before 2814H's EX DE,HL: the
+        # string's descriptor address for a string (2810H: 29DAH), and for
+        # a number the continuation address 0890H it had just pushed
+        # (2806H) (XL-2); the argument's WRA1 image (411D-4124H) and the
+        # type flag are its stores, made here so they reach the write-set
+        # like the 0A9AH trap's own.
         cpu.hl = entry
         cpu.a = argtype
-        cpu.de = (int(float(arg)) & 0xFFFF) if argtype == 3 else 0
+        cpu.de = (int(float(arg)) & 0xFFFF) if argtype == 3 else 0x0890
         self.write(0x40AF, argtype)
         for i, b in enumerate(mbf[:8]):
             self.write((0x411D + i) & 0xFFFF, b & 0xFF)
@@ -1113,6 +1128,10 @@ def serve(m, recv, send, fixture):
             mbf = tuple(int(b) for b in h.get('mbf', '0,0,0,0,0,0,0,0').split(','))
         except (KeyError, ValueError) as e:
             send('ERR bad CALL header: %s' % e)
+            continue
+        if not math.isfinite(arg):
+            # no BASIC number is one; nan reached 0A7FH and crashed the core
+            send('ERR bad CALL header: arg=%s is not a number' % h['arg'])
             continue
         if not (0 <= entry <= 0xFFFF and 0 <= sp <= 0xFFFF):
             # an address off the map crashed the core with IndexError (ZL-5)
