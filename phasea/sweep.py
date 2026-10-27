@@ -114,7 +114,11 @@ def input_files():
 # misfiled in the Model I archive left blocked/ (their text was the wrong
 # token table's), so numbers on the 9,467 set (f4c61dfe) are not compared
 # with numbers on this one.
-INPUT_SET = (9458, '7c540535aebfd81ebd5a6cde35b96361be08d001')
+# Re-pinned 2026-10-26 at trs80_programs c13cd0d4: the same 9,458
+# listings, regenerated 2026-10-22 (bdfaacb4, this pin missed it) and then
+# re-selected (13 moved from blocked/ to runnable/, 131 re-filed inside
+# blocked/, headers rewritten; no listing's body changed); was 7c540535.
+INPUT_SET = (9458, 'fa6e65bd864a804b051d6781a0818119bdd62612')
 
 
 def fingerprint(paths, root=None):
