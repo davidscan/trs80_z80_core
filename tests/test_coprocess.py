@@ -966,6 +966,50 @@ class TestTransport(unittest.TestCase):
         self.assertTrue(out[1].startswith('ERR bad CALL header'), out)
         self.assertTrue(out[2].startswith('RET '), out)
 
+    def test_a_full_frame_discards_the_ram_it_kept(self):
+        """PROTOCOL.md, the frame: `full=1` makes the core discard its RAM
+        and start from 255.  Two full frames into one live core, the first
+        defining 8000H as 7, the second leaving it out: the routine reads
+        it back, so a byte kept from the first frame reads 7, not 255."""
+        prog = 'M 28672:58,0,128,111,38,0,195,154,10'   # LD A,(8000H) / LD L,A / LD H,0 / JP 0A9AH
+        call = 'CALL gen=%d full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=%d'
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            call % (1, 2), prog, 'M 32768:7', 'GO',
+            call % (1, 1), prog, 'GO',
+            'BYE'])
+        self.assertEqual((rc, err), (0, ''))
+        rets = [l for l in out if l.startswith('RET ')]
+        self.assertEqual(len(rets), 2, out)
+        self.assertTrue(rets[0].startswith('RET hl=7 '), out)
+        self.assertTrue(rets[1].startswith('RET hl=255 '), out)
+
+    def test_a_store_at_3000h_is_the_first_ram_byte(self):
+        """The address contract: the interpreter's poke_byte keeps a store
+        from 12288 (3000H) up, so the core must too, and send it back.
+        LD A,5 / LD (3000H),A / RET."""
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'M 28672:62,5,50,0,48,201',
+            'GO', 'BYE'])
+        self.assertEqual((rc, err), (0, ''))
+        self.assertIn('W 12288:5', out)
+
+    def test_sp_one_past_the_map_is_a_bad_header(self):
+        """sp=65535 is the last address; 65536 is off the map and refused
+        before the routine runs, and the core stays up for the next call."""
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=65536 himem=65535 ramtop=65535 runs=1',
+            'M 28672:201', 'GO',
+            'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=65535 himem=65535 ramtop=65535 runs=1',
+            'M 28672:201', 'GO',
+            'BYE'])
+        self.assertEqual((rc, err), (0, ''))
+        self.assertEqual(out[1], 'ERR bad CALL header: entry/sp out of range: 28672/65536')
+        self.assertTrue(out[2].startswith('RET '), out)
+
     def test_need_full_when_a_generation_is_missing(self):
         out, err, rc = self.talk([
             'HELLO proto=3 mhz=0 ramtop=65535',
