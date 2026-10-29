@@ -453,21 +453,25 @@ is `core-failed` and the sweep exits 1 without writing `results.json`.
 Points `z80.trace` at the machine code the family's own tools already
 find and measures what control flow reaches: every loader payload with a
 concrete address that the extractor finds in the pinned input set, and
-the memory every `usr_sweep.py` run sent the core at its `USR` call, from
-every entry it called. Each item is traced twice, without and with
+the memory every run in `usr_sweep.py`'s `results.json` sent the core at
+its `USR` call, from every entry it called (a log in `runs/` that
+`results.json` does not list is a past sweep's, and is not read). The two
+must come from the same input set: when they do not, it refuses and asks
+for a new `usr_sweep.py` run. Each item is traced twice, without and with
 `--guess-tables`. There is no truth for these bytes, so "code found" is
 what flow reaches, not a score; the unit scored is the run of bytes the
 entry sits in, with the whole frame beside it. **Writes:**
 `out/trace_corpus/`: `items.tsv` (a row per item and mode), `json/` (the
 `--json` result for each) and `summary.json` (the inputs: both commits,
 the input-set fingerprint, the sweep's own inputs, the hints, and the
-totals). About a minute and a half.
+totals). About three and a half minutes.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
 | `--hints FILE` | none | a hints file; repeatable | `hints/model1.hints`, always |
 | `--set extractor` / `--set sweep` | both | one population only | a quick re-run |
 | `--out DIR` | `out/trace_corpus` | where to write | keeping a run beside another |
+| `--accept-stale` | off | traces both populations though the sweep ran another input set | a look before the sweep is re-run; its numbers are not comparable |
 
 #### `python3 tools/usr_pty_sweep.py`
 

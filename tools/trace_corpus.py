@@ -8,7 +8,8 @@ Two populations, both read in place:
              loaders: FOR/READ/POKE and POKE sequences); the entry is the
              file's USR entry when it falls inside the payload, else the
              payload's base.
-  sweep      every out/usr_sweep run that reached a USR call: the memory
+  sweep      every run out/usr_sweep/results.json lists that reached a
+             USR call, from the same input set as the extractor: the memory
              the interpreter sent the core (every M line applied in order,
              a full frame starting over from nothing) with every distinct
              CALL entry as an entry point.  Here the image is the whole
@@ -252,6 +253,8 @@ def main(argv=None):
     ap.add_argument('--out', default=os.path.join(HERE, 'out', 'trace_corpus'))
     ap.add_argument('--set', choices=('extractor', 'sweep'), action='append',
                     help='only this population (default: both)')
+    ap.add_argument('--accept-stale', action='store_true',
+                    help="trace both populations though the sweep's input set is not the extractor's")
     a = ap.parse_args(argv)
     h = hintmod.Hints()
     for path in a.hints:
@@ -268,6 +271,14 @@ def main(argv=None):
     if 'sweep' in sets:
         it, inputs['sweep'] = sweep_items()
         items += it
+    if len(sets) == 2:
+        # the two populations are compared item by item (the shared
+        # (file, entry) pairs), so they must come from the same listings
+        ex, sw = inputs['extractor']['fingerprint'], inputs['sweep'].get('input_set')
+        if ex != sw and not a.accept_stale:
+            sys.exit('REFUSING TO MEASURE: the sweep ran input set %s, the extractor '
+                     'reads %s; re-run tools/usr_sweep.py, or --accept-stale' % (sw, ex))
+        inputs['sets_agree'] = ex == sw
     os.makedirs(os.path.join(a.out, 'json'), exist_ok=True)
     rows = []
     for name, segments, entries, info in items:
