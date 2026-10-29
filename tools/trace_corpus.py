@@ -30,7 +30,6 @@ test gate.  There is no truth for these bytes (unlike the source/object
 pairs), so 'code found' is what flow reaches, not a score.
 """
 import argparse
-import glob
 import json
 import os
 import re
@@ -104,9 +103,17 @@ def sweep_items():
         results = json.load(open(os.path.join(SWEEP_OUT, 'results.json')))
     except OSError:
         sys.exit('no %s/results.json: run tools/usr_sweep.py first' % SWEEP_OUT)
+    # the runs are the ones results.json names, not every runs/*.in: the
+    # sweep clears a listing's log only when it runs that listing, so a
+    # log from an earlier sweep over a different set stays behind
     cls = {r['file']: r['cls'] for r in results['results']}
     out = []
-    for path in sorted(glob.glob(os.path.join(SWEEP_OUT, 'runs', '*.in'))):
+    for r in sorted(results['results'], key=lambda r: r['file']):
+        if not r['calls']:
+            continue
+        path = os.path.join(SWEEP_OUT, 'runs', r['file'].replace('/', '__') + '.in')
+        if not os.path.exists(path):
+            sys.exit('%s: results.json counts %d CALLs, no log' % (path, r['calls']))
         mem, entries, calls = {}, [], 0
         with open(path, 'rb') as f:
             for raw in f:
@@ -125,8 +132,9 @@ def sweep_items():
                     for v in vals.split(','):
                         mem[a & 0xFFFF] = int(v) & 0xFF
                         a += 1
-        if not calls:
-            continue
+        if calls != r['calls']:
+            sys.exit('%s: %d CALLs, results.json counts %d: the log is not this sweep\'s'
+                     % (path, calls, r['calls']))
         name = os.path.basename(path)[:-3]
         fname = name.replace('__', '/')
         segments = _segments(mem)
