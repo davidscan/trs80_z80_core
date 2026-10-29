@@ -1,4 +1,4 @@
-"""The corpus traced (DISASM.md S5): z80.trace pointed at the machine code
+"""The corpus traced: z80.trace pointed at the machine code
 the family's own tools already find, to measure how much of it control
 flow reaches, how much is left unknown, and how many conflicts appear.
 Two populations, both read in place:
