@@ -311,6 +311,18 @@ class TestCalls(unittest.TestCase):
         self.assertIn('K 255', sc.out)
         self.assertEqual(sc.ret()['hl'], '3')
 
+    def test_keyboard_mirror(self):
+        # LD A,(3BFFH) / LD L,A / LD H,0 / JP 0A9AH: the keyboard decodes
+        # 3800-3BFFH and the low byte selects rows (PROTOCOL.md's K)
+        m, sc = machine(bytes.fromhex('3AFF3B' '6F' '2600' 'C39A0A'), replies=['K 2'])
+        m.run(0x7000, 0, 0xF000)
+        self.assertIn('K 255', sc.out)
+        self.assertEqual(sc.ret()['hl'], '2')
+        # 3C00H is the screen, not the keyboard: no K
+        m, sc = machine(bytes.fromhex('3A003C' '6F' '2600' 'C39A0A'))
+        m.run(0x7000, 0, 0xF000)
+        self.assertFalse([l for l in sc.out if l.startswith('K ')])
+
     def test_unwritten_memory_reads_255(self):
         # LD A,(0C350H) / LD L,A / LD H,0 / JP 0A9AH
         m, sc = machine(bytes.fromhex('3A50C3' '6F' '2600' 'C39A0A'))
