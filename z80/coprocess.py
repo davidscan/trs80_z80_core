@@ -97,7 +97,7 @@ SENTINEL = 0x2FFD
 def csng(x):
     """The ROM's round to a 24-bit single (0796H, half up at the guard):
     a double is a single FIRST on its way to 16 bits (0A7FH -> 0AB9H), so
-    CINT(2.9999999#) is 3, not 2 (ZL-7; the interpreter's sround)."""
+    CINT(2.9999999#) is 3, not 2 (the interpreter's sround)."""
     if x == 0:
         return 0.0
     ax = abs(x)
@@ -166,7 +166,7 @@ VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
 KBD_LO, KBD_HI = 0x3800, 0x3C00   # 3900-3BFFH mirror 3800-38FFH: only the low byte selects rows
 TICK_TSTATES = 8870            # ~5 ms of emulated time at 1.774 MHz
 TICK_SECONDS = 0.005           # ... and never more wall time than this at a slower clock
-CLS_A = 0x1F                   # A after the ROM's CLS: 01CEH LD A,1FH (clear-to-end), 01D0H JP 033AH returns with it (ZM-5's nit; 1CH is the HOME byte it sends first)
+CLS_A = 0x1F                   # A after the ROM's CLS: 01CEH LD A,1FH (clear-to-end), 01D0H JP 033AH returns with it (1CH is the HOME byte it sends first)
 
 # the machine code z80.sh expects to find behind the stub's canned entries
 # (PROTOCOL.md "Conformance").  Real code; only the addresses are the
@@ -242,7 +242,7 @@ class Machine:
         # T-states alone, a paced slow clock stretched it: at `speed 0.001`
         # 8870 T-states are 8.9 s of wall time, so the guard fired in the
         # middle of a healthy routine and the core was declared dead (the
-        # 2026-09-19 audit, L-46).  The interval is 5 ms of WALL time at
+        # 2026-09-19 audit).  The interval is 5 ms of WALL time at
         # the paced clock, and never more T-states than before.  (Still out
         # of reach: a clock so slow that ONE instruction outlasts the guard,
         # under about 5 T-states a second.)
@@ -281,7 +281,7 @@ class Machine:
             # printer status, ready -- the read side's rule 2 (dopeek):
             # the cell was plain RAM here, so a routine that wrote its
             # character to 37E8H read the character back as the status
-            # and polled forever (ZL-6).  The write still lands in the
+            # and polled forever.  The write still lands in the
             # write-set, where the interpreter's read-only rule drops it.
             return 63
         return self.ram[a]
@@ -291,7 +291,7 @@ class Machine:
         # machine, and PROTOCOL.md has the range holding no bytes on either
         # side.  It used to be kept here and sent back in the write-set,
         # where the interpreter copied it into its own memory (the
-        # 2026-09-19 audit, L-45); poke_byte drops it too now.
+        # 2026-09-19 audit); poke_byte drops it too now.
         if a < ROM_TOP:
             return
         self.ram[a] = v
@@ -396,7 +396,7 @@ class Machine:
             # program that called it is over.  `ready=1` on the RET line
             # says so; without it the interpreter carried on with the next
             # statement as though the routine had returned (the 2026-09-19
-            # audit, L-44).  The interpreter's SYSTEM `/` runs whole
+            # audit).  The interpreter's SYSTEM `/` runs whole
             # programs this way, and at the prompt the two endings look the
             # same.  0000H (reset) stays `ERR rom`: it is the conformance
             # suite's canonical no-ROM call.
@@ -497,12 +497,12 @@ class Machine:
         # exponent past 16 bits goes to 0AA3H, which accepts exactly
         # -32768 and otherwise exits through 07B2H, ?OV.  Sent as
         # `ERR ov`, which the interpreter raises as BASIC's ?OV (the
-        # 2026-09-19 audit, L-43; ruled 2026-09-21).  On success the
+        # 2026-09-19 audit; ruled 2026-09-21).  On success the
         # ROM leaves the integer in WRA1 with the type flag 2 and
-        # A = 2, ordinary stores that reach the write-set (ZM-4).
+        # A = 2, ordinary stores that reach the write-set.
         # WRA1 that is ALREADY an integer leaves at 0A83H's RET M: HL =
         # (4121H), nothing stored, and A = FFH with RST 20H's flags
-        # (25D9H: 2 - 3, OR A, SCF) (XL-2).
+        # (25D9H: 2 - 3, OR A, SCF).
         # Once the routine (or a trap: 14C9H) has stored into WRA1 or
         # the type flag, 0A7FH converts WRA1 as it now stands, which is
         # what the ROM reads; until then the frame's `arg`, as before
@@ -553,7 +553,7 @@ class Machine:
         # ... and zeroes the cursor COLUMN at 40A6H (0342H stores it on
         # the home byte's way through the driver): without this the
         # interpreter's TAB and POS pad from the stale pre-call column
-        # (the 2026-09-26 audit, M-18/ZM-5)
+        # (the 2026-09-26 audit)
         self.write(0x40A6, 0)
 
     def scan_keyboard(self):
@@ -962,11 +962,11 @@ class Machine:
         self.wide = None
         self.wall0 = time.monotonic()
         # the state the ROM's USR dispatch leaves at the jump (27FE-2818,
-        # proto 3 / ZM-4): A = the type from 40AFH (2 I, 3 $, 4 S, 8 D),
+        # proto 3): A = the type from 40AFH (2 I, 3 $, 4 S, 8 D),
         # HL = the entry, DE = what HL held before 2814H's EX DE,HL: the
         # string's descriptor address for a string (2810H: 29DAH), and for
         # a number the continuation address 0890H it had just pushed
-        # (2806H) (XL-2); the argument's WRA1 image (411D-4124H) and the
+        # (2806H); the argument's WRA1 image (411D-4124H) and the
         # type flag are its stores, made here so they reach the write-set
         # like the 0A9AH trap's own.
         cpu.hl = entry
@@ -1134,7 +1134,7 @@ def serve(m, recv, send, fixture):
             send('ERR bad CALL header: arg=%s is not a number' % h['arg'])
             continue
         if not (0 <= entry <= 0xFFFF and 0 <= sp <= 0xFFFF):
-            # an address off the map crashed the core with IndexError (ZL-5)
+            # an address off the map crashed the core with IndexError
             send('ERR bad CALL header: entry/sp out of range: %d/%d' % (entry, sp))
             continue
         if not full and gen != m.gen + 1:

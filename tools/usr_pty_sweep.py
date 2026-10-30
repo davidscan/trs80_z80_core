@@ -46,12 +46,12 @@ def population(cls, files):
     if files:
         return [os.path.join(CORPUS, f) for f in files]
     if cls == 'all':
-        # the extractor's USR evidence, as usr_sweep (ZM-9)
+        # the extractor's USR evidence, as usr_sweep
         sys.path.insert(0, HERE)
         from phasea.extract import has_usr
         return [f for f in listings() if has_usr(f)]
     res = batch_results()
-    if isinstance(res, dict):        # {inputs, results} since ZM-8
+    if isinstance(res, dict):        # {inputs, results} since 2026-10-12
         res = res['results']
     return [os.path.join(CORPUS, r['file']) for r in res if r['cls'] == cls]
 
@@ -59,7 +59,7 @@ def population(cls, files):
 def batch_results_problem():
     """Why the batch sweep's results.json is not this run's population, or
     None.  The class it names was measured on the builds and corpus it
-    records; read on others it is a population of another day (ZL-7)."""
+    records; read on others it is a population of another day."""
     sys.path.insert(0, HERE)
     from tools.usr_sweep import git_state
     from phasea.sweep import fingerprint
@@ -69,7 +69,7 @@ def batch_results_problem():
         return 'no batch sweep results to take the class from (%s)' % e
     rec = res.get('inputs') if isinstance(res, dict) else None
     if not rec:
-        return "the batch sweep's results.json records no inputs (older than ZM-8)"
+        return "the batch sweep's results.json records no inputs (older than 2026-10-12)"
     now = dict(core=git_state(HERE), interpreter=git_state(BASIC),
                corpus=git_state(os.path.dirname(CORPUS)),
                input_set=fingerprint(listings(), CORPUS))
@@ -80,12 +80,12 @@ def batch_results_problem():
 
 
 def population_problem(cls, files, pop):
-    """Why this population must not be measured, or None (ZM-11's sibling:
-    an empty one printed DONE and overwrote results.json with [])."""
+    """Why this population must not be measured, or None (the batch
+    sweep's hole too: an empty one printed DONE and overwrote results.json with [])."""
     missing = [os.path.relpath(f, CORPUS) for f in pop if not os.path.isfile(f)]
     if missing:
         # CLOAD of a name that is not there ran nothing, and the listing
-        # was counted 'not-reached' (ZL-7)
+        # was counted 'not-reached'
         return '%d listing(s) not in the corpus: %s' % (len(missing), ', '.join(missing[:5]))
     if cls == 'all' and not files:
         sys.path.insert(0, HERE)
@@ -103,7 +103,7 @@ def clear_logs(base):
     starts the core at the first USR call, so a listing that never reaches
     one writes no log -- and the log a previous sweep left under the same
     name would be counted as this run's calls, RETs and ERRs: exactly the
-    listing a re-sweep exists to catch (the 2026-09-19 audit, H-22)."""
+    listing a re-sweep exists to catch (the 2026-09-19 audit)."""
     for ext in ('.in', '.out'):
         try:
             os.remove(base + ext)
@@ -116,10 +116,10 @@ def clear_logs(base):
 # TRS80_USR=strict left over from a debugging session turned every
 # un-executed USR into ?FC, TRS80_SOUND started a player per listing, and
 # TRS80_PRINTER collected every LPRINT in the corpus into one file (the
-# 2026-09-19 audit, L-65).  tools/kbd_probe.py has stripped them from the
-# start; phasea/oracle.py does since L-64.
+# 2026-09-19 audit).  tools/kbd_probe.py has stripped them from the
+# start; phasea/oracle.py does since 2026-09-20.
 def sweep_env(**over):
-    # A denylist rots as the interpreter grows knobs (ZL-8: TRS80_MEMORY,
+    # A denylist rots as the interpreter grows knobs (TRS80_MEMORY,
     # the memory-host switch, was not on it), so every TRS80_* is dropped
     # and the measurement sets the ones it means.
     env = dict(os.environ, LC_ALL='C')
@@ -133,7 +133,7 @@ def drive(path):
     rel = os.path.relpath(path, CORPUS)
     tag = rel.replace('/', '__')
     clear_logs(os.path.join(RUNS, tag))
-    # a fresh cwd per listing: files one wrote reached the next (ZL-9)
+    # a fresh cwd per listing: files one wrote reached the next
     cwd = os.path.join(CWD, tag)
     shutil.rmtree(cwd, ignore_errors=True)
     os.makedirs(cwd)

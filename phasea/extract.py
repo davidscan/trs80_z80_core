@@ -177,7 +177,7 @@ def varptr_strings(prog):
     or a POKE of the 408EH vector that names VARPTR(X$), directly or
     through numeric variables assigned from it, however many hops
     (V=VARPTR(X$):AD=PEEK(V+1)+256*PEEK(V+2):DEFUSR=AD -- the second hop
-    was dropped before the 2026-09-19 audit, H-17).  A packed routine is
+    was dropped before the 2026-09-19 audit).  A packed routine is
     always run that way; VARPTR(X$) anywhere else is a string handed to a
     routine as its argument or aliased for a screen trick, and its bytes
     are text."""
@@ -229,7 +229,7 @@ def varptr_arrays(prog):
     one array).  READ into an integer array is code only if something
     takes its address -- a DEF USR, a POKE of a vector, a driver hooked
     into a DCB (omnikey's VARPTR(P%(2)) has no USR at all); without that
-    it is a table of numbers (the 2026-09-19 audit, L-60)."""
+    it is a table of numbers (the 2026-09-19 audit)."""
     out = set()
     for _ln, _body, stmts in prog:
         for st in stmts:
@@ -373,10 +373,10 @@ def find_loaders(path, prog, stream, table):
     #
     # A RESTORE belongs to the first loader BEHIND it: one after the loader
     # on its own line runs after it and redirects the next one (the
-    # 2026-09-19 audit, L-57: the line's RESTORE was taken for every loader
+    # 2026-09-19 audit: the line's RESTORE was taken for every loader
     # on the line), and a second loader behind the same RESTORE continues
     # where the first stopped.  A loader that consumes a RESTORE ends its
-    # carry to the next line (H-18 by another path: `10 RESTORE 900:FOR
+    # carry to the next line (the same double read by another path: `10 RESTORE 900:FOR
     # ...` / `20 FOR ...` read the same block twice).
     prev_restore = None
     texts = build_data_texts(prog)   # the stream's items as READ A$ sees them
@@ -401,8 +401,8 @@ def find_loaders(path, prog, stream, table):
                 continue
             fm = FOR_RE.match(st)
             if not fm:
-                # A stand-alone READ advances the ONE pointer too (ZM-8,
-                # H-18's sibling) -- but only two shapes are recorded,
+                # A stand-alone READ advances the ONE pointer too (the 2026-09-30
+                # audit) -- but only two shapes are recorded,
                 # because line order is not flow (GLOBE reads its display
                 # DATA on lines ABOVE the loader that a GOSUB runs first,
                 # and polar2's `1 RUN 400` resets the pointer under its
@@ -528,7 +528,7 @@ def find_loaders(path, prog, stream, table):
             am = ARRAY_READ_RE.match(read_targets[0]) if read_targets else None
             if (am and not am.group(1).endswith('%')
                     and am.group(1)[0].upper() not in int_letters):
-                am = None          # a single-precision array (ZL-9)
+                am = None          # a single-precision array
             if poke is None and am and len(read_targets) == 1:
                 arr = am.group(1).upper()
                 if start is None or end is None or step in (None, 0):
@@ -655,7 +655,7 @@ def find_loaders(path, prog, stream, table):
             else:
                 by = []
 
-            # Bytes kept as hex strings (the 2026-10-22 F29 item 5 (d)):
+            # Bytes kept as hex strings (found 2026-10-22):
             # `READ X$:L=VAL("&H"+X$):POKE X,L`, or the two digits taken
             # apart with ASC and put together with 16*: every item is one
             # or two hex digits, and the bytes are those digits, not the
@@ -704,8 +704,8 @@ def resolve_poke_target(addr_expr, var, start, step, symbols):
     up = e.upper()
     # The variable as a whole name, its type suffix included: `\b` after
     # a % finds no word boundary, so FOR I%= never matched POKE I%,A and
-    # the loader was filed fixed-address-unresolved (the 2026-09-19 audit,
-    # H-19).  I and I% are two variables, so a suffix in the address that
+    # the loader was filed fixed-address-unresolved (the 2026-09-19 audit).
+    # I and I% are two variables, so a suffix in the address that
     # the loop variable lacks is no match either.
     varpat = re.compile(r'(?<![A-Z0-9])%s(?![A-Z0-9%%!#$])' % re.escape(var))
 
@@ -910,7 +910,7 @@ def _data_start(stream, restore_target, read_line, read_si, consumed=(),
     program's first DATA when there is none below and the READ is the
     listing's first.
 
-    Level II READ has ONE pointer (the 2026-09-19 audit, H-18: two loaders
+    Level II READ has ONE pointer (the 2026-09-19 audit: two loaders
     sharing a block came out with the same bytes, the second at confidence
     high).  `consumed` is what the loaders above this one, in program
     order, read: (start, end, pinned).  Two rules follow the pointer where
@@ -1071,7 +1071,7 @@ def find_usr_evidence(prog, table):
     """DEF USR and the 408EH vector POKEs.  The vector's two POKEs are one
     entry wherever they stand -- on two lines, high byte first, behind
     THEN or ELSE -- joined in program order, each high byte with the low
-    byte nearest before or after it (the 2026-09-19 audit, L-56: only a
+    byte nearest before or after it (the 2026-09-19 audit: only a
     low-then-high pair on one line was joined, and a DEF USR or a POKE
     behind IF was not seen at all)."""
     entries = []
@@ -1186,7 +1186,7 @@ def has_usr_evidence(rep):
     a 408EH vector POKE.  The gate (phasea/sweep.py) and both USR sweeps
     count by it.  The sweeps once had their own substring test, which
     took USR in DATA keyword tables and in damaged-byte text: 586 files
-    against this set's 559 (the 2026-09-30 audit, ZM-9)."""
+    against this set's 559 (the 2026-09-30 audit)."""
     return rep.usr_calls > 0 or bool(rep.usr_entries)
 
 

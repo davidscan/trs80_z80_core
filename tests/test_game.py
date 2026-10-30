@@ -132,7 +132,7 @@ class TestValuesThatDoNotFitAreRefused(unittest.TestCase):
     the generator computed too large was quietly cut -- `--fps 1` wants a
     delay of 68218 turns and emitted LD DE,2682, a 25x faster game, while
     the statistics it printed went on quoting 68218 (the 2026-09-19
-    audit, L-66).
+    audit).
     """
 
     def test_a_frame_rate_the_loop_cannot_reach_is_refused(self):
@@ -165,7 +165,7 @@ class TestValuesThatDoNotFitAreRefused(unittest.TestCase):
         self.assertIn('word', str(e.exception))
 
     def test_a_routine_straddling_8000h_gets_a_loader_that_turns_the_address(self):
-        """ZL-4: `--org` just under 8000H built a loader whose POKE E+I ran
+        """`--org` just under 8000H built a loader whose POKE E+I ran
         past 32767 (?OV in Level II).  The same shape as z80.asm's to_bas."""
         _, code, delay, _ = mkgame.build(32000, 30)
         org = 0x8000 - len(code) // 2
@@ -181,7 +181,7 @@ class TestValuesThatDoNotFitAreRefused(unittest.TestCase):
         self.assertIn('40 E=-32768 : C=0', mkgame.listing(code, 0x8000, delay, 30))
 
     def test_the_command_line_refuses_what_it_would_misreport(self):
-        """ZL-8: --fps 0 was a ZeroDivisionError, --fps -5 and 100000 built
+        """--fps 0 was a ZeroDivisionError, --fps -5 and 100000 built
         a one-turn delay reported at the asked-for rate, --scan -1 was LD
         B,255 reported as 0 reads; each is a usage error now."""
         import subprocess

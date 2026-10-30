@@ -133,7 +133,7 @@ PATCHES = [
     # ends in a timeout kill. A line is logged only when it CHANGES, so a
     # one-line spin (`10 IF USR(0)=0 THEN 10`, the typical poll) writes one
     # short line, and unflushed it dies in gawk's buffer with the process.
-    # DIRECTLN (65535) is skipped: since trs80basic's L-4 fix the
+    # DIRECTLN (65535) is skipped: since trs80basic's 2026-09-20 fix the
     # interpreter marks a statement typed at the prompt with the ROM's own
     # Input Phase value in CLN, rather than 0, and that is not a program
     # line -- logging it put a 65535 at the end of every trace.
@@ -179,7 +179,7 @@ def build(force=False):
 
     The cached build is reused only while its key (source_key) matches:
     reused on existence alone, it ran a pre-edit interpreter with the
-    anchors never re-checked, exit 0 (the 2026-09-30 audit, XM-12)."""
+    anchors never re-checked, exit 0 (the 2026-09-30 audit)."""
     mods = sorted(n for n in os.listdir(SRC) if n.endswith('.awk')) if os.path.isdir(SRC) else []
     if not mods:
         sys.exit('no interpreter sources at %s' % SRC)
@@ -238,7 +238,7 @@ FEED = ('1\n' * 400).encode()
 # to be: TRS80_USR=strict turned every un-executed USR into ?FC, a
 # TRS80_Z80 in the shell put a real core behind calls the oracle believes
 # are stubbed, and TRS80_SOUND started a player.  Results depended on who
-# typed the command (the 2026-09-19 audit, L-64).  tools/kbd_probe.py has
+# typed the command (the 2026-09-19 audit).  tools/kbd_probe.py has
 # had a base_env() like this from the start.
 DETERMINISTIC = {
     'TRS80_Z80': '',          # the stub: the oracle measures the interpreter
@@ -248,7 +248,7 @@ DETERMINISTIC = {
 }
 # Stripped rather than set: any value at all changes what is measured.
 # Every TRS80_* goes, not a denylist -- a list rots as the interpreter
-# grows knobs (ZL-8: TRS80_MEMORY, the memory-host switch, was not on
+# grows knobs (TRS80_MEMORY, the memory-host switch, was not on
 # it); DETERMINISTIC then sets the ones the oracle means.
 
 
@@ -308,7 +308,7 @@ def run_listing(path, timeout=10.0):
 
     # Cut at the first USR call; what the listing pokes after it is kept
     # apart as late_pokes.  validate needs them: a routine loaded after
-    # the first USR is not in `pokes` at all (L-63).
+    # the first USR is not in `pokes` at all.
     pokes, late, usr_seen = [], [], False
     if os.path.exists(log):
         with open(log) as f:
@@ -354,7 +354,7 @@ def region_of(base, data):
     matrix, the printer window, anything below 4000H), plus the RND seed
     a listing pokes at run time.  It had only video, two printer bytes and
     the seed, so a run below 4000H was candidate-ml here and a device
-    stream statically (the 2026-09-19 audit, L-62)."""
+    stream statically (the 2026-09-19 audit)."""
     end = base + len(data) - 1
     if base >= RNDPOKE[0] and end <= RNDPOKE[1]:
         return 'device-stream'
@@ -594,7 +594,7 @@ def payload_verdict(want_data, want_base, pokes, late_pokes):
     AFTER it ('after-usr', when the whole log then agrees with it) or
     never ('unreached').  Both were scored a contradiction, so a correct
     extraction of a second routine, loaded once the first had run, made
-    the oracle look untrustworthy (the 2026-09-19 audit, L-63)."""
+    the oracle look untrustworthy (the 2026-09-19 audit)."""
     v = best_verdict(want_data, want_base, runs_from_pokes(pokes))
     if v != 'contradiction':
         return v
@@ -603,7 +603,7 @@ def payload_verdict(want_data, want_base, pokes, late_pokes):
         return 'contradiction'
     if not any(a in span for a, _b in late_pokes):
         # The same bytes poked at ANOTHER base are a wrong-base
-        # extraction, not a payload this run never loaded (ZL-1: the
+        # extraction, not a payload this run never loaded (the
         # 54e96dc split scored them 'unreached').  Four bytes is the
         # runs' own floor, below which a match is coincidence.
         if len(want_data) >= 4:

@@ -616,7 +616,7 @@ class TestHintEffects(unittest.TestCase):
     def test_inline_with_no_terminator_stops_the_path(self):
         res, segs, _ = hinted("ST: RST 28H\n DM 'NO END'", 'inline 28 until 0DH')
         self.assertEqual(res.truncated, [0x7000])
-        self.assertEqual(bytemap(res, segs), 'C' + 't' * 6)     # S3's guess
+        self.assertEqual(bytemap(res, segs), 'C' + 't' * 6)     # _guess's text
         self.assertIn('no terminator', '\n'.join(res.steps))
 
     def test_noreturn_ends_the_path(self):
@@ -698,7 +698,7 @@ class TestHintEffects(unittest.TestCase):
 
 
 class TestGuess(unittest.TestCase):
-    """S3: what the bytes nothing reached are guessed to be."""
+    """_guess: what the bytes nothing reached are guessed to be."""
 
     def test_a_string_with_its_terminator(self):
         res, segs, _ = run("ST: RET\n DM 'HELLO'\n DB 0DH\n DB 1,2")
@@ -774,7 +774,7 @@ class TestGuess(unittest.TestCase):
 
 
 class TestGuessTables(unittest.TestCase):
-    """D5: `tables=True` (--guess-tables) follows the jump tables an
+    """`tables=True` (--guess-tables) follows the jump tables an
     address constant in traced code names -- two or more words in a row,
     or records of a key byte and a word ended by a zero key, each word the
     address of bytes in the image -- and marks everything they reach as
@@ -950,7 +950,7 @@ class TestGuessTables(unittest.TestCase):
 
 
 class TestReasons(unittest.TestCase):
-    """S4 (b): the listing says why each line is what it is.  `why` holds
+    """The listing says why each line is what it is.  `why` holds
     the reason for every instruction and every data run; the listing
     prints it where an xref does not already say it."""
 
@@ -1047,7 +1047,7 @@ class TestModel1Hints(unittest.TestCase):
 
     def test_the_dos_file_entries(self):
         # a routine that reads a disk record calls TRSDOS at 4436H, and
-        # 4442H positions the file first (F29 item 4)
+        # 4442H positions the file first (found 2026-10-22)
         segs, entry, _ = build('ST: CALL 4442H\n CALL 4436H\n RET')
         res = trace.trace(segs, [entry], hints.load(MODEL1))
         text = trace.source(res)
@@ -1105,7 +1105,7 @@ def _tmp():
 
 
 class TestJson(unittest.TestCase):
-    """S4 (c): the result as JSON for tools -- blocks that tile the image,
+    """The result as JSON for tools -- blocks that tile the image,
     labels, xrefs, conflicts and the report's lists, every address a
     number.  Nothing in it is read back from the listing."""
 

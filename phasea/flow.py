@@ -1,5 +1,5 @@
-"""Follow the DATA pointer through the program's control flow (F29 item 5
-(b)+(c); H-18 re-ruled 2026-10-22: where the walk reaches a READ, its start
+"""Follow the DATA pointer through the program's control flow (re-ruled
+2026-10-22: where the walk reaches a READ, its start
 replaces adjacency in extract.py).
 
 Line order is not flow (GLOBE's GOSUB, polar2's RUN 400), so the one READ

@@ -13,7 +13,7 @@ which makes absence a failure and asks for all 1604 files.  When v1/ is
 there, it is first checked against the pin (tools/vectors.lock and the
 cached .manifest.json): a file that does not hash to its blob, a file the
 pin does not name, or no case run at all is a failure, never a pass (the
-2026-09-30 audit, ZM-10: an empty v1/ passed in 0.002 s).
+2026-09-30 audit: an empty v1/ passed in 0.002 s).
 
     python3 -m unittest tests.test_cpu_vectors          # sample: 40 cases per file
     Z80_VECTORS=all python3 -m unittest tests.test_cpu_vectors   # all 1.6M cases

@@ -1,4 +1,4 @@
-"""The core's own version (the 2026-09-30 audit, ZL-10).
+"""The core's own version (the 2026-09-30 audit).
 
 VERSION is the release this tree is: bumped by the commit that is the
 release, beside its annotated tag of the same name.  Between tags a

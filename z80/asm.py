@@ -420,7 +420,7 @@ def split_fields(line, lineno):
     # does not start in column 1"); a misspelled mnemonic used to become
     # a label silently, and then a column-1 label spelled like a mnemonic
     # (`OUT  LD  H,B`: six corpus sources) was taken for the op-code and
-    # refused (the 2026-09-30 audit, ZM-2).  A ':' makes a label wherever
+    # refused (the 2026-09-30 audit).  A ':' makes a label wherever
     # it stands.
     indented = body[:1].isspace()
     parts = body.split(None, 1)
@@ -446,7 +446,7 @@ def split_fields(line, lineno):
         # EDTASM took a DEFM or DEFB string with no closing quote to the
         # end of the line: TBBS's MINIHOST/SRC line 5140, `DEFM 'Minihost/
         # Cmd v3.2 (c)1985 Mike Bernstein`, assembles to its period object
-        # byte for byte so read, and was an error here (N-6 of the
+        # byte for byte so read, and was an error here (the
         # 2026-09-30 audit).  Anywhere else a lost quote is still an error.
         if first not in ('DEFM', 'DM', 'DEFB', 'DB'):
             raise AsmError(lineno, 'unterminated string')
@@ -510,7 +510,7 @@ def data_items(text, lineno, words=False, prec=False, warnings=None):
     4142H -- and goes out low byte first like any other word.  Both were
     taken as strings before: DEFW 'AB' emitted 41 42 where 4142H is 42 41,
     and DEFW "A" emitted ONE byte, which is not a word at all (the
-    2026-09-19 audit, L-53).  Three or more characters is not a word; that
+    2026-09-19 audit).  Three or more characters is not a word; that
     is what DEFM is for, and saying so beats emitting half a listing.
     """
     out = []
@@ -637,7 +637,7 @@ def encode(enc, entry, opnds, symbols, pc, lineno):
             # signed.  Unwrapped, a JR from 0FFFEH to 0002H computed -65534
             # and was refused, although the disassembler wraps its own
             # target and so hands back exactly that line (the 2026-09-19
-            # audit, L-54).
+            # audit).
             disp = (target - (pc + entry.length)) & 0xFFFF
             if disp > 32767:
                 disp -= 65536
@@ -764,7 +764,7 @@ class Result:
         if org <= 0x7FFF < org + len(code) - 1:
             # the block straddles 8000H, so neither sign fits the whole of
             # it: E+I ran past 32767 and the loader stopped with ?OV (the
-            # 2026-09-30 audit, ZL-4).  The address is turned over as it
+            # 2026-09-30 audit).  The address is turned over as it
             # crosses, on its own line: an IF ends the line it is on.
             e = org
             loop = ['30 FOR I=0 TO %d:READ B:A=E+I:IF A>32767 THEN A=A-65536' % (len(code) - 1),
@@ -971,7 +971,7 @@ def assemble(text, org=None, entry=None, precedence=False):
                     # period .cmd beside every corpus source that uses it.
                     # Zeros went out here before, and through SYSTEM they
                     # reached the screen or a DOS area a buffer sat over
-                    # (the 2026-09-30 audit, ZM-1).  A fill operand, this
+                    # (the 2026-09-30 audit).  A fill operand, this
                     # assembler's own extension, still fills.
                     flush()
                     seg_org, seg = s.pc + s.size, bytearray()

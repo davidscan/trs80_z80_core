@@ -35,7 +35,7 @@ PRINTER_LO, PRINTER_HI = 0x37E0, 0x37FF
 # (37E0-37FF the printer and disk ports; 3033H the DOS entry a Model III
 # ROM has there).  A CALL or JP below 3800H leaves the routine for the
 # system, and ROM_HI at 2FFFH made the named 3033H untallyable (the
-# 2026-09-19 audit, L-61).
+# 2026-09-19 audit).
 ROM_HI = 0x37FF
 
 # The two ROM entry points Stage 1 was specified with (the USR idiom).
@@ -247,7 +247,7 @@ def classify(data, base=None, entries=(), payload_kind='candidate-ml'):
 
         # Every way into the ROM, not CALL alone: a tail JP 0033H prints
         # and returns to BASIC through it, and a JP (HL) goes where no
-        # static reading can say -- both left stage1_ok True (L-61).
+        # static reading can say -- both left stage1_ok True.
         # A target inside the payload is the routine's own.  A symbolic
         # base (a string or array at VARPTR, decoded at 0) has no fixed
         # place: its relative jumps are its own, its absolute ones never.

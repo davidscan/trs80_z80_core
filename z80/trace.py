@@ -108,7 +108,7 @@ class Table:
     #                             instructions, traced as code (`vector`)
     source: int                 # the instruction whose constant names it
     grade: str = 'strong'       # 'weak': an undocumented opcode of the weak
-    #                             kind on the path it opened (D6)
+    #                             kind on the path it opened
 
 
 @dataclass
@@ -119,7 +119,7 @@ class Result:
     owner: dict = field(default_factory=dict)   # byte addr -> head addr
     data: dict = field(default_factory=dict)    # byte addr -> (type, range start)
     guess: dict = field(default_factory=dict)   # byte addr -> (type, run start):
-    #                                             S3's guesses for unknown bytes
+    #                                             the guesses for unknown bytes (_guess)
     conflicts: list = field(default_factory=list)
     indirect: list = field(default_factory=list)    # JP (HL)/(IX)/(IY) addrs
     computed: list = field(default_factory=list)    # RET straight after PUSH
@@ -174,14 +174,14 @@ class Result:
 # The kinds of reference, as the listing names them.  `addr` is a 16-bit
 # constant that falls inside the loaded bytes (LD HL,nn): perhaps an
 # address, perhaps a number; it is labelled, and marked as a guess.
-# `word` is a word of a table S3 guessed: a guess too.
+# `word` is a word of a table _guess found: a guess too.
 REF_KINDS = ('entry', 'jump', 'call', 'table', 'read', 'write', 'addr', 'word')
 
-# S3: what unknown bytes are guessed to be, and the listing's flag for each.
+# What unknown bytes are guessed to be (_guess), and the listing's flag for each.
 GUESS_TYPES = ('words', 'keys', 'text', 'fill')
 GUESS_FLAG = {'words': 'w', 'keys': 'k', 'text': 't', 'fill': 'f'}
 MIN_WORDS = 2       # words in a row, each the address of a traced instruction
-#                     (S3), or of bytes in the image (a guessed table's)
+#                     (_guess), or of bytes in the image (a guessed table's)
 MIN_TEXT = 5        # printable bytes in a row, one of them a letter
 MIN_FILL = 4        # identical bytes in a row
 TEXT_ENDS = (0x00, 0x0D, 0x03)  # a terminator a text run takes with it
@@ -252,9 +252,9 @@ def _hex4(a):
 def trace(segments, entries, hints=None, guess=True, tables=False):
     """Trace SEGMENTS ([(org, bytes)], as z80.load returns) from ENTRIES,
     with HINTS (a z80.hints.Hints) if given; with TABLES, follow the jump
-    tables the code's constants name, marked guessed (D5, `_guess_tables`);
+    tables the code's constants name, marked guessed (`_guess_tables`);
     then, unless GUESS is false, guess what the bytes nothing reached are
-    (S3, `_guess`)."""
+    (`_guess`)."""
     from .hints import Hints
     h = hints or Hints()
     mem = {}
@@ -468,7 +468,7 @@ def _why(how, src):
 
 
 def _guess_tables(res, h, st):
-    """D5: follow the jump tables the traced code's constants name.
+    """Follow the jump tables the traced code's constants name.
 
     A candidate is a 16-bit constant in a traced instruction (LD HL,TAB:
     an `addr` ref) pointing at bytes nothing reached, where MIN_WORDS or
@@ -479,7 +479,7 @@ def _guess_tables(res, h, st):
     is C3H are a vector of JP nn instructions, so the records are traced
     as code themselves (a CP/M BIOS's jump vector).  Each candidate is traced on a
     copy of the result and kept only if that adds no conflict and runs
-    into no undocumented opcode of the STRONG kind (D6); a WEAK one is
+    into no undocumented opcode of the STRONG kind; a WEAK one is
     kept with the table's grade lowered.  Every instruction a kept table
     leads to is marked guessed, never proven.  New constants in guessed
     code can name more tables, so this repeats until none is new.
@@ -612,7 +612,7 @@ def _fork(res):
 
 
 def _guess(res, say):
-    """S3: classify the bytes that are neither code nor hinted data, by
+    """Classify the bytes that are neither code nor hinted data, by
     conservative rules, in this order; every one is a guess, kept apart
     from proven code and from hints, and nothing is traced from it.
 
@@ -802,7 +802,7 @@ def _lines(res):
 
 def _kind(res, a):
     """(type, run start, hinted) for a data byte, or None: a hint's
-    data first, then S3's guess."""
+    data first, then _guess's."""
     if a in res.owner:
         return None
     if a in res.data:
@@ -881,7 +881,7 @@ def source(res, segments=None):
 def listing(res):
     """Address, bytes, flag (' ' code, g guessed code, D hinted data,
     t/w/k/f guessed text/words/keys/fill, ? unknown), label, text, and the reason: why the
-    line is what it is (S4 (b)), who refers to it, and hint comments."""
+    line is what it is, who refers to it, and hint comments."""
     out = []
     for a, raw, text, flag in _lines(res):
         hexb = ' '.join('%02X' % b for b in raw)
@@ -937,7 +937,7 @@ def report(res):
 def blocks(res):
     """The image as maximal runs of one kind: (start, end, kind, type,
     guessed, why).  kind is 'code' (type None), 'data' (a hint's type),
-    'guess' (S3's type) or 'unknown'; guessed is True for code a guessed
+    'guess' (_guess's type) or 'unknown'; guessed is True for code a guessed
     table led to; why is res.why for the run's first byte, or None."""
     out = []
     for start, n in _runs(res.mem):
@@ -972,7 +972,7 @@ def blocks(res):
 
 
 def to_json(res):
-    """S4 (c): the result for tools, as a JSON text.  Every address is a
+    """The result for tools, as a JSON text.  Every address is a
     number.  blocks tile the loaded bytes; labels map address (as a
     decimal string: JSON keys are strings) to name; xrefs are
     {from, to, kind} with from null for an entry; the rest are the

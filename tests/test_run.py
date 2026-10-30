@@ -50,7 +50,7 @@ def asm(src, **kw):
 class Bounded(unittest.TestCase):
     """Each test fails after 30 s instead of hanging the suite.  The budget
     ends a loop only through the tick's BREAK reply; with that reply
-    ignored, the loop cases here ran for ever (the 2026-09-30 audit, BM-12)."""
+    ignored, the loop cases here ran for ever (the 2026-09-30 audit)."""
 
     LIMIT = 30
 
@@ -171,14 +171,14 @@ class TestHeadless(Bounded):
         h, (how, detail) = self.run_src('  ORG 8000H\nLOOP JP LOOP\n', cycles=50_000)
         self.assertEqual(how, 'budget')
         self.assertGreaterEqual(h.machine.cycles, 50_000)
-        self.assertLess(h.machine.cycles, 50_000 + 23)    # within one instruction (N-6)
+        self.assertLess(h.machine.cycles, 50_000 + 23)    # within one instruction
         h, (how, _) = self.run_src('  ORG 8000H\nLOOP JP LOOP\n', cycles=1)
         self.assertEqual((how, h.machine.cycles), ('budget', 10))   # one JP, not a tick's 8880
         h, (how, detail) = self.run_src('  ORG 8000H\n  HALT\n')
         self.assertEqual(how, 'halt')
 
     def test_the_argument_is_where_usr_leaves_it(self):
-        # ZM-3: an integer in WRA1 (4121H) and type 2 at 40AFH and in A,
+        # an integer in WRA1 (4121H) and type 2 at 40AFH and in A,
         # not only behind 0A7FH; -3 is FFFDH in both
         for arg, want in ((21, 21), (-3, 0xFFFD)):
             h, (how, _) = self.run_src('  ORG 8000H\n  LD HL,(4121H)\n  JP 0A9AH\n', arg=arg)
@@ -216,7 +216,7 @@ class TestCommandLine(Bounded):
             with open(loop, 'w') as f:
                 f.write('  ORG 8000H\nLOOP JP LOOP\n')
             rc, out = self.main(loop, '--cycles', '1000')
-            self.assertEqual(rc, 3)          # 2 is argparse's usage error (ZL-4)
+            self.assertEqual(rc, 3)          # 2 is argparse's usage error
             with self.assertRaises(SystemExit) as e, redirect_stderr(io.StringIO()):
                 self.main(loop, '--cycles', '-5')
             self.assertEqual(e.exception.code, 2)
@@ -253,7 +253,7 @@ class TestCommandLine(Bounded):
 
 
 class TestDiagnosticsNameTheRightPlace(Bounded):
-    """Two messages that pointed somewhere else (the 2026-09-19 audit, L-55)."""
+    """Two messages that pointed somewhere else (the 2026-09-19 audit)."""
 
     def test_a_short_transfer_record_names_its_own_offset(self):
         """`i` has already advanced past the record when the check runs.

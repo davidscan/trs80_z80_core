@@ -90,7 +90,7 @@ class TestSynth(unittest.TestCase):
         """Below `rate` Hz two sample boundaries fall on one T-state and the
         sample between them spans no time: it takes the level in force.  It
         used to divide by zero and kill the core -- `speed 0.01` with a WAV
-        set (the 2026-09-19 audit, L-46)."""
+        set (the 2026-09-19 audit)."""
         s = Synth(10000, RATE)
         s.begin_call()
         s.transition(3, 1)
@@ -316,7 +316,7 @@ class TestFromEnv(unittest.TestCase):
         snd.close()
 
     def test_an_unwritable_wav_is_said_not_dropped(self):
-        # L-49: a directory, and a file in a directory that does not exist
+        # a directory, and a file in a directory that does not exist
         import io
         d = tempfile.mkdtemp()
         self.addCleanup(os.rmdir, d)

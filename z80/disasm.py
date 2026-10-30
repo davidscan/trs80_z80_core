@@ -265,7 +265,7 @@ def main(argv=None):
     except ValueError:
         ap.error('--base: %r is not a number (decimal, 0x.., or ..H)' % a.base)
     # the Z80 has 64K and the listing wraps there, so a base outside it
-    # would print addresses that cannot exist (the 2026-09-19 audit, L-52)
+    # would print addresses that cannot exist (the 2026-09-19 audit)
     if not 0 <= base <= 0xFFFF:
         ap.error('--base: %d is outside 0-65535' % base)
     if a.hex is not None:

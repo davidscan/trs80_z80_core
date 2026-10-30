@@ -129,7 +129,7 @@ class TestCompareTiering(unittest.TestCase):
 class TestAfterTheFirstUsr(unittest.TestCase):
     """A payload loaded after the first USR call is not in the pokes the
     oracle reads up to it; that is no contradiction (the 2026-09-19
-    audit, L-63)."""
+    audit)."""
 
     CODE = bytes([62, 1, 211, 255, 62, 2, 211, 201])
 
@@ -147,7 +147,7 @@ class TestAfterTheFirstUsr(unittest.TestCase):
 
     def test_the_same_bytes_at_another_base_are_a_contradiction(self):
         """A wrong-base extraction is what the oracle exists to catch; the
-        54e96dc split scored it 'unreached' (ZL-1)."""
+        54e96dc split scored it 'unreached'."""
         pre = self.pokes(30000, self.CODE)
         self.assertEqual(oracle.payload_verdict(self.CODE, 31000, pre, []),
                          'contradiction')
@@ -178,7 +178,7 @@ class TestRegionDiscrimination(unittest.TestCase):
     def test_the_static_discriminations_hold_dynamically(self):
         # a run the static extractor calls a device stream is one here
         # too: the whole printer window, the keyboard matrix, anything
-        # below 4000H (the 2026-09-19 audit, L-62)
+        # below 4000H (the 2026-09-19 audit)
         self.assertEqual(oracle.region_of(0x37E0, bytes(8)), 'device-stream')
         self.assertEqual(oracle.region_of(0x3800, bytes(8)), 'device-stream')
         self.assertEqual(oracle.region_of(0x3000, bytes(64)), 'device-stream')
@@ -291,7 +291,7 @@ class TestPatchPoints(unittest.TestCase):
 class TestTheCachedBuildFollowsTheSource(unittest.TestCase):
     """The default run reused out/'s instrumented build because it existed:
     with the p80 anchor line edited, it printed a full report from the
-    pre-edit interpreter, exit 0 (the 2026-09-30 audit, XM-12)."""
+    pre-edit interpreter, exit 0 (the 2026-09-30 audit)."""
 
     def test_an_edited_source_rebuilds_and_a_moved_anchor_stops_it(self):
         with tempfile.TemporaryDirectory() as d:
@@ -475,7 +475,7 @@ class TestTheEnvironmentDoesNotLeakIn(unittest.TestCase):
     un-executed USR into ?FC, a TRS80_Z80 put a real core behind calls the
     oracle believes are stubbed, and TRS80_SOUND started a player -- the
     same corpus gave different numbers to different people (the 2026-09-19
-    audit, L-64).
+    audit).
     """
 
     def test_the_variables_that_would_change_a_measurement_are_gone(self):
@@ -488,8 +488,8 @@ class TestTheEnvironmentDoesNotLeakIn(unittest.TestCase):
                 'TRS80_USR_TRACE': '2',
                 'TRS80_EXT': '1',
                 'TRS80_PRINTER': '/tmp/lp',
-                # ZL-8's own variable, and one no interpreter has yet: the
-                # scrub is categorical, not a list (ZM-5)
+                # the variable that started this, and one no interpreter has yet: the
+                # scrub is categorical, not a list
                 'TRS80_MEMORY': 'host',
                 'TRS80_NOT_A_KNOB_YET': '1',
             })

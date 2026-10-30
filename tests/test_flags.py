@@ -3,8 +3,8 @@ that needs no fetched data.
 
 The single-step vector suites (tests/test_cpu_vectors.py) are fetched,
 never committed, so a checkout without them has no other semantic check
-of the CPU: a half-carry mutant passed the vector-less suite (audit
-2026-09-26 ZM-7). CI fetches and runs every vector case since 2026-10-04;
+of the CPU: a half-carry mutant passed the vector-less suite (the
+2026-09-26 audit). CI fetches and runs every vector case since 2026-10-04;
 this file is still the check wherever they are absent.  Every case here is this project's own,
 hand-written against the Zilog manual's flag rules (and, for the
 undocumented X/Y bits, the NMOS behavior the fetched vectors pin), so it
@@ -154,7 +154,7 @@ CASES = [
      {'a': 0xCD, 'f': 'ZHC', 'sp': 0x8000}, 10),
     ('HALT halts', '76', {}, {'pc': 0x0001}, 4),
 
-    # ---- outside the fetched vectors (ZL-5): prefix chains and the ED
+    # ---- outside the fetched vectors: prefix chains and the ED
     # page's undefined bytes, which the SingleStepTests sets do not hold
     # (no 'dd dd', 'dd ed', 'dd fd'; 80 of the 256 ED files).  A DD or FD
     # followed by another prefix is a 4-T no-op of its own, one M1
@@ -219,7 +219,7 @@ class TestFlags(unittest.TestCase):
 
     def test_a_prefix_chain_runs_the_last_prefix(self):
         # the instruction after the no-op prefix: DD FD 21 is LD IY,nn,
-        # FD DD 21 is LD IX,nn, DD ED 6B is ED's own LD HL,(nn) (ZL-5)
+        # FD DD 21 is LD IX,nn, DD ED 6B is ED's own LD HL,(nn)
         for code, reg, t2 in (('DDFD213412', 'iy', 14), ('FDDD213412', 'ix', 14),
                               ('DDED6B0080', 'hl', 20), ('FDED6B0080', 'hl', 20),
                               ('DDDD213412', 'ix', 14)):

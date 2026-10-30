@@ -544,7 +544,7 @@ class TestUndocumentedAgainstTheReferenceCard(unittest.TestCase):
 
     def test_documented_undocumented_split(self):
         """Pinned so the split cannot drift silently.  698/1082 as of
-        2026-09-28 (ZL-3): the 334 no-effect DD/FD forms -- a prefix on an
+        2026-09-28: the 334 no-effect DD/FD forms -- a prefix on an
         instruction with no index operand, DD 00 is NOP plus four T-states
         -- are not in Zilog's published set and moved to undocumented.
         Before that 1032/748 (2026-09-11, the IM undocumented set found
@@ -577,8 +577,8 @@ class TestAddressesWrapAtSixtyFourK(unittest.TestCase):
     """The Z80 has 64K, so a listing that runs off the top comes back to 0.
 
     Every address was `base + offset` unwrapped, so bytes at FFFEH listed
-    as 10000H and up -- addresses that cannot exist (the 2026-09-19 audit,
-    L-52).  The relative-jump target was already wrapped, which is what
+    as 10000H and up -- addresses that cannot exist (the 2026-09-19 audit).
+    The relative-jump target was already wrapped, which is what
     made the inconsistency visible: `JR $` at FFFEH named FFFEH while the
     next line claimed 10000H.
     """
@@ -604,7 +604,7 @@ class TestTheCommandLineSaysWhatIsWrong(unittest.TestCase):
 
     --base outside 64K was accepted and printed impossible addresses; a
     --base that is not a number, a missing file and bad --hex digits were
-    tracebacks (seen during group 3, recorded with L-52).
+    tracebacks (seen during group 3, recorded by the 2026-09-19 audit).
     """
 
     def run_disasm(self, *args):

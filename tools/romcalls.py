@@ -28,7 +28,7 @@ held a listing.
 
 --record writes the measurement with its inputs: every file read and
 its sha1, the set's fingerprint, the core's commit, and the table.  The
-2026-09-17 tally could not be rebuilt (the 2026-09-30 audit, ZM-7): its
+2026-09-17 tally could not be rebuilt (the 2026-09-30 audit): its
 "251" counted part files nobody listed, and the books left out were
 named nowhere.  --from reads the file list from a file, one path a line.
 """

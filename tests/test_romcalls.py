@@ -111,7 +111,7 @@ class RomCalls(unittest.TestCase):
         self.assertIn('the core serves 4 of the 5 entries, 5 of the 6 calls', text)
 
     def test_the_record_names_every_input(self):
-        """ZM-7: the 2026-09-17 tally named no input file, so it could not
+        """the 2026-09-17 tally named no input file, so it could not
         be rebuilt."""
         import hashlib
         import json

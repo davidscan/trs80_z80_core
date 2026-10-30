@@ -123,7 +123,7 @@ class TestTableRoundTrip(unittest.TestCase):
             self.assertIn('at least one item', e[0][1])
 
     def test_the_exact_jr_and_index_displacement_limits(self):
-        """ZL-10: the boundaries themselves, so a mutant off by one fails."""
+        """the boundaries themselves, so a mutant off by one fails."""
         # JR e: -128..+127 from the byte after the instruction
         self.assertEqual(one('  ORG 0\n  JR $+129\n').segments[0][1].hex(), '187f')
         self.assertEqual(one('  ORG 0\n  JR $-126\n').segments[0][1].hex(), '1880')
@@ -173,7 +173,7 @@ class TestTableRoundTrip(unittest.TestCase):
         self.assertEqual(r.errors, [])
 
     def test_a_column_one_label_may_be_spelled_like_an_opcode(self):
-        """ZM-2: Barden p.41-42, free format as long as an op-code does not
+        """Barden p.41-42, free format as long as an op-code does not
         start in column 1; corpus sources label lines OUT, SET, BIT, END,
         AND, INC, DEC, RET.  An op-code in column 1 is refused, saying so."""
         r = one('  ORG 0\nOUT LD H,B\nSET NOP\nEND JR OUT\nBIT: INC A\nDEFB EQU 7\n'
@@ -190,7 +190,7 @@ class TestTableRoundTrip(unittest.TestCase):
 
     def test_a_data_string_with_no_closing_quote_runs_to_the_end_of_the_line(self):
         """As EDTASM took it: TBBS's MINIHOST/SRC line 5140 against its
-        period object (N-6).  A lost quote anywhere else is still an error."""
+        period object.  A lost quote anywhere else is still an error."""
         r = one("  ORG 0\n  DEFM 'ABC ; not a comment\n  DB 1,'D''E\n  DEFM \"F\n")
         self.assertEqual(r.segments[0][1], b"ABC ; not a comment" b"\x01D'E" b"F")
         for bad in ("  LD A,'X\n", "  DEFW 'A\n", "  DEFM 'A','B\n  LD A,'\n"):
@@ -199,7 +199,7 @@ class TestTableRoundTrip(unittest.TestCase):
             self.assertIn('unterminated', e[0][1])
 
     def test_defs_reserves_its_bytes_and_writes_none(self):
-        """ZM-1: Barden p.45-46, "A DEFS does not fill the vacant space with
+        """Barden p.45-46, "A DEFS does not fill the vacant space with
         zeroes"; every period object beside a corpus source that uses DEFS
         skips the space.  The object's blocks end before it and start after;
         a trailing DEFS leaves nothing; a fill operand (this assembler's own)
@@ -318,7 +318,7 @@ class TestSyntax(unittest.TestCase):
         # palindromes: the line could not tell a word stored low byte first
         # from one stored high byte first, and so it pinned DEFW 'AB' as
         # 41 42 for a value the module documents as 4142H (the 2026-09-19
-        # audit, L-53).  A word is a word however it is written.
+        # audit).  A word is a word however it is written.
         b = one('  ORG 0\n  DEFW 0FFFFH,65535,177777Q,1111111111111111B,1234H,\'AB\'\n'
                 '  DEFB 7.MOD.4, 1.SHL.4, 255.SHR.4, 0FH.AND.3, 4.OR.1, 5.XOR.1, .NOT.0\n'
                 '  DEFB 2+3*4, (2+3)*4, -1, 10/3, -7/2').segments[0][1]
@@ -330,7 +330,7 @@ class TestSyntax(unittest.TestCase):
         """Left to right with no precedence by default (the Editor/Assembler
         manual; the user's ruling of 2026-10-15), the usual order with
         precedence=True (--precedence); parentheses and unary signs work in
-        both.  `/` truncates toward zero either way (ZL-3: -7/2 is -3)."""
+        both.  `/` truncates toward zero either way (-7/2 is -3)."""
         src = ('  ORG 0\n  DEFB 2+3*4, 10-2-3, 2*3+4, 1+2.AND.3, 20/2/5, 2+3*-1\n'
                '  DEFW 1<4+1, 100H+(2+3)*4, -7/2, 0FFH&0FH+1\n')
         ltr = one(src).segments[0][1]
@@ -538,9 +538,9 @@ class TestOutputs(unittest.TestCase):
         hi = one('  ORG 0A000H\n  RET\n  END 0A000H\n').to_bas('hi')
         self.assertIn('20 E=-24576:C=0', hi)
         self.assertIn('50 POKE 16526,0:POKE 16527,160', hi)
-        self.assertIn('20 E=-32768:C=0', one('  ORG 8000H\n  RET\n').to_bas('edge'))  # ZL-3
+        self.assertIn('20 E=-32768:C=0', one('  ORG 8000H\n  RET\n').to_bas('edge'))
         self.assertIn('20 E=32767:C=0', one('  ORG 7FFFH\n  RET\n').to_bas('edge'))
-        # a block straddling 8000H turns the address over as it crosses (ZL-4)
+        # a block straddling 8000H turns the address over as it crosses
         st = one('  ORG 7FF8H\n  DEFS 10,0\n  LD HL,1234H\n  JP 0A9AH\n').to_bas('st')
         self.assertIn('20 E=32760:C=0', st)
         self.assertIn('30 FOR I=0 TO 15:READ B:A=E+I:IF A>32767 THEN A=A-65536', st)
@@ -548,7 +548,7 @@ class TestOutputs(unittest.TestCase):
         self.assertIn('50 POKE 16526,248:POKE 16527,127', st)
 
     def test_the_interpreter_loads_a_block_straddling_8000h(self):
-        """ZL-4: `ORG 7FF8H`, 16 bytes, gave `?OV ERROR IN 30`.  Through the
+        """`ORG 7FF8H`, 16 bytes, gave `?OV ERROR IN 30`.  Through the
         interpreter driving this core: the routine runs and answers."""
         basic = os.path.join(os.path.dirname(ROOT), 'trs80basic', 'basic')
         if not os.access(basic, os.X_OK):
@@ -672,7 +672,7 @@ def edtasm_file(lines, name='SAMPLE'):
 
 
 class TestEditorAssemblerFiles(unittest.TestCase):
-    """read_source: the Editor's own file format (Q-8 of the 2026-09-30
+    """read_source: the Editor's own file format (ruled with the 2026-09-30
     audit; 52 of the corpus's 84 distinct sources) decodes to the text
     the assembler reads, and plain text passes through."""
 
@@ -734,13 +734,13 @@ class TestEditorAssemblerFiles(unittest.TestCase):
 
 CORPUS = os.path.join(ROOT, 'corpus', 'programs')
 
-# Period sources beside the object their author built from them (Q-8):
+# Period sources beside the object their author built from them:
 # the one oracle for the assembler that is not this project's own
 # reading of the books.  Measured 2026-10-16 over every source in the
 # corpus, loose or inside the archive's zips (1,159 distinct, by SHA-1),
 # against every load module in the same zip or directory: these 97 come
 # out IMAGE-identical (every byte at every address, no byte more or
-# less: so DEFS space is absent on both sides, ZM-1; TBBS's MINIHOST
+# less: so DEFS space is absent on both sides; TBBS's MINIHOST
 # relies on an unterminated DEFM running to the end of its line).  Not
 # byte-identical files: the period objects differ among themselves in
 # record size (128 or 256), in sector padding after the transfer record
@@ -1009,7 +1009,7 @@ class TestPeriodObjects(unittest.TestCase):
                             image(assemble(text).segments))
 
     def test_the_period_objects_skip_their_defs_space(self):
-        """The harm case of ZM-1 held against the oracle: the four sources
+        """The harm case of the DEFS fill held against the oracle: the four sources
         the audit named reserve 256, 319, 64 and 290 bytes, and their
         objects hold none of them."""
         from z80.load import load_cmd
@@ -1033,7 +1033,7 @@ class TestRelativeJumpsAcrossTheTop(unittest.TestCase):
     The displacement was `target - (pc + length)` with no wrap, so a JR
     from FFFEH to 0002H computed -65534 and was refused -- although the
     disassembler wraps its own target and hands back exactly that line, so
-    the two tools disagreed about a listing (the 2026-09-19 audit, L-54).
+    the two tools disagreed about a listing (the 2026-09-19 audit).
     """
 
     def bytes_of(self, org, ins):
@@ -1080,7 +1080,7 @@ class TestDefwTakesWords(unittest.TestCase):
     number -- 'AB' is 4142H.  DEFW took both as strings instead, so
     DEFW 'AB' emitted 41 42 where 4142H stored as a word is 42 41, and
     DEFW "A" emitted a single byte, which is not a word at all (the
-    2026-09-19 audit, L-53).
+    2026-09-19 audit).
     """
 
     def bytes_of(self, src):

@@ -144,7 +144,7 @@ def wait_for(fd, buf, s, timeout):
     loop and RETURN -- exactly what it does when the text arrives.  So an
     interpreter that died during a probe was measured as one that answered,
     and the tick numbers it produced were of nothing at all (the
-    2026-09-19 audit, L-69).  macOS gives a 0-byte read for the same case,
+    2026-09-19 audit).  macOS gives a 0-byte read for the same case,
     so both endings are taken together.
     """
     t0 = time.monotonic()

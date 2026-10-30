@@ -124,7 +124,7 @@ class Synth:
             # sample boundaries can be the SAME T-state, b == a: the sample
             # spans no time at all and its mean is simply the level in
             # force.  The division took the core down with ZeroDivisionError
-            # (the 2026-09-19 audit, L-46).
+            # (the 2026-09-19 audit).
             x = acc / (b - a) if b > a else float(lvl)
             y = x - px + hp * py
             px, py = x, y
@@ -371,7 +371,7 @@ def from_env(env, mhz, err=None):
     the core's start, and the core runs without the capture.  It used to
     be dropped in silence while the interpreter's `sound` went on showing
     the capture as active; `~` is expanded, as a shell would have (the
-    2026-09-19 audit, L-49)."""
+    2026-09-19 audit)."""
     player = env.get('TRS80_SOUND', '').strip()
     wav = os.path.expanduser(env.get('TRS80_SOUND_WAV', '').strip())
     if not player and not wav:

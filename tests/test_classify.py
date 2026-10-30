@@ -3,7 +3,7 @@
 stage1_ok says the CPU plus the two USR traps (0A7FH, 0A9AH) run the
 routine.  Every way into the ROM refutes it, not only CALL: a tail JP
 0033H prints and returns to BASIC through the ROM, and a JP (HL) goes
-where no static reading can say (the 2026-09-19 audit, L-61).  Every
+where no static reading can say (the 2026-09-19 audit).  Every
 routine here is written for the test; nothing is corpus material.
 """
 

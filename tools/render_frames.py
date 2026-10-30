@@ -49,7 +49,7 @@ for l in open(log).read().splitlines():
         # A call ends at its RET *or* at an ERR -- the protocol's two
         # endings.  Counting only RET left every call after a failed one
         # numbered one too low, so asking for "call 7" of a log with an
-        # earlier ERR rendered call 8 (the 2026-09-19 audit, L-67).
+        # earlier ERR rendered call 8 (the 2026-09-19 audit).
         if call == call_want and 'end' in marks:
             render('call %d, at %s (%d V runs)' % (call, l.split()[0], run))
         call += 1

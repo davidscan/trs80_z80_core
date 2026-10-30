@@ -53,7 +53,7 @@ class TestBasicSurface(unittest.TestCase):
         # The ROM's cruncher leaves a DATA statement's text alone up to the
         # next ':' outside quotes, so REM and ' there are not comments: the
         # items after them, and the statements behind the ':', are real
-        # (the 2026-09-19 audit, L-58).
+        # (the 2026-09-19 audit).
         self.assertEqual(split_statements("DATA IT'S,5:PRINT 1"),
                          ["DATA IT'S,5", 'PRINT 1'])
         self.assertEqual(split_statements('DATA PREMIUM,7:X=2'),
@@ -69,7 +69,7 @@ class TestBasicSurface(unittest.TestCase):
         # READ of an empty item is 0: the ROM's number reader (224DH) finds
         # nothing and returns 0, and a bare DATA is one such item.  They
         # were dropped or read as non-numeric, which shifted every byte
-        # behind them (the 2026-09-19 audit, L-59).
+        # behind them (the 2026-09-19 audit).
         self.assertEqual(data_items('DATA'), [0])
         self.assertEqual(data_items('DATA 1,,2,'), [1, 0, 2, 0])
         self.assertEqual(data_items('DATA 1, ,2'), [1, 0, 2])
@@ -126,7 +126,7 @@ class TestBasicSurface(unittest.TestCase):
         self.assertEqual([ln for ln, _b, _s in prog], [10])
 
     def test_lines_are_cut_as_the_interpreter_loads_them(self):
-        # N-6: a CR-only file (the TRS-80's own ASCII save) ran together as
+        # a CR-only file (the TRS-80's own ASCII save) ran together as
         # one line; an LF inside it is the down-arrow line feed in a string
         prog = parse_program('10 PRINT 1\r20 PRINT "A\nB"\r30 END\r')
         self.assertEqual([(ln, b) for ln, b, _s in prog],
@@ -141,7 +141,7 @@ class TestBasicSurface(unittest.TestCase):
 
 
 class TestUsrPopulation(unittest.TestCase):
-    """ZM-9: the sweeps' population is the extractor's USR evidence, the
+    """the sweeps' population is the extractor's USR evidence, the
     gate's own definition: not USR in text, a DATA table or damaged bytes."""
 
     def probe(self, src):
@@ -183,7 +183,7 @@ class TestLoaderIdioms(unittest.TestCase):
 
     def test_a_count_read_advances_the_pointer(self):
         """polar2's shape: READ M feeds the loop bound above the loader,
-        so the count is not the first byte (ZM-8, H-18's sibling)."""
+        so the count is not the first byte."""
         p = only(run('25 READ M\n'
                      '27 FOR Y=1 TO M\n'
                      '30 FOR X=0 TO 3:READ A:POKE 32545+X,A:NEXT\n'
@@ -222,7 +222,7 @@ class TestLoaderIdioms(unittest.TestCase):
     def test_hex_strings_decoded_with_val(self):
         """demons' shape: READ X$:L=VAL("&H"+X$):POKE X,L -- the bytes
         are the hex digits, not the decimal reading of the items without
-        a letter (F29 item 5 (d))."""
+        a letter (found 2026-10-22)."""
         p = only(run('10 FOR X=32000 TO 32003:READ X$:L=VAL("&H"+X$)'
                      ':POKE X,L:NEXT X\n'
                      '20 DATA 3E,01,D3,C9\n'))
@@ -325,8 +325,8 @@ class TestLoaderIdioms(unittest.TestCase):
 
     def test_a_restore_behind_the_loader_is_for_the_next_one(self):
         """A RESTORE after the loader on its own line runs after it: it
-        redirects the NEXT loader, not this one (the 2026-09-19 audit,
-        L-57: the line's RESTORE was taken for every loader on it)."""
+        redirects the NEXT loader, not this one (the 2026-09-19 audit:
+        the line's RESTORE was taken for every loader on it)."""
         rep = run('10 FOR I=30000 TO 30003:READ A:POKE I,A:NEXT:RESTORE 100\n'
                   '20 FOR I=31000 TO 31003:READ A:POKE I,A:NEXT\n'
                   '30 DATA 1,2,3,4\n'
@@ -357,7 +357,7 @@ class TestLoaderIdioms(unittest.TestCase):
 
     def test_the_pointer_by_flow_and_adjacency_where_the_walk_stops(self):
         """Level II's one READ pointer starts at the first DATA, wherever
-        it is (H-18 re-ruled 2026-10-22: the walk from the first line
+        it is (re-ruled 2026-10-22: the walk from the first line
         replaces adjacency where it reaches the READ).  Where the walk
         cannot know the flow -- an ON n GOTO on a value typed in -- the
         loader keeps adjacency: the first DATA below its READ."""
@@ -459,7 +459,7 @@ class TestLoaderIdioms(unittest.TestCase):
 
     def test_two_loaders_share_one_data_block(self):
         """Level II READ has one sequential pointer, so the second loader
-        reads where the first one stopped (the 2026-09-19 audit, H-18:
+        reads where the first one stopped (the 2026-09-19 audit:
         both started at "the first DATA after this READ" and came out
         with the same bytes at confidence high).  A RESTORE of its own
         sets the second loader's pointer back; a loader that follows a
@@ -492,7 +492,7 @@ class TestLoaderIdioms(unittest.TestCase):
         self.assertTrue(all(p.confidence == 'medium' for p in rep.payloads[:2]))
 
     def test_a_loop_variable_with_a_type_suffix(self):
-        """I% indexes the POKE like I does (the 2026-09-19 audit, H-19: no
+        """I% indexes the POKE like I does (the 2026-09-19 audit: no
         word boundary follows a %, so the variable was never found and the
         loader filed as fixed-address-unresolved).  I and I% are two
         variables: a loop on I does not index a POKE at I%."""
@@ -600,8 +600,8 @@ class TestStringPacked(unittest.TestCase):
     def test_the_usr_link_is_followed_through_every_variable(self):
         """V=VARPTR(A$):AD=PEEK(V+1)+256*PEEK(V+2):DEFUSR=AD -- the entry
         names no VARPTR and no variable assigned one directly, only a
-        variable computed from such a variable (the 2026-09-19 audit,
-        H-17: one hop was followed, this common form was dropped).  The
+        variable computed from such a variable (the 2026-09-19 audit:
+        one hop was followed, this common form was dropped).  The
         hops may sit anywhere in the listing: a subroutine below sets
         them for a DEF USR above."""
         p = only(run('10 A$=CHR$(205)+CHR$(127)+CHR$(10)+CHR$(41)+CHR$(195)+CHR$(154)+CHR$(10)+CHR$(0)\n'
@@ -670,7 +670,7 @@ class TestVarptrIdiom(unittest.TestCase):
         """READ into an integer array is code only if the program takes
         the array's address: VARPTR of any element, under its two-letter
         name (DEFINT makes US(0) the same array as US%).  Without one it
-        is a table -- plot offsets, key codes (the 2026-09-19 audit, L-60:
+        is a table -- plot offsets, key codes (the 2026-09-19 audit:
         8 of the 23 corpus payloads had no VARPTR and no USR)."""
         p = only(run('10 DIM Z%(2):FOR B=0 TO 2:READ Z%(B):NEXT\n'
                      '20 DATA 5,6,7\n'))
@@ -687,7 +687,7 @@ class TestVarptrIdiom(unittest.TestCase):
         self.assertEqual(p.idiom, 'varptr-array')
 
     def test_an_array_defint_makes_integer_is_read_too(self):
-        """ZL-9: DOSCHECK's `READ US(X)` under DEFINT A-Z is the same idiom
+        """DOSCHECK's `READ US(X)` under DEFINT A-Z is the same idiom
         as `READ US%(X)`; a single-precision array is not (4-byte elements)."""
         p = only(run('10 DEFINT A-Z:DIM US(2):FOR X=0 TO 2:READ US(X):NEXT\n'
                      '20 DEF USR 9=VARPTR(US(0))\n'
@@ -729,7 +729,7 @@ class TestUsrEvidence(unittest.TestCase):
     def test_the_vector_pair_across_lines_in_either_order_and_behind_if(self):
         """The two vector POKEs are one entry wherever they stand: on two
         lines, high byte first, behind THEN or ELSE -- and a DEF USR
-        behind ELSE is an entry too (the 2026-09-19 audit, L-56: only a
+        behind ELSE is an entry too (the 2026-09-19 audit: only a
         low-then-high pair on one line was joined; 17 of 64 vector-POKE
         listings kept only `hi-only-N`)."""
         def entries(src):
@@ -755,14 +755,14 @@ class TestUsrEvidence(unittest.TestCase):
         self.assertEqual(rep.usr_calls, 2)
 
     def test_usr_in_a_string_or_a_quote_comment_is_no_call(self):
-        """ZM-5: the blanking behind the population (ZM-9) had no test that
+        """the blanking behind the population had no test that
         failed without it."""
         self.assertEqual(run('10 PRINT "X=USR(0)"\n').usr_calls, 0)
         self.assertEqual(run("10 CLS:' X=USR(0)\n").usr_calls, 0)
         self.assertFalse(run('10 PRINT "X=USR(0)"\n20 PRINT "DEFUSR=1"\n').usr_entries)
 
     def test_a_quoted_def_usr_makes_no_packed_string(self):
-        """ZM-5: VARPTR(A$) beside DEF USR in a message is text, not a sink."""
+        """VARPTR(A$) beside DEF USR in a message is text, not a sink."""
         from phasea.extract import varptr_strings
         prog = parse_program('10 A$="ABC"\n20 PRINT "DEFUSR=";VARPTR(A$)\n')
         self.assertEqual(varptr_strings(prog), set())

@@ -7,7 +7,7 @@
 unittest reports only "OK (skipped=17)", so a test that stopped running
 because its input went missing looked like one that passed (the
 2026-09-30 audit's silent-skip sweep; trs80basic's run_all does the same
-since BL-36).  This prints each skipped test with its reason and exits 1
+since 2026-10-23).  This prints each skipped test with its reason and exits 1
 when a reason is not one of EXPECTED: the inputs CI cannot have, which
 are private and local (the corpus archive and the ocr transcriptions).
 Everything else -- the vectors, the interpreter checkout, gawk, the tags

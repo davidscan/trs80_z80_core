@@ -869,7 +869,7 @@ class Block:
                 # Decided from the SCANNED address every round: a move made
                 # in round one, when the line's own length was not known,
                 # stood for good, and a line settled since then says how
-                # long it is (the 2026-09-19 audit, H-21).  The first
+                # long it is (the 2026-09-19 audit).  The first
                 # address, chained backward, is first_address's to keep.
                 r.addr, r.anote = r.col0, ''
             if self.reserves(r, pc, self.lost_before(recs, i, step)):
@@ -1140,7 +1140,7 @@ class Block:
             # bytes in the object column it is a line of the program, and
             # goes on to be repaired or reported: called text, its bytes
             # vanished from the recovered source and the ROM-call tally,
-            # and nothing said so (the 2026-09-19 audit, H-20).
+            # and nothing said so (the 2026-09-19 audit).
             if r.op in ('EQU', 'DEFL') or (not r.hexs and (
                     (r.op is None and r.label is None)
                     or not re.match(r'^[A-Z]', r.op or ''))):
@@ -1258,7 +1258,7 @@ class Block:
                 # field that reads cleanly as other bytes is a witness
                 # AGAINST the source as printed, and the two were one slip
                 # apart as often as not: RFADY was taken over a hex column
-                # that read READY (the 2026-09-19 audit, H-21).  Such a
+                # that read READY (the 2026-09-19 audit).  Such a
                 # line falls to (b), where the hex's own reading can come
                 # back as one column alone, flagged.
                 continue
@@ -1987,7 +1987,7 @@ def main(argv=None):
     # --block past the end skipped every block and reported "0 lines: 0
     # clean, 0 repaired, 0 unresolved", exit 0 -- a silent pass for a
     # block that is not there, which is the wrong answer to a typo (the
-    # 2026-09-19 audit, L-68).  `a.block and` also let --block 0 through
+    # 2026-09-19 audit).  `a.block and` also let --block 0 through
     # to check everything, since 0 is falsy and the numbering is 1-based.
     if a.block is not None and not 1 <= a.block <= len(blocks):
         sys.stderr.write('%s: --block %d: the file has %d block(s)\n'

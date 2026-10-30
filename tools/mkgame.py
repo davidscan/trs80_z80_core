@@ -99,7 +99,7 @@ class Asm:
             # silent mask turns it into a game that misbehaves: --fps 1
             # wanted a delay of 68218 and emitted LD DE,2682 while the
             # printed statistics went on quoting 68218 (the 2026-09-19
-            # audit, L-66).  Say so instead, as the assembler does.
+            # audit).  Say so instead, as the assembler does.
             if o.kind in ('imm8', 'port_imm'):
                 v = values[vi]
                 if not -128 <= v <= 255:
@@ -189,13 +189,13 @@ def delay_count(fps, overhead):
     n = int((frame - overhead) / per_turn)
     # the loop counts down in DE, so it cannot be told to run more than
     # 65535 turns; a slower frame rate than that allows is not something
-    # to mask into a wrong constant (the 2026-09-19 audit, L-66)
+    # to mask into a wrong constant (the 2026-09-19 audit)
     if n > 0xFFFF:
         raise ValueError('%g fps needs a delay of %d turns, and DE counts to '
                          '65535: the slowest this loop reaches is %.2f fps'
                          % (fps, n, MHZ * 1e6 / (0xFFFF * per_turn + overhead)))
     # and at the other end a frame shorter than the loop's own overhead
-    # was clamped to one turn and reported at the asked-for rate (ZL-8)
+    # was clamped to one turn and reported at the asked-for rate
     if n < 1:
         raise ValueError('%g fps leaves no time for the delay: the fastest this loop '
                          'reaches is %d fps' % (fps, int(MHZ * 1e6 / (overhead + per_turn))))
@@ -428,7 +428,7 @@ def listing(code, org, delay, fps):
     total = sum(code)
     if org <= 0x7FFF < org + len(code) - 1:
         # the routine straddles 8000H: POKE's address is signed in Level II,
-        # so E+I past 32767 was ?OV (the 2026-09-30 audit, ZL-4; the same
+        # so E+I past 32767 was ?OV (the 2026-09-30 audit; the same
         # loop as z80.asm's to_bas).  The IF ends its line, so the POKE
         # goes on the next.
         loop = ['40 E=%d : C=0' % org,
@@ -526,7 +526,7 @@ def main():
     if not 0 <= a.org <= 65535:
         ap.error('--org is an address, 0-65535')
     # --scan is the B of a DJNZ loop: 0 adds none, 1-255 that many reads,
-    # and -1 became LD B,255 reported as 0 reads (ZL-8)
+    # and -1 became LD B,255 reported as 0 reads
     if not 0 <= a.scan <= 255:
         ap.error('--scan is extra reads a frame, 0-255')
     try:

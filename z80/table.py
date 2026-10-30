@@ -642,7 +642,7 @@ def build_table():
     # A DD/FD form the prefix does not touch (DD 00 is NOP with a wasted
     # prefix, DD 41 is LD B,C) is not in Zilog's published set: the prefix
     # merely costs four T-states.  These 334 no-effect forms carried
-    # undoc=False (ZL-3), so the documented count claimed them.  The test:
+    # undoc=False, so the documented count claimed them.  The test:
     # the prefixed entry renders exactly as the plain one.
     from dataclasses import replace as _replace
     for pfx in ((0xDD,), (0xFD,)):

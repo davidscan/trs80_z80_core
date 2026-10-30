@@ -91,7 +91,7 @@ class TestCalls(unittest.TestCase):
 
     def test_0a7f_is_ov_outside_the_integer_range(self):
         # 0AA3H accepts exactly -32768 and otherwise exits through 07B2H: ?OV,
-        # sent as `ERR ov` (the 2026-09-19 audit, L-43)
+        # sent as `ERR ov` (the 2026-09-19 audit)
         for arg in (32768, 40000, 70000, -32769, -32768.5):
             m, sc = machine(bytes.fromhex('CD7F0A' 'C39A0A'))
             with self.assertRaises(CoreError) as cm:
@@ -99,7 +99,7 @@ class TestCalls(unittest.TestCase):
             self.assertEqual(cm.exception.code, 'ov', arg)
 
     def test_entry_registers_are_the_roms_dispatch(self):
-        """XL-2: the ROM's USR (27FE-2818H) jumps with A = the type and
+        """the ROM's USR (27FE-2818H) jumps with A = the type and
         DE = what HL held at 2814H's EX DE,HL: 0890H, the continuation
         address 2806H pushed, for a number; the descriptor for a string."""
         code = bytes.fromhex('ED530071' '320271' 'C9')   # LD (7100H),DE / LD (7102H),A / RET
@@ -110,7 +110,7 @@ class TestCalls(unittest.TestCase):
             self.assertEqual(m.ram[0x7102], t, (arg, t))
 
     def test_0a7f_on_an_integer_is_ret_m(self):
-        """XL-2: WRA1 that is already an integer leaves 0A7FH at 0A83H's
+        """WRA1 that is already an integer leaves 0A7FH at 0A83H's
         RET M: HL = (4121H), nothing stored, A = FFH with RST 20H's flags
         (25D9H: SUB 03H / OR A / SCF: sign and carry, not zero).  A type
         flag of 1 is in the integer class too, and stays 1."""
@@ -136,14 +136,14 @@ class TestCalls(unittest.TestCase):
 
     def test_0a7f_is_tm_for_a_string(self):
         # 0A7FH (CINT) on a string argument is the machine's ?TM, sent as
-        # `ERR tm` (proto 3 / M-17)
+        # `ERR tm` (proto 3)
         m, sc = machine(bytes.fromhex('CD7F0A' 'C39A0A'))
         with self.assertRaises(CoreError) as cm:
             m.run(0x7000, 61437, 0xF000, argtype=3)
         self.assertEqual(cm.exception.code, 'tm')
 
     def test_entry_state_is_the_roms(self):
-        """The routine enters as 27FE-2818 leaves the machine (ZM-4):
+        """The routine enters as 27FE-2818 leaves the machine:
         HL = the entry, A = the type, DE = the descriptor for a string;
         and the dispatch's stores (40AFH, WRA1) are in RAM and the
         write-set.  LD (7100H),HL / LD (7102H),A / EX DE,HL /
@@ -159,7 +159,7 @@ class TestCalls(unittest.TestCase):
         self.assertIn('16669:0,0,0,0,48,117,0,0', sc.writes())
 
     def test_cls_zeroes_the_cursor_column_and_a_is_1f(self):
-        # CALL 01C9H / LD (7100H),A / RET: 0342H zeroes 40A6H (M-18/ZM-5)
+        # CALL 01C9H / LD (7100H),A / RET: 0342H zeroes 40A6H
         # and the ROM's CLS leaves through 01CEH LD A,1FH / 01D0H JP 033AH
         m, sc = machine(bytes.fromhex('CDC901' '320071' 'C9'))
         m.ram[0x40A6] = 7
@@ -202,7 +202,7 @@ class TestCalls(unittest.TestCase):
         / RET: the store is dropped, so it reads back what was there (the
         core's RAM starts at 255) and never reaches the write-set -- it used
         to be kept and sent to the interpreter, which copied it into its
-        own memory (the 2026-09-19 audit, L-45)."""
+        own memory (the 2026-09-19 audit)."""
         m, sc = machine(bytes.fromhex('3E5A' '320010' '3A0010' '320071' 'C9'))
         before = m.ram[0x1000]
         m.run(0x7000, 0, 0xF000)
@@ -222,7 +222,7 @@ class TestCalls(unittest.TestCase):
         the call ends with no result, its stores arrive, and the RET line
         carries `ready=1` so the interpreter ends the PROGRAM instead of
         running the next statement as after a return (the 2026-09-19
-        audit, L-44).  The interpreter's SYSTEM runs whole programs this
+        audit).  The interpreter's SYSTEM runs whole programs this
         way.  (0000H stays ERR rom: the tests below and the interpreter's
         z80.sh pin it as the no-ROM call.)"""
         m, sc = machine(bytes.fromhex('3E09' '32407E' 'C3191A'))
@@ -332,8 +332,8 @@ class TestCalls(unittest.TestCase):
     def test_a_slow_clock_ticks_by_wall_time(self):
         """The tick is the interpreter's proof of life (its read guard is
         5 s).  Paced at 0.001 MHz, 8870 T-states are 8.9 s of wall time, so
-        the guard fired inside a healthy routine (the 2026-09-19 audit,
-        L-46).  The interval is 5 ms of wall time at the paced clock -- 5
+        the guard fired inside a healthy routine (the 2026-09-19 audit).
+        The interval is 5 ms of wall time at the paced clock -- 5
         T-states here -- and at full speed it is what it always was."""
         sc = Scripted()
         self.assertEqual(Machine(sc.send, sc.recv, mhz=0.001).tick_every, 5)
@@ -910,7 +910,7 @@ class TestTransport(unittest.TestCase):
         self.assertEqual(out[2:5], ['W 16559:2', 'W 16669:0,0,0,0,42,0,0,0', 'W 61436:3,112,253,47'])
 
     def test_a_non_finite_arg_is_a_bad_header_and_the_core_stays_up(self):
-        """XL-3's sibling: arg=nan reached 0A7FH and crashed the core."""
+        """arg=nan reached 0A7FH and crashed the core."""
         lines = ['HELLO proto=3 mhz=0 ramtop=65535']
         for a in ('nan', 'inf', '-inf'):
             lines += ['CALL gen=1 full=1 slot=0 entry=28672 arg=%s argtype=4 sp=61440 himem=65535 ramtop=65535 runs=1' % a,
@@ -924,7 +924,7 @@ class TestTransport(unittest.TestCase):
         self.assertTrue(out[4].startswith('RET hl=7 result=1'), out)
 
     def test_0a7fh_leaves_the_integer_in_wra1_without_0a9ah(self):
-        """ZM-4: 0A7FH's own exit stores (WRA1 4121/4122H, 2 at 40AFH,
+        """0A7FH's own exit stores (WRA1 4121/4122H, 2 at 40AFH,
         A = 2), seen with a single argument and no 0A9AH after it to
         make the same stores."""
         out, err, rc = self.talk([
@@ -938,7 +938,7 @@ class TestTransport(unittest.TestCase):
         self.assertEqual(out[2:4], ['W 16559:2', 'W 16669:0,0,0,0,252,255,224,130'])
 
     def test_printer_status_reads_ready_after_a_write(self):
-        """ZL-6: a routine prints by writing 37E8H and polls it for ready;
+        """a routine prints by writing 37E8H and polls it for ready;
         the written byte must not read back as the status."""
         out, err, rc = self.talk([
             'HELLO proto=3 mhz=0 ramtop=65535',
@@ -949,7 +949,7 @@ class TestTransport(unittest.TestCase):
         self.assertTrue(out[1].startswith('RET hl=63 result=1'), out)
 
     def test_0a7fh_rounds_a_double_to_a_single_first(self):
-        """ZL-7: CINT(2.9999999#) is 3 on the ROM (0A7FH -> 0AB9H ->
+        """CINT(2.9999999#) is 3 on the ROM (0A7FH -> 0AB9H ->
         0796H), and 32767.9999999# rounds to 32768 and is ?OV."""
         prog = 'M 28672:205,127,10,195,154,10'   # CALL 0A7FH / JP 0A9AH
         out, err, rc = self.talk([
@@ -963,7 +963,7 @@ class TestTransport(unittest.TestCase):
         self.assertTrue(any(l.startswith('ERR ov') for l in out[2:]), out)
 
     def test_an_entry_off_the_map_is_an_err_not_a_crash(self):
-        """ZL-5: entry=70000 raised IndexError and killed the core."""
+        """entry=70000 raised IndexError and killed the core."""
         out, err, rc = self.talk([
             'HELLO proto=3 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=70000 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
@@ -1033,7 +1033,7 @@ class TestTransport(unittest.TestCase):
             'BYE'])
         self.assertEqual(out[1], 'NEED full')
         # result=0: hl is HL at the sentinel, which is the ENTRY since the
-        # routine never touched it (the ROM's register state, ZM-4)
+        # routine never touched it (the ROM's register state)
         self.assertTrue(out[2].startswith('RET hl=28672 result=0'), out)
 
     def test_err_then_next_call_proceeds(self):

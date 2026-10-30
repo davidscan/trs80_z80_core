@@ -161,7 +161,7 @@ class TestFetchedVectorShape(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Z80_VECTORS_REQUIRE=1 turns the skips into failures, as in
-        # tests/test_cpu_vectors.py (the 2026-09-30 audit, ZM-10)
+        # tests/test_cpu_vectors.py (the 2026-09-30 audit)
         absent = unittest.SkipTest
         if os.environ.get('Z80_VECTORS_REQUIRE') == '1':
             absent = AssertionError

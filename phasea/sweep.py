@@ -3,7 +3,7 @@
 Input set:
     programs/runnable/   +   programs/blocked/   (all categories)
   Since 2026-10-13 the set includes the Model1-only listings (the
-  2026-09-30 audit, XM-16): Model1/ itself is not swept, because every
+  2026-09-30 audit): Model1/ itself is not swept, because every
   listing in it that a detokenizer can read is now in runnable/,
   blocked/ or dialect/ (the corpus's tools/model1_intake.py).  Also
   skipped: the zip archive,
@@ -82,9 +82,9 @@ def input_files():
     return out
 
 
-# The input set, pinned 2026-10-03 (XM-13, the 2026-09-30 audit): a stray
-# copy of one listing in runnable/ moved every F28 number and the sweep
-# still printed them with exit 0.  F28 was measured on the set as it stood
+# The input set, pinned 2026-10-03 (the 2026-09-30 audit): a stray
+# copy of one listing in runnable/ moved every published sweep number and the
+# sweep still printed them with exit 0.  Those numbers were measured on the set as it stood
 # from 2026-08-14 to 2026-10-12 (cbdf3348f32f01e12a0f24da773bc91e0d383625);
 # re-pinned 2026-10-12 at trs80_programs c9d58f53, where 169 listings moved
 # from blocked/ to runnable/ (CMD"T" and CMD"R" now run), 23 re-filed

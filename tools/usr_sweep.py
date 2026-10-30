@@ -51,7 +51,7 @@ def listings():
 
 
 def population(files=None):
-    # the extractor's USR evidence, the gate's own definition (ZM-9: a
+    # the extractor's USR evidence, the gate's own definition (a
     # substring search put 20 non-callers into the published 606, and
     # 28 more, USR in DATA tables and damaged bytes, into the 586 after it)
     sys.path.insert(0, HERE)
@@ -62,7 +62,7 @@ def population(files=None):
 def refusal(files, pop, accept=False):
     """Why this run must not publish, or None.  A tree with no listings
     gave population 0, "DONE", exit 0 and overwrote results.json with []
-    (ZM-11); the listings are phasea/sweep.py's pinned input set."""
+; the listings are phasea/sweep.py's pinned input set."""
     sys.path.insert(0, HERE)
     from phasea.sweep import input_set_problem
     why = input_set_problem(files, CORPUS)
@@ -84,10 +84,10 @@ def publish(res, path):
 # TRS80_USR=strict left over from a debugging session turned every
 # un-executed USR into ?FC, TRS80_SOUND started a player per listing, and
 # TRS80_PRINTER collected every LPRINT in the corpus into one file (the
-# 2026-09-19 audit, L-65).  tools/kbd_probe.py has stripped them from the
-# start; phasea/oracle.py does since L-64.
+# 2026-09-19 audit).  tools/kbd_probe.py has stripped them from the
+# start; phasea/oracle.py does since 2026-09-20.
 def sweep_env(**over):
-    # A denylist rots as the interpreter grows knobs (ZL-8: TRS80_MEMORY,
+    # A denylist rots as the interpreter grows knobs (TRS80_MEMORY,
     # the memory-host switch, was not on it), so every TRS80_* is dropped
     # and the measurement sets the ones it means.
     env = dict(os.environ, LC_ALL='C')
@@ -100,7 +100,7 @@ def sweep_env(**over):
 def run(path, z80, cwd):
     # each run gets a FRESH cwd: a high-score or data file a listing wrote
     # reached the next run under the shared one, so the stub/core/control
-    # comparison measured leftovers, not the build (ZL-9)
+    # comparison measured leftovers, not the build
     shutil.rmtree(cwd, ignore_errors=True)
     os.makedirs(cwd)
     env = sweep_env(TRS80_Z80=z80, TRS80_DUMB='1')
@@ -133,7 +133,7 @@ NEVER_STARTED_RE = re.compile(r"^USR CORE: (cannot start '|'.*' speaks protocol 
 def never_started(r):
     """True when the run's core never ran and USR fell back to the stub:
     then the run measured the stub twice, and a listing whose stub run
-    counted calls was published as 'stub-only-reached' (ZL-7)."""
+    counted calls was published as 'stub-only-reached'."""
     return any(NEVER_STARTED_RE.match(l) for l in r['err'].splitlines())
 
 
@@ -150,8 +150,8 @@ def git_state(repo):
 
 
 def inputs(files, pop):
-    """What this measurement ran on, recorded beside its numbers (ZM-8:
-    the class table could not be reproduced, and nothing said which
+    """What this measurement ran on, recorded beside its numbers (until
+    2026-10-12 the class table could not be reproduced, and nothing said which
     interpreter, core, corpus or host load had produced it)."""
     sys.path.insert(0, HERE)
     from phasea.sweep import fingerprint
@@ -177,7 +177,7 @@ def clear_logs(base):
     starts the core at the first USR call, so a listing that never reaches
     one writes no log -- and the log a previous sweep left under the same
     name would be counted as this run's calls, RETs and ERRs: exactly the
-    listing a re-sweep exists to catch (the 2026-09-19 audit, H-22)."""
+    listing a re-sweep exists to catch (the 2026-09-19 audit)."""
     for ext in ('.in', '.out'):
         try:
             os.remove(base + ext)
@@ -211,7 +211,7 @@ def one(path):
     elif core['timeout'] and not stub['timeout']: cls = 'timeout-core-only'
     elif core['timeout']: cls = 'timeout-both'
     elif calls == 0 and tally == 0 and BASIC_ERROR_RE.match(stop(stub)):
-        cls = 'error-before-usr'      # the run stopped on an interpreter error (ZM-8)
+        cls = 'error-before-usr'      # the run stopped on an interpreter error
     elif calls == 0 and tally == 0: cls = 'no-usr-reached'
     elif calls == 0 and tally > 0: cls = 'stub-only-reached'
     elif equal: cls = 'identical'

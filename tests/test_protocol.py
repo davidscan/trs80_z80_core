@@ -9,7 +9,7 @@ passed every suite.  These tests read it.
     byte-identical to this mirror and its Z80PROTO is the same number;
   * Z80_INTERP_REQUIRE=1 (CI sets it) makes the interpreter's absence a
     FAILURE, so the tests that need it (test_oracle's anchors, test_asm's
-    BASIC loader) cannot skip unseen (XM-3).
+    BASIC loader) cannot skip unseen.
 """
 
 import os

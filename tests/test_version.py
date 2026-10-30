@@ -1,4 +1,4 @@
-"""The core names its own version (the 2026-09-30 audit, ZL-10): HEAD
+"""The core names its own version (the 2026-09-30 audit): HEAD
 past a release and the release itself were indistinguishable to a user
 or a bug report, since the handshake says only name and proto."""
 import io

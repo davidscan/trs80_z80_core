@@ -34,7 +34,7 @@ def split_statements(body):
     DATA statement REM and ' are not comments at all: the ROM's cruncher
     leaves DATA text alone up to the next ':' outside quotes, so
     `DATA IT'S,5` and `DATA PREMIUM,7` are two items each (the 2026-09-19
-    audit, L-58: 144 corpus DATA statements lost the items behind one).
+    audit: 144 corpus DATA statements lost the items behind one).
     """
     out = []
     cur = []
@@ -74,7 +74,7 @@ def cut_lines(text):
     is a TRS-80 ASCII save, cut at CR only, and an LF inside it is the
     down-arrow line feed in a REM or a string, not a line end.  Cutting
     at LF alone ran such a file together as one line (the 2026-09-30
-    audit, N-6)."""
+    audit)."""
     if '\r\n' not in text and text.count('\r') > text.count('\n'):
         return text.split('\r')
     return [raw.rstrip('\r') for raw in text.split('\n')]
@@ -83,7 +83,7 @@ def cut_lines(text):
 def parse_program(text, drop_blocked_header=True):
     """-> list of (lineno, raw_body, [statements]) in line-number order,
     as the interpreter stores a loaded file: a line number given twice is
-    the later line, as typing it again replaces it (N-6)."""
+    the later line, as typing it again replaces it."""
     prog = {}
     for raw in cut_lines(text):
         if not raw.strip():
@@ -129,7 +129,7 @@ def data_items(stmt):
     entries so a caller counting positions stays aligned with the real
     READ stream.  An EMPTY item is
     0, a bare DATA one such item: the ROM's number reader (224DH) finds
-    nothing and returns 0 (the 2026-09-19 audit, L-59).
+    nothing and returns 0 (the 2026-09-19 audit).
     """
     m = DATA_RE.match(stmt)
     if not m:

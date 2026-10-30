@@ -11,7 +11,7 @@
 # machine, so the tests that drive it (the oracle's text anchors into its
 # source, the BASIC loader, PROTOCOL.md's mirror and version) run here too;
 # Z80_INTERP_REQUIRE=1 makes its absence a failure, not a skip (the
-# 2026-09-30 audit, XM-3). The interpreter's commit is written to the job
+# 2026-09-30 audit). The interpreter's commit is written to the job
 # summary, so a run says which pair it tested.
 name: tests
 

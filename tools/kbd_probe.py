@@ -179,7 +179,7 @@ def load(log, wait=10.0):
 
 
 def base_env():
-    # every TRS80_* dropped, then the ones this measurement means (ZL-8)
+    # every TRS80_* dropped, then the ones this measurement means
     env = {k: v for k, v in os.environ.items() if not k.startswith('TRS80_')}
     env.update(TRS80_MHZ='0', TRS80_DUMB='1', TERM='xterm', TRS80_Z80='')
     return env

@@ -1,7 +1,7 @@
 """tools/usr_sweep.py and tools/usr_pty_sweep.py count THIS run's protocol
 log.  The interpreter starts the core at the first USR call, so a listing
 that never reaches one leaves no log; the one a previous sweep left under
-the same name must not be read in its place (the 2026-09-19 audit, H-22).
+the same name must not be read in its place (the 2026-09-19 audit).
 No corpus and no interpreter are needed: the runs are stood in for."""
 
 import contextlib
@@ -91,15 +91,15 @@ class TestTheSweepEnvironmentIsItsOwn(unittest.TestCase):
     left over from a debugging session turned every un-executed USR into
     ?FC, TRS80_SOUND started a player per listing, and TRS80_PRINTER
     collected every LPRINT in the corpus into one file (the 2026-09-19
-    audit, L-65).
+    audit).
     """
 
     HOSTILE = {'TRS80_USR': 'strict', 'TRS80_USR_TRACE': '2',
                'TRS80_SOUND': 'auto', 'TRS80_SOUND_WAV': '/tmp/w.wav',
                'TRS80_PRINTER': '/tmp/lp', 'TRS80_EXT': '1',
                'TRS80_MHZ': '1.77', 'TRS80_MANFILE': '/tmp/man.txt',
-               # ZL-8's own variable, and one no interpreter has yet: the
-               # scrub is categorical, not a list (ZM-5)
+               # the variable that started this, and one no interpreter has yet: the
+               # scrub is categorical, not a list
                'TRS80_MEMORY': 'host', 'TRS80_NOT_A_KNOB_YET': '1'}
 
     def envs(self):
@@ -132,7 +132,7 @@ class TestTheSweepEnvironmentIsItsOwn(unittest.TestCase):
 
 class TestEachRunHasAFreshCwd(unittest.TestCase):
     """A file a listing wrote reached the next run under a shared cwd, so
-    the stub/core/control comparison measured leftovers (ZL-9; ZM-5: no
+    the stub/core/control comparison measured leftovers (no
     test failed without the fix)."""
 
     def test_a_run_never_sees_the_last_runs_files(self):
@@ -154,7 +154,7 @@ class TestEachRunHasAFreshCwd(unittest.TestCase):
 
 
 class TestTheSweepSaysHowARunStopped(unittest.TestCase):
-    """ZM-8: no-usr-reached hid 194 interpreter error stops, and nothing
+    """no-usr-reached hid 194 interpreter error stops, and nothing
     recorded which build or load produced the classes."""
 
     def test_the_stop_line_skips_diagnostics(self):
@@ -210,10 +210,10 @@ def tree(d, names):
 
 
 class TestTheInputSetIsPinned(unittest.TestCase):
-    """One stray file in runnable/ moved every published F28 number and
-    the sweep printed them with exit 0 (XM-13, the 2026-09-30 audit); a
+    """One stray file in runnable/ moved every published sweep number and
+    the sweep printed them with exit 0 (the 2026-09-30 audit); a
     tree with no listings gave usr_sweep population 0, DONE, exit 0 and
-    an emptied results.json (ZM-11)."""
+    an emptied results.json."""
 
     NAMES = ['runnable/a.bas', 'runnable/usr1.bas', 'blocked/gfx/usr2.bas']
 
@@ -292,7 +292,7 @@ class TestTheInputSetIsPinned(unittest.TestCase):
         self.assertEqual(kept, '[{"file": "earlier"}]')
 
     def test_both_sweeps_take_the_extractors_usr_population(self):
-        """ZM-9: USR in a DATA keyword table is no USR program; ZM-5: no
+        """USR in a DATA keyword table is no USR program; until 2026-10-23 no
         test failed when either sweep's population() took every listing."""
         with tempfile.TemporaryDirectory() as d:
             progs = tree(d, self.NAMES)
@@ -318,7 +318,7 @@ class TestTheInputSetIsPinned(unittest.TestCase):
             try:
                 a = os.path.join(progs, 'runnable/a.bas')
                 self.assertIsNone(usr_pty_sweep.population_problem('x', ['runnable/a.bas'], [a]))
-                # ZL-7: a named listing that is not there was driven anyway
+                # a named listing that is not there was driven anyway
                 # (CLOAD of nothing) and counted 'not-reached'
                 why = usr_pty_sweep.population_problem(
                     'x', ['runnable/a.bas', 'runnable/typo.bas'],
@@ -329,7 +329,7 @@ class TestTheInputSetIsPinned(unittest.TestCase):
 
 
 class TestAFailureIsNotAMeasurement(unittest.TestCase):
-    """ZL-7: a core that could not start left USR to the stub, and the
+    """a core that could not start left USR to the stub, and the
     listing was published as 'stub-only-reached'; the pty sweep took its
     population from a results.json of any age."""
 

@@ -191,7 +191,7 @@ class HexCheck(unittest.TestCase):
                 if r.status == 'unresolved':
                     unresolved += 1
                 elif r.status == 'text' and r.hexs:
-                    wrong += 1          # object bytes dropped without a word (H-20)
+                    wrong += 1          # object bytes dropped without a word
                 elif r.bytes and r.addr is not None:
                     if checked_only and r.status == 'hexonly':
                         continue
@@ -736,7 +736,7 @@ T44     DEFW    0846H
         """DEFM 'RFADY' over an object column that reads 5245414459 cleanly:
         the source's bytes were a near miss of the field, so they were
         taken as a two-witness repair and the listing's word became RFADY
-        (the 2026-09-19 audit, H-21, damage seed 58).  A field that reads
+        (the 2026-09-19 audit, damage seed 58).  A field that reads
         cleanly as other bytes is a witness against the source, and the
         line comes back as the object column's own reading, flagged."""
         import re
@@ -757,7 +757,7 @@ T44     DEFW    0846H
 
     def test_the_damage_model_beyond_the_pinned_seeds(self):
         """The audit ran seeds 12-211 and found 98 with wrong accepted bytes.
-        The H-21 fixes brought the wrong lines over seeds 12-59 from 47 to
+        The 2026-09-19 audit's fixes brought the wrong lines over seeds 12-59 from 47 to
         34 (what is left: the address chain's one witness per address, and
         both columns damaged at once).  A bar, so the number cannot climb
         back unnoticed; the pinned seeds above stay the exact check."""
@@ -771,7 +771,7 @@ T44     DEFW    0846H
         """A mnemonic the scan began with a mark or a digit made the line
         'text' with no bytes: not counted unresolved, absent from the
         recovered source and from the ROM-call tally, exit 0 (the
-        2026-09-19 audit, H-20).  With bytes in the object column the
+        2026-09-19 audit).  With bytes in the object column the
         line is repaired like any other, or reported."""
         import re
         call = re.search(r'^7D16 CD347D \d{5} CALL\s+COUNT$', self.listing, re.M)
@@ -835,7 +835,7 @@ T44     DEFW    0846H
             0 lines: 0 clean, 0 repaired, 0 unresolved
 
         with exit 0 -- a silent pass for a block that does not exist, which
-        is the wrong answer to a typo (the 2026-09-19 audit, L-68).
+        is the wrong answer to a typo (the 2026-09-19 audit).
         """
         import tempfile
         with tempfile.TemporaryDirectory() as d:

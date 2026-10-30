@@ -45,7 +45,7 @@ class Headless:
         self.budget = cycles
         self.machine = Machine(self._send, self._recv, 0.0)
         # the budget is read at a tick, every 8870 T-states, so --cycles 1
-        # ran 8880 and 100000 ran 106560 (the 2026-09-30 audit, N-6): the
+        # ran 8880 and 100000 ran 106560 (the 2026-09-30 audit): the
         # next tick is put at the budget instead, and a run stops within
         # one instruction of it
         self.machine.tick_every = max(1, min(self.machine.tick_every, cycles))
@@ -80,7 +80,7 @@ class Headless:
         # the state USR leaves for an integer argument (PROTOCOL.md, proto
         # 3): type 2 at 40AFH and A, the value at 4121/4122H.  Without them
         # a routine that reads 4121H, as 13 corpus listings do, saw 0
-        # where 0A7FH answered --arg (the 2026-09-30 audit, ZM-3).
+        # where 0A7FH answered --arg (the 2026-09-30 audit).
         v = arg & 0xFFFF
         try:
             m.run(entry, arg, sp, 2, (0, 0, 0, 0, v & 0xFF, v >> 8, 0, 0))
@@ -156,7 +156,7 @@ def hexdump(ram, start, length):
     The bytes came out of a plain slice, so a range crossing the top came
     back short and the dump quietly stopped -- while the address column
     already wrapped, so --dump 0FFF8H,16 printed eight bytes under a label
-    that promised sixteen (the 2026-09-19 audit, L-55).
+    that promised sixteen (the 2026-09-19 audit).
     """
     out = []
     for off in range(0, length, 16):

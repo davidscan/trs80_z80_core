@@ -31,7 +31,7 @@ class TestRenderFramesCounting(unittest.TestCase):
 
     render_frames counted only RET, so every call after a failed one was
     numbered one too low and asking for a frame of "call 7" rendered call
-    8, or nothing at all (the 2026-09-19 audit, L-67).
+    8, or nothing at all (the 2026-09-19 audit).
     """
 
     def setUp(self):
@@ -81,7 +81,7 @@ class TestTickProbeWaiting(unittest.TestCase):
     macOS gives a 0-byte read.  The loop caught OSError and broke, which
     is exactly what it does when the text ARRIVES, so an interpreter that
     died during a probe was measured as one that answered and the tick
-    numbers were of nothing at all (the 2026-09-19 audit, L-69).
+    numbers were of nothing at all (the 2026-09-19 audit).
     """
 
     def tick_probe(self):
@@ -152,7 +152,7 @@ class TestPtyProbesReachThePrompt(unittest.TestCase):
     """kbd_probe and tick_probe waited for "MEMORY SIZE" after the
     interpreter's prompt became "MEM SIZE?", and every interactive row
     aborted on a timeout (fixed 2026-09-28; no test failed without the
-    fix, the 2026-09-30 audit, ZM-5).  Each drives the real interpreter
+    fix, the 2026-09-30 audit).  Each drives the real interpreter
     through a pty to READY and out again."""
 
     def test_kbd_probe_session(self):
@@ -171,7 +171,7 @@ class TestPtyProbesReachThePrompt(unittest.TestCase):
 
 class TestMkgameRefusesNoRoom(unittest.TestCase):
     """--org near the top used to build a routine that ran off 0FFFFH;
-    the check is pinned through the command line it guards (ZM-5)."""
+    the check is pinned through the command line it guards."""
 
     def test_no_room_is_a_usage_error(self):
         with tempfile.TemporaryDirectory() as d:
