@@ -1008,6 +1008,28 @@ class TestTransport(unittest.TestCase):
         self.assertEqual((rc, err), (0, ''))
         self.assertIn('W 12288:5', out)
 
+    def test_a_routine_at_3000h_runs_as_ram(self):
+        """3000H is the first RAM byte on execute as on write: an entry
+        there runs the routine (RET), it is not a call into the ROM."""
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=12288 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'M 12288:201',
+            'GO', 'BYE'])
+        self.assertEqual((rc, err), (0, ''))
+        self.assertTrue(out[1].startswith('RET '), out)
+
+    def test_entry_at_the_last_address_runs(self):
+        """entry=65535 is on the map: a RET there runs, it is not a bad
+        header (sp's bound is the next test)."""
+        out, err, rc = self.talk([
+            'HELLO proto=3 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=65535 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
+            'M 65535:201',
+            'GO', 'BYE'])
+        self.assertEqual((rc, err), (0, ''))
+        self.assertTrue(out[1].startswith('RET '), out)
+
     def test_sp_one_past_the_map_is_a_bad_header(self):
         """sp=65535 is the last address; 65536 is off the map and refused
         before the routine runs, and the core stays up for the next call."""
