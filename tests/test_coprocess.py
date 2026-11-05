@@ -1124,6 +1124,24 @@ class TestTransport(unittest.TestCase):
         self.assertTrue(out[0].startswith('Z80 proto=4'), out)
         self.assertEqual(rc, 0)
 
+    def test_a_closed_stream_at_start_is_one_line_not_a_traceback(self):
+        """`core.py >&-` and `<&-` died with an AttributeError traceback."""
+        for redir in ('>&-', '<&-'):
+            p = subprocess.run(['sh', '-c', 'printf "HELLO proto=4\\n" | "$0" "$1" %s' % redir,
+                                sys.executable, CORE],
+                               stderr=subprocess.PIPE, text=True, timeout=30)
+            self.assertEqual((p.returncode, p.stderr),
+                             (2, 'core.py: stdin or stdout is closed\n'), redir)
+
+    def test_the_interpreter_leaving_mid_session_is_a_quiet_exit(self):
+        """The reading end closed before the core answers HELLO: the
+        write's broken pipe was a traceback and rc 120."""
+        p = subprocess.Popen([sys.executable, CORE], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        p.stdout.close()
+        _, err = p.communicate('HELLO proto=4 mhz=0 ramtop=65535\n', timeout=30)
+        self.assertEqual((p.returncode, err), (0, ''))
+
 
 if __name__ == '__main__':
     unittest.main()

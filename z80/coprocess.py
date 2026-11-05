@@ -1052,8 +1052,26 @@ def fields(line):
     return dict(kv.split('=', 1) for kv in line.split()[1:] if '=' in kv)
 
 
+def peer_gone():
+    """The interpreter closed its end of the pipe: exit as on EOF, quietly.
+    stdout goes to /dev/null first, or the interpreter's shutdown flush
+    reports the same broken pipe again."""
+    try:
+        fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(fd, sys.stdout.fileno())
+    except (OSError, ValueError, AttributeError):
+        pass
+    sys.exit(0)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if sys.stdin is None or sys.stdout is None:
+        # started with a stream closed (`core.py >&-`): nothing to serve;
+        # an AttributeError traceback was all it gave before
+        if sys.stderr is not None:
+            sys.stderr.write('core.py: stdin or stdout is closed\n')
+        return 2
     if '--version' in argv:
         from .version import version_text
         sys.stdout.write(version_text() + '\n')
@@ -1062,8 +1080,11 @@ def main(argv=None):
     out = sys.stdout
 
     def send(s):
-        out.write(s + '\n')
-        out.flush()
+        try:
+            out.write(s + '\n')
+            out.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            peer_gone()
 
     def recv():
         line = sys.stdin.readline()
