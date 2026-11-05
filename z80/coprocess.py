@@ -1,4 +1,4 @@
-"""The USR coprocess -- the core's half of PROTOCOL.md, version 3.
+"""The USR coprocess -- the core's half of PROTOCOL.md, version 4.
 
 `trs80basic` runs this as a `|&` coprocess named by `TRS80_Z80` and
 drives it one USR call at a time: a frame of memory in, a write-set back,
@@ -89,7 +89,7 @@ import time
 from .cpu import Z80, SZ53, SZ53P, H, P, N, C
 from .sound import from_env as sound_from_env
 
-PROTO = '3'
+PROTO = '4'
 NAME = 'trs80_z80_core'
 SENTINEL = 0x2FFD
 
@@ -946,7 +946,7 @@ class Machine:
                 self.port_out(0xFF, flag)
 
     # ---- one call ------------------------------------------------------------
-    def run(self, entry, arg, sp, argtype=4, mbf=(0, 0, 0, 0, 0, 0, 0, 0)):
+    def run(self, entry, arg, sp, argtype=4, mbf=(0, 0, 0, 0, 0, 0, 0, 0), stmt=None):
         cpu = self.cpu
         cpu.reset()
         self.arg = arg
@@ -969,12 +969,19 @@ class Machine:
         # (2806H); the argument's WRA1 image (411D-4124H) and the
         # type flag are its stores, made here so they reach the write-set
         # like the 0A9AH trap's own.
-        cpu.hl = entry
-        cpu.a = argtype
-        cpu.de = (int(float(arg)) & 0xFFFF) if argtype == 3 else 0x0890
-        self.write(0x40AF, argtype)
-        for i, b in enumerate(mbf[:8]):
-            self.write((0x411D + i) & 0xFFFF, b & 0xFF)
+        # A statement's vector instead (`stmt=hl,a,f`, proto 4: NAME
+        # through 418EH): the verb dispatch leaves HL on the byte after
+        # the token, blanks skipped, A that byte and F its fetch's flags;
+        # USR's argument and its stores are no part of it.
+        if stmt is not None:
+            cpu.hl, cpu.a, cpu.f = stmt
+        else:
+            cpu.hl = entry
+            cpu.a = argtype
+            cpu.de = (int(float(arg)) & 0xFFFF) if argtype == 3 else 0x0890
+            self.write(0x40AF, argtype)
+            for i, b in enumerate(mbf[:8]):
+                self.write((0x411D + i) & 0xFFFF, b & 0xFF)
         self.wra1_moved = False        # the frame's own seeding: WRA1 is still `arg`
         cpu.sp = sp
         cpu.sp = (cpu.sp - 2) & 0xFFFF
@@ -1126,6 +1133,12 @@ def serve(m, recv, send, fixture):
             sp = int(h['sp'])
             argtype = int(h.get('argtype', '4'))
             mbf = tuple(int(b) for b in h.get('mbf', '0,0,0,0,0,0,0,0').split(','))
+            stmt = None
+            if 'stmt' in h:
+                stmt = tuple(int(v) for v in h['stmt'].split(','))
+                if len(stmt) != 3 or not (0 <= stmt[0] <= 0xFFFF and 0 <= stmt[1] <= 0xFF
+                                          and 0 <= stmt[2] <= 0xFF):
+                    raise ValueError('stmt=%s is not hl,a,f' % h['stmt'])
         except (KeyError, ValueError) as e:
             send('ERR bad CALL header: %s' % e)
             continue
@@ -1161,7 +1174,7 @@ def serve(m, recv, send, fixture):
             fixture.load(m)
             entry = fixture.entry.get(entry, entry)
         try:
-            m.run(entry, arg, sp, argtype, mbf)
+            m.run(entry, arg, sp, argtype, mbf, stmt)
         except CoreError as e:
             # The routine's stores up to the error stay in this RAM, and the
             # next frame is a delta of what the INTERPRETER changed: unsent,

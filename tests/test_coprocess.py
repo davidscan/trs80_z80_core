@@ -894,14 +894,14 @@ class TestTransport(unittest.TestCase):
 
     def test_hello_call_bye(self):
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=21 argtype=2 mbf=0,0,0,0,21,0,0,0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:205,127,10,41,195,154,10',       # CALL 0A7FH / ADD HL,HL / JP 0A9AH
             'GO',
             'BYE'])
         self.assertEqual(rc, 0)
         self.assertEqual(err, '')
-        self.assertTrue(out[0].startswith('Z80 proto=3 name=trs80_z80_core pid='), out)
+        self.assertTrue(out[0].startswith('Z80 proto=4 name=trs80_z80_core pid='), out)
         self.assertTrue(out[1].startswith('RET hl=42 result=1 cycles='), out)
         self.assertTrue(out[1].endswith(' break=0 writes=3'), out)
         # the type flag (seeded 2, 0A7FH and 0A9AH store 2 again), the WRA1
@@ -911,7 +911,7 @@ class TestTransport(unittest.TestCase):
 
     def test_a_non_finite_arg_is_a_bad_header_and_the_core_stays_up(self):
         """arg=nan reached 0A7FH and crashed the core."""
-        lines = ['HELLO proto=3 mhz=0 ramtop=65535']
+        lines = ['HELLO proto=4 mhz=0 ramtop=65535']
         for a in ('nan', 'inf', '-inf'):
             lines += ['CALL gen=1 full=1 slot=0 entry=28672 arg=%s argtype=4 sp=61440 himem=65535 ramtop=65535 runs=1' % a,
                       'M 28672:205,127,10,201', 'GO']
@@ -928,7 +928,7 @@ class TestTransport(unittest.TestCase):
         A = 2), seen with a single argument and no 0A9AH after it to
         make the same stores."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=-3.5 argtype=4 mbf=0,0,0,0,0,0,224,130 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:205,127,10,111,201',             # CALL 0A7FH / LD L,A / RET
             'GO',
@@ -941,7 +941,7 @@ class TestTransport(unittest.TestCase):
         """a routine prints by writing 37E8H and polls it for ready;
         the written byte must not read back as the status."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             # LD A,65 / LD (37E8H),A / LD A,(37E8H) / LD L,A / LD H,0 / JP 0A9AH
             'M 28672:62,65,50,232,55,58,232,55,111,38,0,195,154,10',
@@ -953,7 +953,7 @@ class TestTransport(unittest.TestCase):
         0796H), and 32767.9999999# rounds to 32768 and is ?OV."""
         prog = 'M 28672:205,127,10,195,154,10'   # CALL 0A7FH / JP 0A9AH
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=2.9999999 argtype=8 sp=61440 himem=65535 ramtop=65535 runs=1',
             prog, 'GO',
             'CALL gen=2 full=0 slot=0 entry=28672 arg=32767.9999999 argtype=8 sp=61440 himem=65535 ramtop=65535 runs=1',
@@ -965,7 +965,7 @@ class TestTransport(unittest.TestCase):
     def test_an_entry_off_the_map_is_an_err_not_a_crash(self):
         """entry=70000 raised IndexError and killed the core."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=70000 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:201',
             'GO',
@@ -986,7 +986,7 @@ class TestTransport(unittest.TestCase):
         prog = 'M 28672:58,0,128,111,38,0,195,154,10'   # LD A,(8000H) / LD L,A / LD H,0 / JP 0A9AH
         call = 'CALL gen=%d full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=%d'
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             call % (1, 2), prog, 'M 32768:7', 'GO',
             call % (1, 1), prog, 'GO',
             'BYE'])
@@ -1001,7 +1001,7 @@ class TestTransport(unittest.TestCase):
         from 12288 (3000H) up, so the core must too, and send it back.
         LD A,5 / LD (3000H),A / RET."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:62,5,50,0,48,201',
             'GO', 'BYE'])
@@ -1012,7 +1012,7 @@ class TestTransport(unittest.TestCase):
         """3000H is the first RAM byte on execute as on write: an entry
         there runs the routine (RET), it is not a call into the ROM."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=12288 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 12288:201',
             'GO', 'BYE'])
@@ -1023,7 +1023,7 @@ class TestTransport(unittest.TestCase):
         """entry=65535 is on the map: a RET there runs, it is not a bad
         header (sp's bound is the next test)."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=65535 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 65535:201',
             'GO', 'BYE'])
@@ -1034,7 +1034,7 @@ class TestTransport(unittest.TestCase):
         """sp=65535 is the last address; 65536 is off the map and refused
         before the routine runs, and the core stays up for the next call."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=65536 himem=65535 ramtop=65535 runs=1',
             'M 28672:201', 'GO',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=65535 himem=65535 ramtop=65535 runs=1',
@@ -1046,7 +1046,7 @@ class TestTransport(unittest.TestCase):
 
     def test_need_full_when_a_generation_is_missing(self):
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=2 full=0 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=0',
             'GO',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
@@ -1060,7 +1060,7 @@ class TestTransport(unittest.TestCase):
 
     def test_err_then_next_call_proceeds(self):
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:205,0,0',
             'GO',
@@ -1080,7 +1080,7 @@ class TestTransport(unittest.TestCase):
         RAM, so it must reach the interpreter too -- as W lines ahead of the
         ERR -- or the two memories disagree from then on."""
         out, err, rc = self.talk([
-            'HELLO proto=3 mhz=0 ramtop=65535',
+            'HELLO proto=4 mhz=0 ramtop=65535',
             'CALL gen=1 full=1 slot=0 entry=28672 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1',
             'M 28672:62,42,50,0,113,205,0,0',
             'GO',
@@ -1089,13 +1089,39 @@ class TestTransport(unittest.TestCase):
                                    'W 28928:42', 'W 61436:8,112,253,47',
                                    'ERR rom called 0000H, no ROM here'])
 
+    def test_stmt_enters_with_its_registers_and_no_usr_stores(self):
+        """`stmt=hl,a,f` (proto 4, NAME through 418EH): the routine
+        enters with those HL, A and F, and the core makes none of USR's
+        entry stores (40AFH, 411D-4124H); RET's hl is where it left HL."""
+        out, err, rc = self.talk([
+            'HELLO proto=4 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=16782 arg=0 argtype=4 mbf=0,0,0,0,0,0,0,0 sp=61440 himem=65535 ramtop=65535 runs=2 stmt=17200,49,35',
+            'M 16782:195,0,125',                      # JP 7D00H
+            # LD (7E00H),HL / LD (7E02H),A / PUSH AF / POP BC /
+            # LD (7E04H),BC / INC HL / RET
+            'M 32000:34,0,126,50,2,126,245,193,237,67,4,126,35,201',
+            'GO',
+            'BYE'])
+        self.assertEqual((rc, err), (0, ''))
+        self.assertTrue(out[1].startswith('RET hl=17201 result=0 '), out)
+        self.assertIn('W 32256:48,67,49', out)        # HL 4330H, A 31H
+        self.assertIn('W 32260:35,49', out)           # AF by POP BC: F 23H, then A
+        self.assertFalse([w for w in out if w.startswith('W 16559') or w.startswith('W 16669')], out)
+
+    def test_a_bad_stmt_is_a_bad_header(self):
+        out, err, rc = self.talk([
+            'HELLO proto=4 mhz=0 ramtop=65535',
+            'CALL gen=1 full=1 slot=0 entry=16782 arg=0 sp=61440 himem=65535 ramtop=65535 runs=1 stmt=17200,256,0',
+            'M 16782:201', 'GO', 'BYE'])
+        self.assertEqual(out[1], 'ERR bad CALL header: stmt=17200,256,0 is not hl,a,f')
+
     def test_exit_on_eof(self):
-        out, err, rc = self.talk(['HELLO proto=3 mhz=0 ramtop=65535'])
+        out, err, rc = self.talk(['HELLO proto=4 mhz=0 ramtop=65535'])
         self.assertEqual(rc, 0)
 
     def test_protocol_mismatch_answers_and_leaves(self):
-        out, err, rc = self.talk(['HELLO proto=4 mhz=0 ramtop=65535', 'BYE'])
-        self.assertTrue(out[0].startswith('Z80 proto=3'), out)
+        out, err, rc = self.talk(['HELLO proto=5 mhz=0 ramtop=65535', 'BYE'])
+        self.assertTrue(out[0].startswith('Z80 proto=4'), out)
         self.assertEqual(rc, 0)
 
 
