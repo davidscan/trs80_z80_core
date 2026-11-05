@@ -55,6 +55,21 @@ class TestRenderFramesCounting(unittest.TestCase):
         out = self.render(2, 'end')
         self.assertIn('call 2, at ERR', out)
 
+    def test_a_missing_input_or_argument_is_one_line_not_a_traceback(self):
+        """render_frames without its arguments gave an IndexError, and
+        reconstruct_screen and hexcheck on a missing file a
+        FileNotFoundError traceback."""
+        tools = os.path.join(ROOT, 'tools')
+        for argv in (['render_frames.py'], ['render_frames.py', self.log, 'x', 'end'],
+                     ['render_frames.py', '/nonexistent/proto.out', '1', 'end'],
+                     ['reconstruct_screen.py', '/nonexistent/capture.raw'],
+                     ['hexcheck.py', '/nonexistent/book.txt']):
+            r = subprocess.run([sys.executable, os.path.join(tools, argv[0])] + argv[1:],
+                               capture_output=True, text=True, cwd=ROOT)
+            self.assertNotEqual(r.returncode, 0, argv)
+            self.assertNotIn('Traceback', r.stderr, argv)
+            self.assertEqual(r.stderr.count('\n'), 1, (argv, r.stderr))
+
     def test_the_call_after_an_err_keeps_its_number(self):
         out = self.render(3, 'end')
         self.assertIn('call 3, at RET', out)

@@ -65,6 +65,10 @@ def reconstruct(data):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         sys.exit('usage: reconstruct_screen.py capture.raw')
-    data = open(sys.argv[1], 'rb').read().decode('latin-1')
+    try:
+        with open(sys.argv[1], 'rb') as f:
+            data = f.read().decode('latin-1')
+    except OSError as e:
+        sys.exit('reconstruct_screen.py: %s: %s' % (sys.argv[1], e.strerror or e))
     for r in reconstruct(data)[:16]:
         print('|' + ''.join(r)[:64] + '|')

@@ -150,6 +150,36 @@ class RomCalls(unittest.TestCase):
         finally:
             os.unlink(f.name)
 
+    def test_a_file_named_twice_is_counted_once(self):
+        """On the line and in --from, or by two spellings of one path:
+        each naming counted its calls again."""
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, 'book.txt')
+            with open(src, 'w') as f:
+                f.write(self.listing + '\n')
+            lst = os.path.join(d, 'list.txt')
+            with open(lst, 'w') as f:
+                f.write(src + '\n')
+            rec = os.path.join(d, 'rec.json')
+            again = os.path.join(d, '.', 'book.txt')
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(romcalls.main([src, again, '--from', lst, '--record', rec]), 0)
+            with open(rec) as f:
+                got = json.load(f)
+        self.assertEqual(got['inputs']['files_with_a_listing'], 1)
+        self.assertIn({'entry': '0033H', 'name': 'VDCHAR', 'calls': 2, 'alone': 0,
+                       'files': 1, 'served': True, 'by': ['CALL']}, got['table'])
+
+    def test_a_missing_input_is_one_line_and_exit_2(self):
+        """a FILE or a --from list that is not there was a traceback."""
+        for args in (['/nonexistent/book.txt'], ['--from', '/nonexistent/list.txt']):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(romcalls.main(args), 2)
+            self.assertEqual(err.getvalue().count('\n'), 1, err.getvalue())
+            self.assertIn('/nonexistent/', err.getvalue())
+
 
 if __name__ == '__main__':
     unittest.main()

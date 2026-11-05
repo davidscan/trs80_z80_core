@@ -198,10 +198,27 @@ def main(argv=None):
     a = ap.parse_args(argv)
     files = list(a.files)
     if a.list:
-        with open(a.list) as f:
-            files += [l.rstrip('\n') for l in f if l.strip()]
+        try:
+            with open(a.list) as f:
+                files += [l.rstrip('\n') for l in f if l.strip()]
+        except OSError as e:
+            sys.stderr.write('romcalls: %s: %s\n' % (a.list, e.strerror or e))
+            return 2
+    # a file named twice (on the line and in --from, or by two spellings
+    # of one path) is one input: it was counted once per naming
+    seen_paths, uniq = set(), []
+    for p in files:
+        k = os.path.realpath(p)
+        if k not in seen_paths:
+            seen_paths.add(k)
+            uniq.append(p)
+    files = uniq
     if not files:
         ap.error('no FILE given')
+    for p in files:
+        if not os.path.isfile(p) or not os.access(p, os.R_OK):
+            sys.stderr.write('romcalls: %s: cannot read it\n' % p)
+            return 2
     table, seen = tally(files, a.verbose)
     if not seen:
         sys.stderr.write('no listing in any file\n')

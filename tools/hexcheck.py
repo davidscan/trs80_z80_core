@@ -1975,8 +1975,12 @@ def main(argv=None):
     ap.add_argument('-v', '--verbose', action='store_true', help='name every repair')
     a = ap.parse_args(argv)
 
-    with open(a.file, 'rb') as f:
-        text = f.read().decode('utf-8', 'replace')
+    try:
+        with open(a.file, 'rb') as f:
+            text = f.read().decode('utf-8', 'replace')
+    except OSError as e:
+        sys.stderr.write('hexcheck: %s: %s\n' % (a.file, e.strerror or e))
+        return 2
     blocks = find_blocks(text, a.min_lines)
     if not blocks:
         sys.stderr.write('%s: no listing found\n' % a.file)

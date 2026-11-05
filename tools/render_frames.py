@@ -9,8 +9,16 @@ without a person at the terminal: the streamed video, replayed.
 """
 import sys
 
+USAGE = 'usage: render_frames.py proto.out CALL (RUN [RUN ...] | end)'
+if len(sys.argv) < 4 or not sys.argv[2].isdigit():
+    sys.exit(USAGE)
 log, call_want = sys.argv[1], int(sys.argv[2])
 marks = sys.argv[3:]
+try:
+    with open(log) as f:
+        log_lines = f.read().splitlines()
+except OSError as e:
+    sys.exit('render_frames.py: %s: %s' % (log, e.strerror or e))
 scr = [32] * 1024
 call = 1
 run = 0
@@ -35,7 +43,7 @@ def render(tag, rows=range(0, 16), cols=range(0, 64)):
             print('|' + line.rstrip() + '|')
 
 
-for l in open(log).read().splitlines():
+for l in log_lines:
     if l.startswith('V '):
         a, bs = l[2:].split(':', 1)
         a = int(a)
