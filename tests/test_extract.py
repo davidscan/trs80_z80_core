@@ -139,6 +139,18 @@ class TestBasicSurface(unittest.TestCase):
         prog = parse_program('20 PRINT 2\n10 PRINT 1\n20 PRINT 3\n')
         self.assertEqual([(ln, b) for ln, b, _s in prog], [(10, 'PRINT 1'), (20, 'PRINT 3')])
 
+    def test_the_cut_is_tok_pys(self):
+        """The four ways phasea's cut differed from the family's (tools/tok.py
+        split_lines): every trailing CR stripped, the 00/1A padding kept,
+        `60 60 PRINT` read as line 60, and a bare `20` kept as an empty
+        line instead of deleting line 20."""
+        cut = lambda t: [(ln, b) for ln, b, _s in parse_program(t)]
+        self.assertEqual(cut('10 A\r\r\n20 B\n'), [(10, 'A\r'), (20, 'B')])
+        self.assertEqual(cut('10 A\n\x00\x00\x1a'), [(10, 'A')])
+        self.assertEqual(cut('60 60 PRINT 1\n'), [(6060, 'PRINT 1')])
+        self.assertEqual(cut('10 PRINT 1\n20 END\n20\n'), [(10, 'PRINT 1')])
+        self.assertEqual(cut('10  PRINT\n20\tEND\n'), [(10, ' PRINT'), (20, 'END')])
+
 
 class TestUsrPopulation(unittest.TestCase):
     """the sweeps' population is the extractor's USR evidence, the

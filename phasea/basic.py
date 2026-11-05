@@ -15,8 +15,6 @@ import re
 # not part of the original listing; extraction ignores it.
 BLOCKED_HDR = re.compile(r'^\s*0\s+REM\s+\*\*\*\s*BLOCKED:')
 
-LINE_RE = re.compile(r'^\s*(\d+)\s?(.*)$', re.S)
-
 
 def read_source(path):
     with open(path, 'rb') as fh:
@@ -69,32 +67,72 @@ def split_statements(body):
 
 
 def cut_lines(text):
-    """The family's line cut (trs80basic's prog_load and tools/tok.py): LF,
-    CR LF, or CR alone -- a file with no CR LF pair and more CRs than LFs
-    is a TRS-80 ASCII save, cut at CR only, and an LF inside it is the
-    down-arrow line feed in a REM or a string, not a line end.  Cutting
-    at LF alone ran such a file together as one line (the 2026-09-30
-    audit)."""
+    """The family's line cut (trs80basic's prog_load and tools/tok.py
+    split_lines): a sector-padded file's trailing run of 00H/1AH goes
+    first; then LF, CR LF, or CR alone -- a file with no CR LF pair and
+    more CRs than LFs is a TRS-80 ASCII save, cut at CR only, and an LF
+    inside it is the down-arrow line feed in a REM or a string, not a line
+    end.  In an LF file each line loses ONE CR before its LF, as CR LF
+    is one line end; a second CR is the line's own."""
+    text = text.rstrip('\x00\x1a')
     if '\r\n' not in text and text.count('\r') > text.count('\n'):
         return text.split('\r')
-    return [raw.rstrip('\r') for raw in text.split('\n')]
+    return [raw[:-1] if raw.endswith('\r') else raw for raw in text.split('\n')]
+
+
+def cut_number(raw):
+    """(lineno, body) of one listing line as the ROM reads it, or None when
+    it has no line number.  The number skips leading blanks and the
+    blanks BETWEEN its digits (1E5AH reads through RST 10H), so
+    `60 60 PRINT` is line 6060; after it, blanks, TABs and LFs are
+    skipped and one of the trailing blanks is dropped (1A8BH-1A95H) --
+    tools/tok.py split_lines, which the interpreter's cut_lineno agrees
+    with."""
+    raw = raw.lstrip(' \t\n')
+    j, digits = 0, ''
+    while j < len(raw):
+        if raw[j] in '0123456789':
+            digits += raw[j]
+            j += 1
+            continue
+        k = j
+        while k < len(raw) and raw[k] in ' \t':
+            k += 1
+        if digits and k < len(raw) and raw[k] in '0123456789':
+            j = k
+            continue
+        break
+    if not digits:
+        return None
+    k = j
+    while k < len(raw) and raw[k] in ' \t\n':
+        k += 1
+    nb = 0
+    while nb < k - j and raw[k - 1 - nb] == ' ':
+        nb += 1
+    return int(digits), ' ' * max(nb - 1, 0) + raw[k:]
 
 
 def parse_program(text, drop_blocked_header=True):
     """-> list of (lineno, raw_body, [statements]) in line-number order,
     as the interpreter stores a loaded file: a line number given twice is
-    the later line, as typing it again replaces it."""
+    the later line, as typing it again replaces it, and a number with
+    nothing behind it DELETES its line (1AADH-1ABFH).  A line blank to
+    the ROM (blanks, TABs, LFs only) is skipped; one that is not blank
+    and has no number is skipped too (the interpreter refuses it)."""
     prog = {}
     for raw in cut_lines(text):
-        if not raw.strip():
+        if not raw.strip(' \t\n'):
             continue
         if drop_blocked_header and BLOCKED_HDR.match(raw):
             continue
-        m = LINE_RE.match(raw)
-        if not m:
+        cut = cut_number(raw)
+        if cut is None:
             continue
-        lineno = int(m.group(1))
-        body = m.group(2)
+        lineno, body = cut
+        if not body.strip(' \t'):
+            prog.pop(lineno, None)
+            continue
         prog[lineno] = (lineno, body, split_statements(body))
     return [prog[n] for n in sorted(prog)]
 
