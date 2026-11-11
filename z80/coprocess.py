@@ -160,6 +160,9 @@ CURSOR = 0x4020
 # RST 08H and RST 18H jump through RAM vectors (0008H is JP 4000H, 0018H
 # is JP 4006H; Farvour's notes on the restart vectors)
 RST_VECTOR = {0x0008: 0x4000, 0x0018: 0x4006}
+# ... and where the boot points each one (Farvour's listing of the table
+# the boot moves to 4000H, 06D2H-0707H, p. 95-96): JP 1C96H and JP 1C90H
+RST_BOOT = {0x0008: 0x1C96, 0x0018: 0x1C90}
 VIDEO_DRIVER = 0x401E          # the video DCB's driver address (401D-4024H)
 ROM_VIDEO_DRIVER = 0x0458      # ... as the ROM sets it, and the interpreter seeds it
 VIDEO_LO, VIDEO_HI = 0x3C00, 0x4000
@@ -420,8 +423,12 @@ class Machine:
             # RST 18H's compare is served (Missile Attack, Adventure
             # International, 1980, uses it); RST 08H's syntax check reads
             # BASIC text and is not, so it stays ERR rom.
+            # "Nothing stored" is also the boot's own jump: the
+            # interpreter's frame carries 4000H-4035H as the boot leaves
+            # it, so the vector is always known, and following JP 1C90H
+            # only reaches ROM space ("called 1C90H, no ROM here").
             vec = RST_VECTOR[pc]
-            if self.known[vec]:
+            if self.known[vec] and not self.boot_vector(pc):
                 cpu.pc = cpu.wz = vec
                 return
             if pc == 0x0008:
@@ -736,6 +743,13 @@ class Machine:
         self.write(0x4121, v & 0xFF)
         self.write(0x4122, (v >> 8) & 0xFF)
         self.write(TYPE_FLAG, 2)
+
+    def boot_vector(self, rst):
+        """True when the RST's RAM vector holds the boot's own JP."""
+        vec, to = RST_VECTOR[rst], RST_BOOT[rst]
+        ram = self.ram
+        return (ram[vec] == 0xC3 and ram[vec + 1] == (to & 0xFF)
+                and ram[vec + 2] == (to >> 8))
 
     def compare_hl_de(self):
         """RST 18H's routine (1C90H): H - D, and if they are equal L - E,

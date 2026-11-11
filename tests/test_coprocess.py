@@ -858,6 +858,33 @@ class TestVideoAndVectors(unittest.TestCase):
         m.run(0x7000, 0, 0xF000)
         self.assertEqual(m.ram[0x7100], 0x77)
 
+    def test_rst_through_the_boot_vector_is_the_roms_own_routine(self):
+        # the interpreter's frame carries 4000H-4035H as the boot leaves it
+        # (JP 1C96H at 4000H, JP 1C90H at 4006H): that is not a routine a
+        # program stored, so RST 18H still compares and RST 08H still
+        # reports its own message
+        def seeded(code):
+            m, sc = machine(bytes.fromhex(code))
+            m.apply_run('%d:%s' % (0x4000, ','.join(str(b) for b in bytes.fromhex('C3961C'))))
+            m.apply_run('%d:%s' % (0x4006, ','.join(str(b) for b in bytes.fromhex('C3901C'))))
+            return m
+        for h, d, want in ((5, 7, (False, True)), (5, 5, (True, False)), (5, 3, (False, False))):
+            m = seeded('21' + le16(h) + '11' + le16(d) + 'DF' 'F5' 'C1' 'ED430071' 'C9')
+            m.run(0x7000, 0, 0xF000)
+            f = m.ram[0x7100]
+            self.assertEqual((bool(f & 0x40), bool(f & 0x01)), want, (h, d))
+        m = seeded('CF' 'C9')
+        with self.assertRaises(CoreError) as cm:
+            m.run(0x7000, 0, 0xF000)
+        self.assertEqual(cm.exception.code, 'rom')
+        self.assertIn('RST 08H', cm.exception.text)
+        # a program's own jump over the boot's is still followed
+        m = seeded('DF' '320071' 'C9')
+        m.apply_run('%d:%s' % (0x7010, ','.join(str(b) for b in bytes.fromhex('3E77C9'))))
+        m.apply_run('%d:%s' % (0x4006, ','.join(str(b) for b in bytes.fromhex('C31070'))))
+        m.run(0x7000, 0, 0xF000)
+        self.assertEqual(m.ram[0x7100], 0x77)
+
     def test_2b05_puts_wra1_in_de_and_keeps_hl(self):
         # Defense Penetrator's sequence, with WRA1 an integer: LD HL,1234H /
         # LD (4121H),HL / LD A,2 / LD (40AFH),A / LD HL,0BEEFH / CALL 2B05H /
