@@ -241,7 +241,7 @@ def listing(data, base=0):
 
 
 def main(argv=None):
-    """Disassemble a file of raw Z80 bytes (goal (4) from a shell):
+    """Disassemble a file of raw Z80 bytes from a shell:
 
         python3 -m z80.disasm ROUTINE.bin --base 0x7F00
         python3 -m z80.disasm --hex "CD 7F 0A 29 C3 9A 0A" --base 32000

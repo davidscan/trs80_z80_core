@@ -11,8 +11,10 @@ routines) actually runs. The routine works on the same memory `PEEK` and
 and its cassette-port sound can be played or saved to a WAV file. That is
 enough to run Dancing Demon, machine code and sound included. It also
 includes a standalone Z80 disassembler and an assembler that reads the
-Editor/Assembler syntax the period books print. It uses only the standard library,
-contains no ROM bytes, and writes no files except a WAV file you name.
+Editor/Assembler syntax the period books print. It uses only the standard library and
+contains no ROM bytes. The core itself writes no files except a WAV file
+you name; the assembler and the tools write only the files you name, or
+under `out/` (each command's **Writes:** line says which).
 
 ## Quick start
 
@@ -43,7 +45,7 @@ file named by `TRS80_SOUND_WAV`.
 
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
-| `--fixture` | off | adds machine-code routines behind the interpreter's reference stub's canned entry addresses (7000H-7010H and 7777H) | running trs80basic's conformance suite against the real core: `TRS80_Z80="python3 ../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh` |
+| `--fixture` | off | adds machine-code routines behind the interpreter's reference stub's canned entry addresses (7000H-7010H and 7777H) | running trs80basic's conformance suite against the real core: `TRS80_Z80="python3 $PWD/../trs80_z80_core/core.py --fixture" sh programs/tests/z80.sh` from the trs80basic checkout (the path in full: one case runs the command after `cd /`) |
 | `--version` | | prints the core's release, its exact build in a checkout (as `git describe` names it), and the protocol, then exits; `python3 -m z80.asm`, `z80.disasm`, `z80.run` and `z80.trace` take it too | a bug report: which core ran |
 
 The core reads these from the environment it inherits from the interpreter:
@@ -137,6 +139,7 @@ is used only when you pass it.
 | `--explain` | off | prints the worklist as it runs, one line per step | seeing why a byte was or was not reached |
 | `--source` | off | prints assembler source instead of the listing; `python3 -m z80.asm` gives the same bytes back | editing and reassembling a program |
 | `--no-guess` | off | leaves every byte nothing reached unknown: no text, table or fill guesses | seeing only what flow proves |
+| `--guess-tables` | off | follows jump tables named by an address constant in traced code; what they reach is flagged `g`, never proven | code with dispatch tables |
 | `--json` | off | prints the result as JSON and nothing else: `blocks` that tile the image (`kind` code/data/guess/unknown, `type`, `guessed`, `why`), `labels`, `xrefs`, `conflicts`, `tables`, the report's other lists and the `summary` counts; every address a number | feeding another tool, as `tools/trace_corpus.py` does |
 
 ### `python3 -m z80.asm SOURCE`
@@ -221,6 +224,8 @@ interpreter, when `../trs80basic` is present.
 | `Z80_VECTORS` | 40 cases per vector file | `all` runs every case of the CPU test vectors (about 20 s) | after any change to `z80/cpu.py` or `z80/table.py` |
 | `Z80_VECTORS_FILES` | every file | comma-separated vector files, by name without `.json` (`ed b2`) or by prefix (`cb`) | reproducing one failure by the case name it printed |
 | `Z80_VECTORS_REQUIRE` | unset | `1` makes missing vectors a failure instead of a skip, and asks for all 1604 files | before trusting a run as a check of the CPU |
+| `Z80_INTERP_REQUIRE` | unset | `1` makes a missing `../trs80basic` a failure instead of a skip (CI sets it) | before trusting a run as a check of the protocol |
+| `TRS80_OCR` | the `ocr` link at the repository root | where the anchor tests find their private transcriptions; without them those tests skip | you keep them somewhere else |
 
 Test groups skip when their input is missing: the CPU vectors until
 `tools/fetch_vectors.py` has run, the anchor tests without the listing
@@ -401,11 +406,12 @@ share. Exit 0; 2 if no file held a listing.
 
 ### Corpus measurement tools
 
-The next four read a local archive of period listings that is not
+The next five read a local archive of period listings that is not
 published. They find it through a `corpus` link at this repository's root
 (`ln -s /path/to/archive corpus`; gitignored) or the `TRS80_CORPUS`
-variable, and refuse to run without it. All but `phasea.sweep` also run
-`../trs80basic`.
+variable, and refuse to run without it. `phasea.oracle`, `usr_sweep.py` and
+`usr_pty_sweep.py` also run `../trs80basic`; `trace_corpus.py` reads the
+logs `usr_sweep.py` wrote.
 
 #### `python3 -m phasea.sweep`
 
@@ -416,6 +422,7 @@ It refuses to report counts unless the two anchor test suites pass.
 | argument | default | what it does | when you'd use it |
 |---|---|---|---|
 | `--json PATH` | `out/manifest.json` | where the manifest of extracted payloads goes | keeping two sweeps side by side |
+| `--accept-input-set` | off | counts a listing set other than the pinned one (say why beside the numbers) | after the archive changed |
 
 #### `python3 -m phasea.oracle`
 
@@ -700,7 +707,7 @@ Restart the interpreter to attach a fresh core. Everything under `out/` and
 | `z80/` | the CPU (`cpu.py`), the opcode table everything decodes from (`table.py`), the disassembler, the coprocess, sound | you | no |
 | `hints/model1.hints` | names for the documented Model I entry points and RAM locations, for `z80.trace --hints` | you | no |
 | `phasea/` | the loader extractor, classifier, sweep and oracle | you | no |
-| `tools/` | the scripts above; `vectors.lock` pins the test vectors | you | no |
+| `tools/` | the scripts above; `vectors.lock` pins the test vectors; `check_skips.py` names a test run's skipped tests (CI) | you | no |
 | `tests/` | the test suite | you | no |
 | `tests/vectors/` | the downloaded CPU test vectors, about 1.3 GB, never committed | `fetch_vectors.py` | yes; fetch again |
 | `out/manifest.json` | payloads and classifications from the static sweep | `phasea.sweep` | yes; regenerable |

@@ -8,7 +8,7 @@ back: the sentinel ending a call, the three HLE traps, `ERR rom` and
 tick, and pacing left alone at mhz=0.  The transport test runs core.py
 as a real subprocess through pipes, including `NEED full`, `BYE` and
 exit on EOF.  trs80basic's `sh programs/tests/z80.sh` remains the
-acceptance bar (DD-17); these pin the mechanism so a regression names
+acceptance bar; these pin the mechanism so a regression names
 itself here first.
 """
 

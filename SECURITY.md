@@ -5,7 +5,7 @@ many of the listings people run are ones they found online. This page says
 what that machine code can and cannot do on your computer, what the core
 promises, and what it does not.
 
-It describes the current `main` branch (v2.1 and the fixes since) on macOS
+It describes the current `main` branch (v2.2.0 and the fixes since) on macOS
 and Linux. The interpreter's own page,
 [trs80basic's SECURITY.md](https://github.com/davidscan/trs80basic/blob/main/SECURITY.md),
 covers the BASIC side: what a program can do with files, the shell and the
@@ -24,7 +24,7 @@ is by design. In particular **`TRS80_SOUND` is a shell command**: any value
 other than `auto` is run through `sh -c` and fed the audio. Set it only to
 a command you would type yourself. Likewise `TRS80_SOUND_WAV` names a file
 the core overwrites when it starts (or, when the interpreter restarts the
-core within a session, carries on a capture it recognises). The promises
+core within a session, carries on a capture it recognizes). The promises
 below are about the right column.
 
 ## What machine code can do
@@ -57,8 +57,9 @@ below are about the right column.
 
 ## What the tools promise about files
 
-- `python3 -m z80.run`, `z80.disasm` and `tools/romcalls.py` read the
-  file you name and write nothing. `python3 -m z80.asm` writes only the
+- `python3 -m z80.run`, `z80.disasm` and `z80.trace` read the
+  file you name and write nothing. `tools/romcalls.py` writes only the
+  `--record` file you name. `python3 -m z80.asm` writes only the
   output and listing files you name, and `tools/hexcheck.py` only its
   `--out` file.
 - A malformed `.cmd`, `.cas` or `.asm` file is reported as an error with a

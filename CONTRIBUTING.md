@@ -54,8 +54,8 @@ a routine can and cannot do. No instruction, port or trap may reach the
 host: no file, process or network access from emulated code. Only the
 user's own settings (`TRS80_SOUND`, `TRS80_SOUND_WAV`) touch the host.
 
-## Licence
+## License
 
 The project is GPL-3.0 ([LICENSE](LICENSE)); a contribution is offered
-under the same licence. Do not commit the CPU test vectors, ROM bytes,
+under the same license. Do not commit the CPU test vectors, ROM bytes,
 book text or third-party listings.

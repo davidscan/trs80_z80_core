@@ -5,7 +5,7 @@ and runs with no data on disk.  This file needs the data: it runs the
 fetched cases through `Z80.step()` and compares every register, every
 flag bit, MEMPTR, R, IFF1/2, IM, the EI delay, the Q state, every RAM
 cell the case names, every port access, and the T-state count (which is
-what finally validates the table's cycle column -- DD-9).
+what finally validates the table's cycle column).
 
 It skips cleanly when the vectors are not fetched
 (`python3 tools/fetch_vectors.py --all`), unless Z80_VECTORS_REQUIRE=1,

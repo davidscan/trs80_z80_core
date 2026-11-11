@@ -3,7 +3,7 @@
 Four things are under test.  Every signature in the inverse index
 assembles to bytes the disassembler decodes as that same signature, and
 the disassembler's own text assembles back to the same bytes (so a
-listing from goal (4) is source for goal (3)).  CATCH, the one real
+listing from the disassembler is source for the assembler).  CATCH, the one real
 program the table has assembled so far, comes out byte for byte from
 its disassembly.  The EDTASM-shaped source syntax -- line numbers,
 labels, EQU forward references, $, the number forms, the data
