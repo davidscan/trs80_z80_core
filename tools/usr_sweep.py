@@ -25,7 +25,9 @@ interpreter error, `no-usr-reached` otherwise (INPUT ran dry, a CMD, a
 menu, a quiet end).
 
 Controls (the corpus measurement traps): --seed 1, the oracle's stdin feed
-of 400 "1" lines, a same-build control run, gawk diagnostics and the two
+of 400 "1" lines, the interpreter's --steps limit and --clock steps (so a
+run that never ends stops at the same statement whatever the host's load,
+and TIME$ is the same in every run), a same-build control run, gawk diagnostics and the two
 USR notices dropped before comparing, a fresh cwd per run (under the
 gitignored out/usr_sweep/cwd, never a repo's own tree).  Batch has
 no keyboard: a routine that polls the matrix sees 0 and, at the end of
@@ -43,7 +45,16 @@ CORE = 'python3 ' + os.path.join(HERE, 'core.py')
 OUT = os.path.join(HERE, 'out', 'usr_sweep')
 RUNS, CWD = OUT + '/runs', OUT + '/cwd'
 FEED = ('1\n' * 400).encode()
-TIMEOUT = 10.0
+# A run that never ends is stopped by the interpreter's statement limit,
+# not a wall clock: under a 10 s timeout the two timeout classes moved
+# with the host's load and CPU throttling, as the corpus A/B's did before
+# it took the same limit (400,000, the A/B's).  --clock steps makes TIME$
+# and the clock bytes follow the count too.
+STEPS = 400000
+# The statement count cannot stop a routine that loops in the CORE without
+# coming back to BASIC, or a run slow per statement: those are still cut by
+# the wall clock, and `limit` says which stopped a run.
+BACKSTOP = 30.0
 WORKERS = 6
 
 def listings():
@@ -104,14 +115,28 @@ def run(path, z80, cwd):
     shutil.rmtree(cwd, ignore_errors=True)
     os.makedirs(cwd)
     env = sweep_env(TRS80_Z80=z80, TRS80_DUMB='1')
+    rep = cwd + '.steps'         # beside the cwd, not in it: the listing's files are its own
+    try:
+        os.remove(rep)
+    except FileNotFoundError:
+        pass
     t0 = time.monotonic()
-    p = subprocess.Popen([BASIC, '--seed', '1', path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    p = subprocess.Popen([BASIC, '--seed', '1', '--steps', str(STEPS), '--steps-report', rep,
+                          '--clock', 'steps', path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, env=env, cwd=cwd, start_new_session=True)
     try:
-        out, err = p.communicate(FEED, timeout=TIMEOUT); rc = p.returncode; to = False
+        out, err = p.communicate(FEED, timeout=BACKSTOP); rc = p.returncode
+        limit = 'steps' if rc == 3 else ''       # exit 3: the --steps limit stopped it
     except subprocess.TimeoutExpired:
-        os.killpg(p.pid, signal.SIGKILL); out, err = p.communicate(); rc, to = 124, True
-    return dict(rc=rc, timeout=to, out=out.decode('latin-1'), err=err.decode('latin-1'), secs=round(time.monotonic() - t0, 2))
+        os.killpg(p.pid, signal.SIGKILL); out, err = p.communicate(); rc, limit = 124, 'backstop'
+    steps = None
+    try:
+        with open(rep) as fh:
+            steps = int(fh.read().strip())
+    except (OSError, ValueError):
+        pass
+    return dict(rc=rc, timeout=bool(limit), limit=limit, steps=steps, out=out.decode('latin-1'),
+                err=err.decode('latin-1'), secs=round(time.monotonic() - t0, 2))
 
 def stop(r):
     """How the run ended, as the interpreter said it on stderr: its first
@@ -163,7 +188,8 @@ def inputs(files, pop):
     return dict(core=git_state(HERE), interpreter=git_state(os.path.dirname(BASIC)),
                 interpreter_version=version, corpus=git_state(os.path.dirname(CORPUS)),
                 listings=len(files), input_set=fingerprint(files, CORPUS), population=len(pop),
-                seed=1, feed='400 lines of "1"', timeout_s=TIMEOUT, workers=WORKERS,
+                seed=1, feed='400 lines of "1"', steps=STEPS, clock='steps', backstop_s=BACKSTOP,
+                workers=WORKERS,
                 python=sys.version.split()[0], started=time.strftime('%Y-%m-%dT%H:%M:%S'),
                 load_start=[round(x, 2) for x in os.getloadavg()])
 
@@ -219,6 +245,8 @@ def one(path):
     else: cls = 'differs-noise'
     return dict(file=rel, cls=cls, tally=tally, calls=calls, rets=rets, errs=errs, notices=notices, K=ks, V=vs, MODE=modes,
                 rc=[stub['rc'], core['rc'], ctrl['rc']], timeout=[stub['timeout'], core['timeout'], ctrl['timeout']],
+                limit=[r.get('limit', '') for r in (stub, core, ctrl)],
+                steps=[r.get('steps') for r in (stub, core, ctrl)],
                 secs=[stub['secs'], core['secs'], ctrl['secs']], equal=equal, stable=stable,
                 stop=[stop(stub), stop(core), stop(ctrl)])
 
@@ -252,6 +280,8 @@ def main(argv=None):
                 load_end=[round(x, 2) for x in os.getloadavg()])
     publish(dict(inputs=meta, results=res), OUT + '/results.json')
     print(Counter(r['cls'] for r in res))
+    print('runs the backstop stopped (stub, core, control):',
+          [sum(1 for r in res if r['limit'][k] == 'backstop') for k in range(3)])
     roms = Counter()
     for r in res:
         for e in r['errs'][:1]:

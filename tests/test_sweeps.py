@@ -153,6 +153,44 @@ class TestEachRunHasAFreshCwd(unittest.TestCase):
         self.assertEqual(second['out'], '')
 
 
+class TestARunEndsOnTheStatementCount(unittest.TestCase):
+    """Under a 10 s wall clock the two timeout classes moved with the
+    host's load: a run is bounded by --steps, its TIME$ by --clock steps,
+    and only the backstop is wall time."""
+
+    def fake(self, d, body):
+        fake = os.path.join(d, 'basic')
+        with open(fake, 'w') as f:
+            f.write('#!/bin/sh\n' + body)
+        os.chmod(fake, 0o755)
+        return fake
+
+    def run_with(self, body):
+        with tempfile.TemporaryDirectory() as d:
+            saved = usr_sweep.BASIC
+            usr_sweep.BASIC = self.fake(d, body)
+            try:
+                return usr_sweep.run('x.bas', '', os.path.join(d, 'cwd'))
+            finally:
+                usr_sweep.BASIC = saved
+
+    def test_the_run_passes_the_limit_and_the_clock(self):
+        r = self.run_with('echo "$@"\n')
+        self.assertIn('--steps %d' % usr_sweep.STEPS, r['out'])
+        self.assertIn('--clock steps', r['out'])
+        self.assertIn('--steps-report', r['out'])
+
+    def test_exit_3_is_the_step_limit_and_the_count_is_read(self):
+        body = ('while [ $# -gt 0 ]; do [ "$1" = --steps-report ] && rep=$2; shift; done\n'
+                'echo 400000 > "$rep"\necho "STEP LIMIT IN 10" >&2\nexit 3\n')
+        r = self.run_with(body)
+        self.assertEqual((r['rc'], r['timeout'], r['limit'], r['steps']), (3, True, 'steps', 400000))
+
+    def test_a_run_that_ends_is_no_timeout(self):
+        r = self.run_with('exit 0\n')
+        self.assertEqual((r['timeout'], r['limit'], r['steps']), (False, '', None))
+
+
 class TestTheSweepSaysHowARunStopped(unittest.TestCase):
     """no-usr-reached hid 194 interpreter error stops, and nothing
     recorded which build or load produced the classes."""
@@ -179,7 +217,7 @@ class TestTheSweepSaysHowARunStopped(unittest.TestCase):
                 usr_sweep.CORPUS = saved
             fp = sweep.fingerprint(files, progs)
         for k in ('core', 'interpreter', 'interpreter_version', 'corpus', 'input_set',
-                  'listings', 'population', 'timeout_s', 'workers', 'load_start'):
+                  'listings', 'population', 'steps', 'clock', 'backstop_s', 'workers', 'load_start'):
             self.assertIn(k, meta)
         self.assertEqual(meta['input_set'], fp)
 
