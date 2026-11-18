@@ -51,9 +51,12 @@ FEED = ('1\n' * 400).encode()
 # it took the same limit (400,000, the A/B's).  --clock steps makes TIME$
 # and the clock bytes follow the count too.
 STEPS = 400000
-# The statement count cannot stop a routine that loops in the CORE without
-# coming back to BASIC, or a run slow per statement: those are still cut by
-# the wall clock, and `limit` says which stopped a run.
+# The count includes a USR routine's cycles in the core (1,000 a statement,
+# the interpreter's), so a routine that never returns stops on it too.  What
+# it cannot bound is a run slow per statement or per call (thousands of USR
+# round trips, a shell forked each statement): that is still cut by the wall
+# clock, and `limit` says which stopped a run.  Two sweeps on 2026-11-18,
+# under loads of 3 to 12, agreed in every class and every count.
 BACKSTOP = 30.0
 WORKERS = 6
 

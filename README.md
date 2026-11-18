@@ -451,10 +451,11 @@ run is classified by what the core changed, and `results.json` records
 the inputs beside the classes: both builds, the corpus commit and
 fingerprint, the controls and the host load. A run that never ends is
 stopped by the interpreter's `--steps 400000` (with `--clock steps`), so
-the timeout classes do not move with the host's load; a 30-second wall
-clock remains as a backstop for a routine that loops inside the core,
-and each result's `limit` says which stopped it. It takes about 25
-minutes.
+the timeout classes do not move with the host's load (the interpreter
+counts a `USR` routine's cycles in the core toward the limit too); a
+30-second wall clock remains as a backstop for a run slow per statement
+or per call, and each result's `limit` says which stopped it. It takes
+about 20 minutes.
 **Writes:** `out/usr_sweep/`. Its one argument, `--accept-input-set`,
 runs a set that is not the pinned one. If the core never started in a
 run (it could not be launched, or it speaks another protocol) the listing
