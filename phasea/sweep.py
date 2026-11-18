@@ -118,7 +118,11 @@ def input_files():
 # listings, regenerated 2026-10-22 (bdfaacb4, this pin missed it) and then
 # re-selected (13 moved from blocked/ to runnable/, 131 re-filed inside
 # blocked/, headers rewritten; no listing's body changed); was 7c540535.
-INPUT_SET = (9458, 'fa6e65bd864a804b051d6781a0818119bdd62612')
+# Re-pinned 2026-11-18, A NEW BASELINE: in 42 listings that ran into an
+# endless `n GOTO n` hold, that line became `n END` (trs80_programs
+# tools/holds_to_end.py, its registry programs/HOLDS_TO_END.tsv); the same
+# 9,458 files; was fa6e65bd.
+INPUT_SET = (9458, 'accecc994068f93edbd9da7ee7645347f71fb8fc')
 
 
 def fingerprint(paths, root=None):
