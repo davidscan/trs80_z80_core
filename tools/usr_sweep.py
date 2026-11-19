@@ -57,7 +57,9 @@ STEPS = 400000
 # round trips, a shell forked each statement): that is still cut by the wall
 # clock, and `limit` says which stopped a run.  Two sweeps on 2026-11-18,
 # under loads of 3 to 12, agreed in every class and every count.
-BACKSTOP = 30.0
+# 300 s since 2026-11-18 (was 30), as the corpus A/B: a slow run is
+# let reach the statement limit rather than be cut by the clock.
+BACKSTOP = 300.0
 WORKERS = 6
 
 def listings():

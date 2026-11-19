@@ -126,7 +126,11 @@ def input_files():
 # LargeCollection/ the set did not hold joined (trs80_programs 319c8510,
 # tools/list_intake.py, runnable/LARGECOLL_INTAKE.tsv); 9,464 files; was
 # accecc99.
-INPUT_SET = (9464, '50cbf7673a2bd4108d66b4087d97f98c12da1495')
+# Re-pinned 2026-11-18 (later still), A NEW BASELINE: seven CR listings'
+# blocked header ends in CR, so their first line is no longer swallowed
+# into the REM (trs80_programs c1ef8f37); the same 9,464 files; was
+# 50cbf767.
+INPUT_SET = (9464, '64f8dbc51b9afd999a931c71b57d443cf7122c37')
 
 
 def fingerprint(paths, root=None):
