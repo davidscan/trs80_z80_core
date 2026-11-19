@@ -122,7 +122,11 @@ def input_files():
 # endless `n GOTO n` hold, that line became `n END` (trs80_programs
 # tools/holds_to_end.py, its registry programs/HOLDS_TO_END.tsv); the same
 # 9,458 files; was fa6e65bd.
-INPUT_SET = (9458, 'accecc994068f93edbd9da7ee7645347f71fb8fc')
+# Re-pinned 2026-11-18 (later), A NEW BASELINE: six versions from
+# LargeCollection/ the set did not hold joined (trs80_programs 319c8510,
+# tools/list_intake.py, runnable/LARGECOLL_INTAKE.tsv); 9,464 files; was
+# accecc99.
+INPUT_SET = (9464, '50cbf7673a2bd4108d66b4087d97f98c12da1495')
 
 
 def fingerprint(paths, root=None):
