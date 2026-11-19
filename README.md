@@ -28,6 +28,10 @@ TRS80_MHZ=1.77408 ./basic <program>.bas                           # USR routines
 Substitute any BASIC listing for `<program>.bas`. The interpreter finds the
 core by itself when the two repositories sit side by side.
 
+Writing a new program that uses machine code, for speed or for sound?
+Read [WRITING_USR.md](WRITING_USR.md) first: when a routine pays (measured),
+where it lives, passing data, sound, and testing, with worked examples.
+
 Needs Python 3, plus GNU awk 5.0 or later for trs80basic. Live sound also
 needs an audio player: ffplay (part of FFmpeg) anywhere, or ffmpeg alone on
 macOS, or aplay or pw-play on Linux; `ffplay -version` checks for it.
@@ -514,6 +518,23 @@ interpreter in batch mode, and through a pseudo-terminal. **Writes:**
 |---|---|---|---|
 | `--basic PATH` | `../trs80basic` | the interpreter checkout | one that lives elsewhere |
 | `--passes N` | `12` | passes of 256 tone cycles | longer runs for steadier timings |
+
+#### `python3 tools/usr_speed.py`
+
+Measures what a `USR` routine costs and saves, through the interpreter in
+batch mode: BASIC statements a second, the cost of one call, a screen fill
+by a POKE loop against the same fill by a routine, and the core's speed as
+a multiple of the Model I. Each case runs at two sizes, so start-up cancels
+out; the median of the repeats is printed with the inputs (builds, versions,
+host, load). The numbers behind WRITING_USR.md. **Writes:** nothing, except
+the `--json` file.
+
+| argument | default | what it does | when you'd use it |
+|---|---|---|---|
+| `--basic PATH` | `../trs80basic` | the interpreter checkout | one that lives elsewhere |
+| `--repeats N` | `3` | runs of each case; the median is reported | a noisy host |
+| `--scale F` | `1.0` | multiplies every run's size (about 45 s in all at 1.0) | a slow host: `0.5` |
+| `--json FILE` | none | writes the results and their inputs to FILE, replacing it | keeping a measurement beside its inputs |
 
 #### `python3 tools/kbd_probe.py`
 
