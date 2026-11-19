@@ -5,7 +5,7 @@ many of the listings people run are ones they found online. This page says
 what that machine code can and cannot do on your computer, what the core
 promises, and what it does not.
 
-It describes the current `main` branch (v2.2.0 and the fixes since) on macOS
+It describes the current `main` branch (v2.2.1 and the fixes since) on macOS
 and Linux. The interpreter's own page,
 [trs80basic's SECURITY.md](https://github.com/davidscan/trs80basic/blob/main/SECURITY.md),
 covers the BASIC side: what a program can do with files, the shell and the
